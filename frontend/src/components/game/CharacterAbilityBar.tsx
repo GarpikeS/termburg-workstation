@@ -15,8 +15,8 @@ export function CharacterAbilityBar({ game }: { game: GameKey }) {
 
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3 border-t"
-      style={{ borderColor: `${color}25`, backgroundColor: `${color}10` }}
+      className="flex items-center gap-3 px-4 py-3 border-t bg-black/50 backdrop-blur-sm"
+      style={{ borderColor: `${color}30` }}
     >
       <img
         src={character.image}
