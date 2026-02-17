@@ -20,7 +20,12 @@ export function loadProgress(): PlayerProgress {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_PROGRESS };
-    return { ...DEFAULT_PROGRESS, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULT_PROGRESS, ...JSON.parse(raw) };
+    // Migrate: add cooldowns to existing pets
+    if (parsed.pet && !parsed.pet.cooldowns) {
+      parsed.pet = { ...parsed.pet, cooldowns: {} };
+    }
+    return parsed;
   } catch {
     return { ...DEFAULT_PROGRESS };
   }

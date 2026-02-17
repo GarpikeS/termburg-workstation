@@ -1,8 +1,10 @@
-import { useRef, useCallback, useMemo } from 'react';
+import { useRef, useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, RotateCcw, Trophy } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Trophy, Sparkles } from 'lucide-react';
 import { useBubbles } from '@/hooks/useBubbles';
+import { useGameContext } from '@/store/GameContext';
+import { getTermlinById, ELEMENT_COLORS } from '@/data/termliny';
 import { BUBBLE_HEX_COLORS, type BubbleColor } from '@/engine/engine-bubbles/bubbleTypes';
 import { BUBBLE_RADIUS } from '@/engine/engine-bubbles/hexGrid';
 import { getAimLine } from '@/engine/engine-bubbles/bubblePhysics';
@@ -27,9 +29,22 @@ function BubbleCircle({ x, y, color, size = BUBBLE_RADIUS }: { x: number; y: num
 
 export function BubbleShooterScreen() {
   const navigate = useNavigate();
+  const { progress } = useGameContext();
   const { state, aimAngle, setAimAngle, shoot, flying, nextLevel, restart } = useBubbles(FIELD_WIDTH);
   const fieldRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const [abilityUsed, setAbilityUsed] = useState(false);
+  const [showTrajectory, setShowTrajectory] = useState(false);
+
+  const character = getTermlinById(progress.selectedCharacter);
+  const charColor = character ? (ELEMENT_COLORS[character.element] ?? '#BA9B4F') : '#BA9B4F';
+
+  // Bonus shots: yaromir +3, valkiriya +2
+  const bonusShots = progress.selectedCharacter === 'yaromir' ? 3
+    : progress.selectedCharacter === 'valkiriya' ? 2 : 0;
+
+  // Score multiplier: pereslav +20%
+  const scoreMult = progress.selectedCharacter === 'pereslav' ? 1.20 : 1.0;
 
   const shooterX = FIELD_WIDTH / 2;
   const shooterY = FIELD_WIDTH * 1.3;
@@ -63,11 +78,27 @@ export function BubbleShooterScreen() {
     }
   }, [aimAngle, shoot]);
 
+  // Ability: kazimir shows bounce trajectory
+  const handleAbility = useCallback(() => {
+    if (abilityUsed) return;
+    setAbilityUsed(true);
+    setShowTrajectory(true);
+    setTimeout(() => setShowTrajectory(false), 5000);
+  }, [abilityUsed]);
+
+  const hasActiveAbility = !abilityUsed && (
+    progress.selectedCharacter === 'kazimir' ||
+    progress.selectedCharacter === 'milovan'
+  );
+
   // Aim line
   const aimLine = useMemo(() => {
     if (state.isWon || state.isLost) return [];
-    return getAimLine(shooterX, shooterY, aimAngle, FIELD_WIDTH, 150);
-  }, [aimAngle, shooterX, shooterY, state.isWon, state.isLost]);
+    const len = showTrajectory ? 300 : 150;
+    return getAimLine(shooterX, shooterY, aimAngle, FIELD_WIDTH, len);
+  }, [aimAngle, shooterX, shooterY, state.isWon, state.isLost, showTrajectory]);
+
+  const displayScore = Math.round(state.score * scoreMult);
 
   return (
     <div className="h-full flex flex-col bg-dark-surface">
@@ -80,9 +111,19 @@ export function BubbleShooterScreen() {
           <h2 className="font-heading text-base font-bold text-primary tracking-wider">
             Шарики — Ур. {state.level}
           </h2>
-          <button onClick={restart} className="text-white/50 hover:text-primary transition-colors">
-            <RotateCcw size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            {character && (
+              <img
+                src={character.image}
+                alt={character.name}
+                className="w-7 h-7 rounded-full object-cover border"
+                style={{ borderColor: charColor }}
+              />
+            )}
+            <button onClick={restart} className="text-white/50 hover:text-primary transition-colors">
+              <RotateCcw size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -91,13 +132,27 @@ export function BubbleShooterScreen() {
         <div className="flex gap-3">
           <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2 text-center">
             <p className="text-white/40 text-[10px]">Очки</p>
-            <p className="text-primary font-bold text-lg">{state.score}</p>
+            <p className="text-primary font-bold text-lg">{displayScore}</p>
           </div>
           <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2 text-center">
             <p className="text-white/40 text-[10px]">Выстрелов</p>
-            <p className="text-primary font-bold text-lg">{state.shotsLeft}</p>
+            <p className="text-primary font-bold text-lg">{state.shotsLeft + bonusShots}</p>
           </div>
+          {hasActiveAbility && (
+            <button
+              onClick={handleAbility}
+              className="w-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center animate-pulse"
+              style={{ borderColor: `${charColor}40` }}
+            >
+              <Sparkles size={16} style={{ color: charColor }} />
+            </button>
+          )}
         </div>
+        {character?.ability.bubbles && (
+          <p className="text-center text-[10px] mt-1" style={{ color: `${charColor}90` }}>
+            {character.ability.name}: {character.ability.bubbles}
+          </p>
+        )}
       </div>
 
       {/* Game field */}
@@ -121,14 +176,14 @@ export function BubbleShooterScreen() {
             <BubbleCircle x={flying.x} y={flying.y} color={flying.color} />
           )}
 
-          {/* Aim line (dotted) */}
+          {/* Aim line */}
           {!flying && aimLine.length > 1 && (
             <svg className="absolute inset-0 pointer-events-none" style={{ width: FIELD_WIDTH, height: FIELD_WIDTH * 1.5 }}>
               <polyline
                 points={aimLine.map(p => `${p.x},${p.y}`).join(' ')}
                 fill="none"
-                stroke="rgba(255,255,255,0.2)"
-                strokeWidth="2"
+                stroke={showTrajectory ? `${charColor}60` : 'rgba(255,255,255,0.2)'}
+                strokeWidth={showTrajectory ? 3 : 2}
                 strokeDasharray="4,6"
               />
             </svg>
@@ -145,7 +200,7 @@ export function BubbleShooterScreen() {
             />
           </div>
 
-          {/* Next color indicator */}
+          {/* Next color */}
           <div
             className="absolute flex items-center gap-1"
             style={{ left: shooterX + 30, top: shooterY - 8 }}
@@ -168,7 +223,7 @@ export function BubbleShooterScreen() {
               >
                 <Trophy size={48} className="text-primary mb-3" />
                 <p className="text-primary font-bold text-xl mb-1">Победа!</p>
-                <p className="text-white/50 text-sm mb-4">Очки: {state.score}</p>
+                <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
                 <div className="space-y-2">
                   <Button onClick={nextLevel} size="sm">Следующий уровень</Button>
                   <button onClick={restart} className="block text-white/40 text-xs mx-auto hover:text-white/60">
@@ -185,7 +240,7 @@ export function BubbleShooterScreen() {
                 exit={{ opacity: 0 }}
               >
                 <p className="text-white font-bold text-xl mb-1">Проиграли</p>
-                <p className="text-white/50 text-sm mb-4">Очки: {state.score}</p>
+                <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
                 <Button onClick={restart} size="sm">Заново</Button>
               </motion.div>
             )}

@@ -1,3 +1,12 @@
+export interface TermlinAbility {
+  name: string;
+  description: string;
+  match3?: string;
+  game2048?: string;
+  bubbles?: string;
+  pet?: string;
+}
+
 export interface Termlin {
   id: string;
   name: string;
@@ -11,27 +20,33 @@ export interface Termlin {
   expressions: string[];
   omens: string;
   unlockLevel: number;
-  ability: {
-    name: string;
-    description: string;
-  };
+  isLegendary?: boolean;
+  ability: TermlinAbility;
 }
 
 export const termliny: Termlin[] = [
   {
     id: 'yaromir',
     name: 'Банник-Яромир',
-    title: 'Хранитель бань',
+    title: 'Главный хранитель Термбурга',
     image: '/images/characters/yaromir.webp',
     element: 'fire',
     mission: 'Поддерживает нужную температуру, нагоняет пар и создаёт комфортные условия.',
-    history: 'Был банником у Петра I, который обещал ему построить целый город бань, но не успел. Долго скитался и мечтал, что кто-то захочет его мечту реализовать.',
-    character: 'Спокойный, молчаливый, но в гневе становится огромным.',
-    habits: 'Любит травяные чаи, мёд и молоко.',
+    history: 'Был банником у Петра I, который обещал ему построить целый город бань, но не успел. Долго скитался и мечтал, что кто-то захочет его мечту реализовать. Благодаря чёрным петухам узнал про Термбург и привёл сюда жить всю семью.',
+    character: 'Спокойный, молчаливый, но в гневе становится огромным. Мудрый лидер, к которому идут за советом все Термлины.',
+    habits: 'Любит травяные чаи, мёд и молоко. Еженедельно посещает ГлинВил.',
     expressions: ['Ажно', 'Дородный', 'Рожено дитятко'],
     omens: 'Мужчины входят в баню с правой ноги, женщины — с левой.',
     unlockLevel: 0,
-    ability: { name: 'Жар пара', description: '+1 подсказка на уровне' },
+    isLegendary: true,
+    ability: {
+      name: 'Жар пара',
+      description: 'Мастер всех стихий — бонус во всех играх',
+      match3: '+1 подсказка и +2 хода',
+      game2048: '+10% к очкам за слияние',
+      bubbles: '+3 выстрела на уровне',
+      pet: 'Питомец теряет статы на 30% медленнее',
+    },
   },
   {
     id: 'valkiriya',
@@ -46,7 +61,14 @@ export const termliny: Termlin[] = [
     expressions: ['Хухря', 'Запуклить', 'Жандобиться'],
     omens: 'Попросите у неё помощь в избавлении от недугов.',
     unlockLevel: 10,
-    ability: { name: 'Исцеление', description: '+3 хода на старте уровня' },
+    ability: {
+      name: 'Исцеление',
+      description: 'Восстанавливает силы',
+      match3: '+3 хода на старте уровня',
+      game2048: 'Одна «вторая жизнь» при проигрыше',
+      bubbles: '+2 выстрела',
+      pet: '+10 к восстановлению при уходе',
+    },
   },
   {
     id: 'pereslav',
@@ -61,7 +83,14 @@ export const termliny: Termlin[] = [
     expressions: ['Засельщина', 'Доселева', 'Чадо'],
     omens: 'Не любит ругань и мусор.',
     unlockLevel: 20,
-    ability: { name: 'Хитрость', description: '+25% очков за комбо' },
+    ability: {
+      name: 'Хитрость',
+      description: 'Множитель очков',
+      match3: '+25% очков за комбо',
+      game2048: '+15% к финальному счёту',
+      bubbles: '+20% очков за лопнутые шарики',
+      pet: '+2 монеты за действие',
+    },
   },
   {
     id: 'kazimir',
@@ -76,7 +105,14 @@ export const termliny: Termlin[] = [
     expressions: ['Бельмес', 'Годы годуй', 'Фыркалка'],
     omens: 'Не берите его шар с предсказаниями!',
     unlockLevel: 30,
-    ability: { name: 'Предвидение', description: 'Показать следующие фишки' },
+    ability: {
+      name: 'Предвидение',
+      description: 'Видит наперёд',
+      match3: 'Показать следующие фишки',
+      game2048: 'Подсветка лучшего хода',
+      bubbles: 'Показать траекторию отскока',
+      pet: 'Предупреждение о падении статов',
+    },
   },
   {
     id: 'vedagor',
@@ -91,7 +127,14 @@ export const termliny: Termlin[] = [
     expressions: ['Мурмики'],
     omens: 'Прошепчите желание ему на ухо и обойдите трижды по часовой стрелке.',
     unlockLevel: 50,
-    ability: { name: 'Мудрость', description: 'Автоподсказка каждые 10 ходов' },
+    ability: {
+      name: 'Мудрость',
+      description: 'Автоматические подсказки',
+      match3: 'Автоподсказка каждые 10 ходов',
+      game2048: 'Показывает оптимальный угол',
+      bubbles: 'Подсветка одноцветных групп',
+      pet: 'Статы падают на 15% медленнее',
+    },
   },
   {
     id: 'milovan',
@@ -106,7 +149,14 @@ export const termliny: Termlin[] = [
     expressions: ['Глаголить', 'Без пены', 'Глупендяй'],
     omens: 'Попросите восстановить отношения.',
     unlockLevel: 70,
-    ability: { name: 'Удар', description: 'Уничтожить 1 фишку на поле' },
+    ability: {
+      name: 'Удар',
+      description: 'Разрушительная сила',
+      match3: 'Уничтожить 1 фишку на поле',
+      game2048: 'Удалить наименьший тайл',
+      bubbles: 'Взрывная волна (3 шарика)',
+      pet: '+15 к счастью за действие',
+    },
   },
   {
     id: 'lelya',
@@ -121,7 +171,14 @@ export const termliny: Termlin[] = [
     expressions: ['Батюшка', 'Матушка'],
     omens: 'Просите помощь в обучении плаванию. День Берегини — 15 июля.',
     unlockLevel: 100,
-    ability: { name: 'Прощение', description: '1 «прощённый» ход при проигрыше' },
+    ability: {
+      name: 'Прощение',
+      description: 'Второй шанс',
+      match3: '1 «прощённый» ход при проигрыше',
+      game2048: 'Отмена последнего хода',
+      bubbles: 'Промах не считается выстрелом',
+      pet: 'Питомец не может упасть ниже 10%',
+    },
   },
 ];
 

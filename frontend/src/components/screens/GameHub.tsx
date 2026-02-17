@@ -52,9 +52,12 @@ export function GameHub() {
       {/* Header */}
       <div className="pt-10 pb-4 px-5">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-2xl font-bold text-primary tracking-[0.1em]">ТЕРМЛИНЫ</h1>
-            <p className="text-white/40 text-xs mt-0.5">Выбери игру</p>
+          <div className="flex items-center gap-3">
+            <img src="/images/ui/splash-logo.svg" alt="Термбург" className="w-9 h-9" />
+            <div>
+              <h1 className="font-heading text-xl font-bold text-primary tracking-[0.1em]">ТЕРМБУРГ</h1>
+              <p className="text-white/30 text-[10px] italic">Стресс долой — семья с тобой!</p>
+            </div>
           </div>
           <CurrencyDisplay amount={progress.currency} />
         </div>

@@ -134,6 +134,7 @@ export interface PetState {
   age: number;
   stage: 'baby' | 'teen' | 'adult';
   lastUpdated: number;
+  cooldowns: Record<string, number>;
 }
 
 export interface PlayerProgress {

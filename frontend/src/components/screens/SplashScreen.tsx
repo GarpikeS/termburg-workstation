@@ -44,19 +44,27 @@ export function SplashScreen() {
 
       {/* Logo */}
       <motion.div
-        className="flex flex-col items-center gap-6 relative z-10"
+        className="flex flex-col items-center gap-5 relative z-10"
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 200, damping: 20 }}
       >
-        <div className="w-28 h-28 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-          <Droplets size={48} className="text-primary" />
-        </div>
+        {/* Термбург logo */}
+        <img
+          src="/images/ui/splash-logo.svg"
+          alt="Термбург"
+          className="w-28 h-28"
+        />
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-primary font-heading tracking-[0.1em]">
-            ТЕРМЛИНЫ
+          <h1 className="text-3xl font-bold text-primary font-heading tracking-[0.15em]">
+            ТЕРМБУРГ
           </h1>
-          <p className="text-white/50 text-sm mt-2 tracking-[0.2em] uppercase">Match-3 Game</p>
+          <p className="text-white/60 text-base mt-1 font-heading tracking-[0.2em]">
+            ТЕРМЛИНЫ
+          </p>
+          <p className="text-white/30 text-[10px] mt-2 italic">
+            Стресс долой — семья с тобой!
+          </p>
         </div>
       </motion.div>
 

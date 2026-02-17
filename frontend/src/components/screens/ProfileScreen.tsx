@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, Trophy, Star, Target, Award, Grid3x3, Circle, Heart, Droplets, Sparkles, Settings } from 'lucide-react';
+import { ArrowLeft, Trophy, Star, Target, Award, Grid3x3, Circle, Heart, Droplets, Sparkles, Ticket } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useGameContext } from '@/store/GameContext';
 import { getTermlinById, ELEMENT_COLORS } from '@/data/termliny';
 import { STAGE_LABELS, MOOD_LABELS, getMood } from '@/engine/engine-pet/petEngine';
+import { getProductById } from '@/data/shopData';
 import { cn } from '@/utils/cn';
 
 const achievements = [
@@ -55,10 +56,20 @@ export function ProfileScreen() {
     petAdult: progress.pet?.stage === 'adult',
   };
 
-  // XP-like progress: total stars as "experience"
+  // XP-like progress
   const xpCurrent = totalStars + completedLevels * 5 + progress.best2048Score + progress.bubbleLevelsCompleted * 10;
   const playerLevel = Math.floor(xpCurrent / 50) + 1;
   const xpInLevel = xpCurrent % 50;
+
+  // Orders with ticket products
+  const ticketOrders = progress.orders.flatMap(order =>
+    order.items
+      .map(item => {
+        const product = getProductById(item.productId);
+        return product && product.category === 'tickets' ? { order, product, qty: item.quantity } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null),
+  );
 
   return (
     <div className="h-full flex flex-col bg-dark-surface pb-20">
@@ -183,6 +194,42 @@ export function ProfileScreen() {
               </motion.div>
             ))}
           </div>
+
+          {/* Purchased tickets */}
+          {ticketOrders.length > 0 && (
+            <div>
+              <h3 className="font-heading text-xs font-semibold uppercase tracking-wider text-primary mb-3">
+                Мои билеты
+              </h3>
+              <div className="space-y-2">
+                {ticketOrders.map((t, i) => (
+                  <div
+                    key={`${t.order.id}-${t.product.id}-${i}`}
+                    className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Ticket size={18} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/90 text-sm font-medium">{t.product.name}</p>
+                      <p className="text-white/40 text-[10px]">
+                        {t.qty > 1 ? `${t.qty} шт. — ` : ''}
+                        Заказ {t.order.id}
+                      </p>
+                    </div>
+                    <span className={cn(
+                      'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                      t.order.status === 'completed' ? 'bg-green-500/15 text-green-400'
+                        : t.order.status === 'confirmed' ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-yellow-500/15 text-yellow-400',
+                    )}>
+                      {t.order.status === 'completed' ? 'Готов' : t.order.status === 'confirmed' ? 'Подтверждён' : 'Ожидание'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Game progress cards */}
           <div>
