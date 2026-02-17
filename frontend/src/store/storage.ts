@@ -1,0 +1,33 @@
+import type { PlayerProgress } from '@/types/game';
+
+const STORAGE_KEY = 'termliny-progress';
+
+const DEFAULT_PROGRESS: PlayerProgress = {
+  currentLevel: 1,
+  levels: {},
+  currency: 0,
+  selectedCharacter: 'yaromir',
+  tutorialCompleted: false,
+};
+
+export function loadProgress(): PlayerProgress {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_PROGRESS };
+    return { ...DEFAULT_PROGRESS, ...JSON.parse(raw) };
+  } catch {
+    return { ...DEFAULT_PROGRESS };
+  }
+}
+
+export function saveProgress(progress: PlayerProgress): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  } catch {
+    // localStorage full or unavailable
+  }
+}
+
+export function resetProgress(): void {
+  localStorage.removeItem(STORAGE_KEY);
+}
