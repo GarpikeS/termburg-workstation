@@ -2,11 +2,18 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GameProvider } from '@/store/GameContext';
 import { BottomNav } from '@/components/ui/BottomNav';
 import { SplashScreen } from '@/components/screens/SplashScreen';
-import { MainMenu } from '@/components/screens/MainMenu';
+import { GameHub } from '@/components/screens/GameHub';
 import { BathhouseMap } from '@/components/screens/BathhouseMap';
 import { LevelMap } from '@/components/screens/LevelMap';
 import { GameScreen } from '@/components/screens/GameScreen';
+import { Game2048Screen } from '@/components/screens/Game2048Screen';
+import { BubbleShooterScreen } from '@/components/screens/BubbleShooterScreen';
+import { TamagotchiScreen } from '@/components/screens/TamagotchiScreen';
 import { ShopScreen } from '@/components/screens/ShopScreen';
+import { CartScreen } from '@/components/screens/CartScreen';
+import { CheckoutScreen } from '@/components/screens/CheckoutScreen';
+import { TermlinyCollection } from '@/components/screens/TermlinyCollection';
+import { TermlinDetail } from '@/components/screens/TermlinDetail';
 import { ProfileScreen } from '@/components/screens/ProfileScreen';
 
 export default function App() {
@@ -24,11 +31,18 @@ export default function App() {
             <div className="flex-1 overflow-hidden relative">
               <Routes>
                 <Route path="/" element={<SplashScreen />} />
-                <Route path="/menu" element={<MainMenu />} />
-                <Route path="/map" element={<BathhouseMap />} />
-                <Route path="/levels/:bathhouseId" element={<LevelMap />} />
-                <Route path="/game/:id" element={<GameScreen />} />
+                <Route path="/games" element={<GameHub />} />
+                <Route path="/games/match3" element={<BathhouseMap />} />
+                <Route path="/games/match3/levels/:bathhouseId" element={<LevelMap />} />
+                <Route path="/games/match3/play/:id" element={<GameScreen />} />
+                <Route path="/games/2048" element={<Game2048Screen />} />
+                <Route path="/games/bubbles" element={<BubbleShooterScreen />} />
+                <Route path="/games/pet" element={<TamagotchiScreen />} />
                 <Route path="/shop" element={<ShopScreen />} />
+                <Route path="/shop/cart" element={<CartScreen />} />
+                <Route path="/shop/checkout" element={<CheckoutScreen />} />
+                <Route path="/collection" element={<TermlinyCollection />} />
+                <Route path="/collection/:id" element={<TermlinDetail />} />
                 <Route path="/profile" element={<ProfileScreen />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -2,8 +2,10 @@ import type { Objective } from '@/types/game';
 import { TOKEN_COLORS } from '@/types/game';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Pause } from 'lucide-react';
-import { Droplets, Leaf, Mountain, Wind, Flame, TreeDeciduous } from 'lucide-react';
+import { Droplets, Leaf, Mountain, Wind, Flame, TreeDeciduous, Sparkles } from 'lucide-react';
 import type { ComponentType } from 'react';
+import type { Termlin } from '@/data/termliny';
+import { ELEMENT_COLORS } from '@/data/termliny';
 
 const GEM_ICONS: Record<string, ComponentType<{ size?: number }>> = {
   water: Droplets, leaf: Leaf, stone: Mountain,
@@ -16,9 +18,12 @@ interface GameHUDProps {
   movesLeft: number;
   objectives: Objective[];
   onPause: () => void;
+  character?: Termlin;
+  abilityReady?: boolean;
+  onAbility?: () => void;
 }
 
-export function GameHUD({ levelName, score, movesLeft, objectives, onPause }: GameHUDProps) {
+export function GameHUD({ levelName, score, movesLeft, objectives, onPause, character, abilityReady, onAbility }: GameHUDProps) {
   return (
     <div className="bg-dark-surface-warm border-b border-white/10 text-white px-4 py-3">
       {/* Top row */}
@@ -30,7 +35,27 @@ export function GameHUD({ levelName, score, movesLeft, objectives, onPause }: Ga
           <Pause size={18} className="text-white/70" />
         </button>
         <h3 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">{levelName}</h3>
-        <div className="w-9" />
+        {character ? (
+          <div className="flex items-center gap-2">
+            <img
+              src={character.image}
+              alt={character.name}
+              className="w-8 h-8 rounded-full object-cover border"
+              style={{ borderColor: ELEMENT_COLORS[character.element] ?? '#BA9B4F' }}
+            />
+            {abilityReady && onAbility && (
+              <button
+                onClick={onAbility}
+                className="w-8 h-8 rounded-lg flex items-center justify-center animate-pulse"
+                style={{ backgroundColor: `${ELEMENT_COLORS[character.element] ?? '#BA9B4F'}30` }}
+              >
+                <Sparkles size={14} style={{ color: ELEMENT_COLORS[character.element] ?? '#BA9B4F' }} />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="w-9" />
+        )}
       </div>
 
       {/* Stats bar */}

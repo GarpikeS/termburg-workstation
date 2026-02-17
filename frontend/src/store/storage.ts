@@ -8,6 +8,12 @@ const DEFAULT_PROGRESS: PlayerProgress = {
   currency: 0,
   selectedCharacter: 'yaromir',
   tutorialCompleted: false,
+  best2048Score: 0,
+  bubbleLevelsCompleted: 0,
+  pet: null,
+  unlockedCharacters: ['yaromir'],
+  cart: [],
+  orders: [],
 };
 
 export function loadProgress(): PlayerProgress {

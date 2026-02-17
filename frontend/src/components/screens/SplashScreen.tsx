@@ -7,14 +7,14 @@ export function SplashScreen() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const timer = setTimeout(() => navigate('/menu'), 3000);
+    const timer = setTimeout(() => navigate('/games'), 3000);
     return () => clearTimeout(timer);
   }, [navigate]);
 
   return (
     <div
       className="h-full flex flex-col items-center justify-center bg-dark-surface cursor-pointer relative overflow-hidden ornament-pattern"
-      onClick={() => navigate('/menu')}
+      onClick={() => navigate('/games')}
     >
       {/* Decorative floating icons */}
       <motion.div

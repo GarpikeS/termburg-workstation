@@ -20,7 +20,7 @@ export function LevelMap() {
       {/* Header */}
       <div className="pt-10 pb-4 px-5">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/map')} className="text-white/50 hover:text-primary transition-colors">
+          <button onClick={() => navigate('/games/match3')} className="text-white/50 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">
@@ -51,7 +51,7 @@ export function LevelMap() {
                     unlocked ? 'border-white/10 hover:border-primary/30' : 'border-white/5 opacity-30',
                   )}
                   whileTap={unlocked ? { scale: 0.98 } : undefined}
-                  onClick={() => unlocked && navigate(`/game/${level.id}`)}
+                  onClick={() => unlocked && navigate(`/games/match3/play/${level.id}`)}
                   disabled={!unlocked}
                 >
                   <div className="flex items-center gap-2.5">

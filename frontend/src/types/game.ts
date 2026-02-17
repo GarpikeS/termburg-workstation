@@ -109,10 +109,43 @@ export interface GameState {
   isLost: boolean;
 }
 
+export interface CartItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface Order {
+  id: string;
+  items: CartItem[];
+  total: number;
+  name: string;
+  phone: string;
+  email?: string;
+  createdAt: number;
+  status: 'pending' | 'confirmed' | 'completed';
+}
+
+export interface PetState {
+  characterId: string;
+  hunger: number;
+  happiness: number;
+  energy: number;
+  cleanliness: number;
+  age: number;
+  stage: 'baby' | 'teen' | 'adult';
+  lastUpdated: number;
+}
+
 export interface PlayerProgress {
   currentLevel: number;
   levels: Record<number, LevelProgress>;
   currency: number;
   selectedCharacter: string;
   tutorialCompleted: boolean;
+  best2048Score: number;
+  bubbleLevelsCompleted: number;
+  pet: PetState | null;
+  unlockedCharacters: string[];
+  cart: CartItem[];
+  orders: Order[];
 }

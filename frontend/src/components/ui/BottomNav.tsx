@@ -1,20 +1,29 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Play, Map, ShoppingBag, User } from 'lucide-react';
+import { Gamepad2, ShoppingBag, Users, User } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { useGameContext } from '@/store/GameContext';
 
 const tabs = [
-  { path: '/menu', icon: Play, label: 'Игра' },
-  { path: '/map', icon: Map, label: 'Карта' },
-  { path: '/shop', icon: ShoppingBag, label: 'Магазин' },
+  { path: '/games', icon: Gamepad2, label: 'Игры' },
+  { path: '/shop', icon: ShoppingBag, label: 'Магазин', badge: true },
+  { path: '/collection', icon: Users, label: 'Термлины' },
   { path: '/profile', icon: User, label: 'Профиль' },
 ];
+
+const HIDDEN_PREFIXES = ['/games/match3/play/', '/games/2048', '/games/bubbles', '/games/pet'];
 
 export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { progress } = useGameContext();
 
-  if (location.pathname === '/' || location.pathname.startsWith('/game/')) return null;
+  const hidden = location.pathname === '/' ||
+    HIDDEN_PREFIXES.some(p => location.pathname.startsWith(p));
+
+  if (hidden) return null;
+
+  const cartCount = progress.cart.reduce((s, c) => s + c.quantity, 0);
 
   return (
     <motion.div
@@ -25,7 +34,10 @@ export function BottomNav() {
     >
       <div className="flex items-center justify-around px-4 py-3">
         {tabs.map(tab => {
-          const active = location.pathname === tab.path;
+          const active = location.pathname === tab.path ||
+            (tab.path === '/games' && location.pathname.startsWith('/games')) ||
+            (tab.path === '/shop' && location.pathname.startsWith('/shop')) ||
+            (tab.path === '/collection' && location.pathname.startsWith('/collection'));
           return (
             <button
               key={tab.path}
@@ -35,7 +47,14 @@ export function BottomNav() {
                 active ? 'text-primary' : 'text-white/50 hover:text-white/80',
               )}
             >
-              <tab.icon size={20} />
+              <div className="relative">
+                <tab.icon size={20} />
+                {tab.badge && cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {cartCount > 9 ? '9+' : cartCount}
+                  </span>
+                )}
+              </div>
               <span className="text-[10px] font-medium">{tab.label}</span>
               {active && (
                 <motion.div

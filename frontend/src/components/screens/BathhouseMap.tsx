@@ -15,7 +15,7 @@ export function BathhouseMap() {
       {/* Header */}
       <div className="pt-10 pb-4 px-5">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/menu')} className="text-white/50 hover:text-primary transition-colors">
+          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-base font-bold text-primary tracking-wider uppercase">Карта</h2>
@@ -57,7 +57,7 @@ export function BathhouseMap() {
                 className="absolute flex flex-col items-center gap-1.5"
                 style={{ left: `${bh.position.x}%`, top: `${bh.position.y}%`, transform: 'translate(-50%, -50%)' }}
                 whileTap={unlocked ? { scale: 0.95 } : undefined}
-                onClick={() => unlocked && navigate(`/levels/${bh.id}`)}
+                onClick={() => unlocked && navigate(`/games/match3/levels/${bh.id}`)}
                 disabled={!unlocked}
               >
                 <div className={cn(
