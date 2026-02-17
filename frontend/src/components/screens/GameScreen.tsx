@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getLevelConfig } from '@/data/levels';
+import { getBathhouseForLevel } from '@/data/bathhouses';
 import { useGame } from '@/hooks/useGame';
 import { useGameContext } from '@/store/GameContext';
 import { getStars, getReward } from '@/engine/scorer';
@@ -18,17 +19,16 @@ export function GameScreen() {
   const { completeLevelAction } = useGameContext();
   const levelId = Number(id) || 1;
   const config = getLevelConfig(levelId);
+  const bathhouse = getBathhouseForLevel(levelId);
 
   const [showStart, setShowStart] = useState(true);
   const [showPause, setShowPause] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
 
-  // Use a fallback config if level not found
   const safeConfig = config ?? getLevelConfig(1)!;
   const game = useGame(safeConfig);
   const { state, animData, handleCellClick, handleSwipe, advanceAnimation, resetGame } = game;
 
-  // Handle win
   useEffect(() => {
     if (state.isWon && !hasCompleted) {
       setHasCompleted(true);
@@ -61,23 +61,23 @@ export function GameScreen() {
 
   if (!config) {
     return (
-      <div className="h-full flex items-center justify-center bg-game-bg">
-        <p className="text-white/60">Уровень не найден</p>
+      <div className="h-full flex items-center justify-center bg-background">
+        <p className="text-muted-foreground">Уровень не найден</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-game-bg">
+    <div className="h-full flex flex-col bg-background">
       <GameHUD
-        level={levelId}
+        levelName={config.name}
         score={state.score}
         movesLeft={state.movesLeft}
         objectives={state.objectives}
         onPause={() => setShowPause(true)}
       />
 
-      <div className="flex-1 flex items-center justify-center relative">
+      <div className="flex-1 flex items-center justify-center relative px-2">
         <GameBoard
           grid={state.grid}
           rows={state.levelConfig.rows}
@@ -96,7 +96,7 @@ export function GameScreen() {
         open={showStart}
         config={safeConfig}
         onStart={handleStartPlay}
-        onBack={() => navigate('/map')}
+        onBack={() => navigate(bathhouse ? `/levels/${bathhouse.id}` : '/map')}
       />
 
       <WinPopup
@@ -104,20 +104,20 @@ export function GameScreen() {
         score={state.score}
         levelConfig={state.levelConfig}
         onNext={handleNext}
-        onMap={() => navigate('/map')}
+        onMap={() => navigate(bathhouse ? `/levels/${bathhouse.id}` : '/map')}
       />
 
       <LosePopup
         open={state.isLost}
         onRetry={handleRestart}
-        onMap={() => navigate('/map')}
+        onMap={() => navigate(bathhouse ? `/levels/${bathhouse.id}` : '/map')}
       />
 
       <PausePopup
         open={showPause}
         onResume={() => setShowPause(false)}
         onRestart={handleRestart}
-        onQuit={() => navigate('/map')}
+        onQuit={() => navigate(bathhouse ? `/levels/${bathhouse.id}` : '/map')}
       />
     </div>
   );

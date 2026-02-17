@@ -1,60 +1,32 @@
 export interface Character {
   id: string;
   name: string;
-  image: string;
+  gradient: string;
   description: string;
   unlockLevel: number;
 }
 
 export const characters: Character[] = [
   {
-    id: 'yaromir',
-    name: 'Яромир',
-    image: '/images/characters/yaromir.webp',
-    description: 'Хранитель терм, мудрый и спокойный',
+    id: 'ai-concierge',
+    name: 'AI-консьерж',
+    gradient: 'from-[#7FA99B] to-[#6DB4C9]',
+    description: 'Умный помощник с подсказками',
     unlockLevel: 1,
   },
   {
-    id: 'valkiriya',
-    name: 'Валькирия',
-    image: '/images/characters/valkiriya.webp',
-    description: 'Воительница пара, стремительная и ловкая',
-    unlockLevel: 6,
-  },
-  {
-    id: 'pereslav',
-    name: 'Переслав',
-    image: '/images/characters/pereslav.webp',
-    description: 'Мастер камня, крепкий и надёжный',
+    id: 'term-master',
+    name: 'Терм-мастер',
+    gradient: 'from-[#E88B5C] to-[#C4956C]',
+    description: 'Мастер горячего пара',
     unlockLevel: 11,
   },
   {
-    id: 'kazimir',
-    name: 'Казимир',
-    image: '/images/characters/kazimir.webp',
-    description: 'Повелитель огня, пылкий и решительный',
-    unlockLevel: 16,
-  },
-  {
-    id: 'vedagor',
-    name: 'Ведагор',
-    image: '/images/characters/vedagor.webp',
-    description: 'Лесной дух, загадочный и мудрый',
-    unlockLevel: 21,
-  },
-  {
-    id: 'milovan',
-    name: 'Милован',
-    image: '/images/characters/milovan.webp',
-    description: 'Целитель вод, добрый и заботливый',
-    unlockLevel: 23,
-  },
-  {
-    id: 'lelya',
-    name: 'Леля',
-    image: '/images/characters/lelya.webp',
-    description: 'Дух весны, нежная и могущественная',
-    unlockLevel: 26,
+    id: 'ar-guide',
+    name: 'AR-гид',
+    gradient: 'from-[#C4956C] to-[#E8DCC4]',
+    description: 'Проводник виртуальных миров',
+    unlockLevel: 41,
   },
 ];
 

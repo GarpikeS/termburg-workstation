@@ -10,12 +10,12 @@ export const TokenType = {
 export type TokenType = (typeof TokenType)[keyof typeof TokenType];
 
 export const TOKEN_COLORS: Record<TokenType, string> = {
-  water: '#6AABDA',
-  leaf: '#5DB879',
-  stone: '#8E8E9E',
-  steam: '#9B7EC8',
-  fire: '#D4956A',
-  wood: '#A0784C',
+  water: '#6DB4C9',
+  leaf: '#6EAA5E',
+  stone: '#8B8D8F',
+  steam: '#B8C9D9',
+  fire: '#E88B5C',
+  wood: '#8B6F47',
 };
 
 export const ALL_TOKEN_TYPES: TokenType[] = Object.values(TokenType) as TokenType[];
@@ -65,16 +65,29 @@ export interface Objective {
   current: number;
 }
 
+export type Difficulty = 'classic' | 'premium' | 'vip';
+
 export interface LevelConfig {
   id: number;
+  name: string;
+  difficulty: Difficulty;
+  bathhouseId: number;
   rows: number;
   cols: number;
   tokenTypes: TokenType[];
   moves: number;
   objectives: { type: TokenType; target: number }[];
-  starThresholds: [number, number, number]; // 1★, 2★, 3★ score
-  reward: number; // termliny currency
+  starThresholds: [number, number, number];
+  reward: number;
   characterId: string;
+}
+
+export interface Bathhouse {
+  id: number;
+  name: string;
+  color: string;
+  levelsRange: [number, number];
+  position: { x: number; y: number };
 }
 
 export interface LevelProgress {

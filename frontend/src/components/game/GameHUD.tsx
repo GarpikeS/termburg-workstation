@@ -1,41 +1,77 @@
 import type { Objective } from '@/types/game';
-import { ObjectiveDisplay } from './ObjectiveDisplay';
+import { TOKEN_COLORS } from '@/types/game';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Pause } from 'lucide-react';
+import { Droplets, Leaf, Mountain, Wind, Flame, TreeDeciduous } from 'lucide-react';
+import type { ComponentType } from 'react';
+
+const GEM_ICONS: Record<string, ComponentType<{ size?: number }>> = {
+  water: Droplets, leaf: Leaf, stone: Mountain,
+  steam: Wind, fire: Flame, wood: TreeDeciduous,
+};
 
 interface GameHUDProps {
-  level: number;
+  levelName: string;
   score: number;
   movesLeft: number;
   objectives: Objective[];
   onPause: () => void;
 }
 
-export function GameHUD({ level, score, movesLeft, objectives, onPause }: GameHUDProps) {
+export function GameHUD({ levelName, score, movesLeft, objectives, onPause }: GameHUDProps) {
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-2 space-y-2">
-      {/* Top bar */}
-      <div className="flex items-center justify-between">
-        <div className="text-white/60 text-sm font-heading">
-          Уровень {level}
-        </div>
-        <div className="text-primary font-bold text-lg tabular-nums">
-          {score.toLocaleString()}
-        </div>
+    <div className="bg-gradient-to-b from-primary to-accent text-white px-4 py-3 rounded-b-3xl shadow-lg">
+      {/* Top row */}
+      <div className="flex items-center justify-between mb-3">
         <button
           onClick={onPause}
-          className="w-9 h-9 flex items-center justify-center rounded-lg bg-dark-surface-warm/60 hover:bg-dark-surface-warm text-white/70 hover:text-white transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm"
         >
           <Pause size={18} />
         </button>
+        <h3 className="font-heading text-base font-bold">{levelName}</h3>
+        <div className="w-9" />
       </div>
 
-      {/* Moves + Objectives */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 bg-dark-surface-warm/60 rounded-lg px-3 py-1.5">
-          <span className="text-white/50 text-xs">Ходы</span>
-          <span className="text-white font-bold text-lg tabular-nums leading-none">{movesLeft}</span>
+      {/* Stats bar */}
+      <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-3 flex items-center justify-between">
+        <div className="text-center">
+          <p className="text-white/60 text-[10px] uppercase">Ходы</p>
+          <p className="text-2xl font-bold tabular-nums">{movesLeft}</p>
         </div>
-        <ObjectiveDisplay objectives={objectives} />
+        <div className="text-center">
+          <p className="text-white/60 text-[10px] uppercase">Очки</p>
+          <p className="text-2xl font-bold tabular-nums">{score.toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* Goals */}
+      <div className="mt-3 space-y-2">
+        {objectives.map((obj, i) => {
+          const Icon = GEM_ICONS[obj.type];
+          const done = obj.current >= obj.target;
+          return (
+            <div key={i} className="flex items-center gap-2">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: TOKEN_COLORS[obj.type] }}
+              >
+                {Icon && <Icon size={16} />}
+              </div>
+              <div className="flex-1">
+                <ProgressBar
+                  current={obj.current}
+                  max={obj.target}
+                  color={done ? '#6EAA5E' : 'white'}
+                  className="h-2 bg-white/20"
+                />
+              </div>
+              <span className="text-xs tabular-nums font-bold min-w-[40px] text-right">
+                {Math.min(obj.current, obj.target)}/{obj.target}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

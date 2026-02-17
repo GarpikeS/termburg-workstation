@@ -19,8 +19,8 @@ export function StarRating({ stars, maxStars = 3, size = 24, animated = false, c
           className={cn(
             'transition-all duration-300',
             i < stars
-              ? 'text-primary fill-primary'
-              : 'text-dark-border fill-none',
+              ? 'fill-termo-gold text-termo-gold'
+              : 'text-muted fill-none',
             animated && i < stars && 'animate-star-pop',
           )}
           style={animated && i < stars ? { animationDelay: `${i * 0.15}s` } : undefined}

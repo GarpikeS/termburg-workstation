@@ -8,7 +8,6 @@ interface ComboTextProps {
 interface FloatingText {
   id: number;
   text: string;
-  key: number;
 }
 
 let floatId = 0;
@@ -20,7 +19,7 @@ export function ComboText({ combo, score }: ComboTextProps) {
     if (combo > 0 && score > 0) {
       const id = ++floatId;
       const text = combo > 1 ? `+${score} x${combo}!` : `+${score}`;
-      setFloats(prev => [...prev, { id, text, key: id }]);
+      setFloats(prev => [...prev, { id, text }]);
 
       const timer = setTimeout(() => {
         setFloats(prev => prev.filter(f => f.id !== id));
@@ -34,8 +33,8 @@ export function ComboText({ combo, score }: ComboTextProps) {
     <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
       {floats.map(f => (
         <div
-          key={f.key}
-          className="absolute text-primary font-heading text-2xl font-bold animate-float-up"
+          key={f.id}
+          className="absolute text-primary font-heading text-2xl font-bold animate-float-up drop-shadow-lg"
         >
           {f.text}
         </div>

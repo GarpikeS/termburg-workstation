@@ -1,70 +1,108 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Sparkles, Zap, Star } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { useGameContext } from '@/store/GameContext';
-import { getUnlockedCharacters } from '@/data/characters';
-import { cn } from '@/utils/cn';
+
+const packages = [
+  {
+    name: 'Классик', gradient: 'from-[#7FA99B] to-[#6DB4C9]',
+    gems: 50, boosters: 3, lives: 0, price: 'Бесплатно',
+  },
+  {
+    name: 'Премиум', gradient: 'from-[#C4956C] to-[#E8DCC4]',
+    gems: 200, boosters: 10, lives: 5, price: '99',
+  },
+  {
+    name: 'VIP', gradient: 'from-[#E88B5C] to-[#C4956C]',
+    gems: 500, boosters: 25, lives: 15, price: '299',
+  },
+];
+
+const boosters = [
+  { name: 'AI-Подсказка', icon: Sparkles, color: '#6DB4C9', price: 20 },
+  { name: 'Перемешать', icon: Zap, color: '#6EAA5E', price: 30 },
+  { name: 'Уничтожить', icon: Star, color: '#E88B5C', price: 50 },
+];
 
 export function ShopScreen() {
   const navigate = useNavigate();
-  const { progress, selectCharacter } = useGameContext();
-  const unlockedChars = getUnlockedCharacters(progress.currentLevel);
+  const { progress, spendCurrency } = useGameContext();
 
   return (
-    <div className="h-full flex flex-col bg-game-bg">
+    <div className="h-full flex flex-col bg-background pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3">
-        <button
-          onClick={() => navigate('/menu')}
-          className="w-9 h-9 flex items-center justify-center rounded-lg bg-dark-surface-warm/60 text-white/70 hover:text-white"
-        >
-          <ArrowLeft size={18} />
-        </button>
-        <h2 className="font-heading text-lg text-white">Персонажи</h2>
-        <CurrencyDisplay amount={progress.currency} />
+      <div className="bg-gradient-to-b from-primary to-accent pt-12 pb-6 px-6 rounded-b-4xl shadow-xl">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate('/menu')}
+            className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm text-white"
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <h2 className="font-heading text-lg text-white font-bold">Магазин</h2>
+          <CurrencyDisplay amount={progress.currency} light />
+        </div>
       </div>
 
-      {/* Characters */}
-      <div className="flex-1 overflow-y-auto px-4 pb-6">
-        <div className="grid grid-cols-2 gap-3 max-w-md mx-auto pt-2">
-          {unlockedChars.map(char => {
-            const isSelected = progress.selectedCharacter === char.id;
-            return (
-              <button
-                key={char.id}
-                onClick={() => selectCharacter(char.id)}
-                className={cn(
-                  'flex flex-col items-center gap-2 p-4 rounded-xl transition-all',
-                  isSelected
-                    ? 'bg-primary/20 border-2 border-primary'
-                    : 'bg-dark-surface-warm border-2 border-transparent hover:border-primary/30',
-                )}
-              >
-                <div className="w-16 h-16 rounded-full bg-dark-surface overflow-hidden">
-                  <img src={char.image} alt={char.name} className="w-full h-full object-cover" />
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        {/* Packages */}
+        <div>
+          <h3 className="font-heading text-xl font-bold text-foreground mb-3">Наборы</h3>
+          <div className="space-y-3">
+            {packages.map(pkg => (
+              <div key={pkg.name} className="bg-card rounded-2xl overflow-hidden shadow-md">
+                <div className={`bg-gradient-to-br ${pkg.gradient} p-4`}>
+                  <h4 className="text-white font-bold text-xl">{pkg.name}</h4>
+                  <p className="text-white/80 text-sm mt-1">
+                    {pkg.gems} гемов + {pkg.boosters} бустеров{pkg.lives ? ` + ${pkg.lives} жизней` : ''}
+                  </p>
                 </div>
-                <span className="text-white font-heading text-sm">{char.name}</span>
-                <span className="text-white/40 text-xs text-center">{char.description}</span>
-                {isSelected && (
-                  <span className="text-primary text-xs font-medium">Выбран</span>
-                )}
-              </button>
-            );
-          })}
+                <div className="p-4">
+                  <Button className="w-full" size="sm">
+                    {pkg.price === 'Бесплатно' ? 'Забрать' : `${pkg.price} T`}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {unlockedChars.length < 7 && (
-          <p className="text-white/30 text-xs text-center mt-4">
-            Проходи уровни, чтобы открыть новых персонажей
-          </p>
-        )}
-      </div>
+        {/* Boosters */}
+        <div>
+          <h3 className="font-heading text-xl font-bold text-foreground mb-3">Бустеры</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {boosters.map(b => (
+              <button
+                key={b.name}
+                className="bg-card rounded-2xl p-3 text-center shadow-md"
+                onClick={() => spendCurrency(b.price)}
+              >
+                <div
+                  className="w-12 h-12 rounded-xl mx-auto mb-2 flex items-center justify-center"
+                  style={{ backgroundColor: b.color }}
+                >
+                  <b.icon size={24} className="text-white" />
+                </div>
+                <p className="text-xs font-bold text-foreground">{b.name}</p>
+                <p className="text-xs text-termo-gold font-bold mt-1">{b.price} T</p>
+              </button>
+            ))}
+          </div>
+        </div>
 
-      <div className="px-4 pb-4">
-        <Button onClick={() => navigate('/menu')} className="w-full">
-          Назад в меню
-        </Button>
+        {/* NFT promo */}
+        <div className="bg-gradient-to-br from-secondary to-[#D4C5A0] rounded-2xl p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-white/30 flex items-center justify-center">
+              <Star size={24} className="text-foreground" />
+            </div>
+            <div>
+              <h4 className="font-heading font-bold text-foreground">NFT-Коллекция</h4>
+              <p className="text-muted-foreground text-sm">Скоро: уникальные предметы</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
