@@ -9,6 +9,7 @@ import { getStars, getReward } from '@/engine/scorer';
 import { GameBoard } from '@/components/game/GameBoard';
 import { GameHUD } from '@/components/game/GameHUD';
 import { ComboText } from '@/components/game/ComboText';
+import { CharacterAbilityBar } from '@/components/game/CharacterAbilityBar';
 import { WinPopup } from '@/popups/WinPopup';
 import { LosePopup } from '@/popups/LosePopup';
 import { PausePopup } from '@/popups/PausePopup';
@@ -138,6 +139,9 @@ export function GameScreen() {
         />
         <ComboText combo={state.combo} score={animData.scoreGained ?? 0} />
       </div>
+
+      {/* Character ability bar */}
+      <CharacterAbilityBar game="match3" />
 
       <LevelStartPopup
         open={showStart}

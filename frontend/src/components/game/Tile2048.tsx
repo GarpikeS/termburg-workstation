@@ -11,22 +11,23 @@ interface Tile2048Props {
 export function Tile2048({ tile, cellSize, gap }: Tile2048Props) {
   const { bg, text } = getTileColor(tile.value);
   const fontSize = getTileFontSize(tile.value);
-  const x = tile.col * (cellSize + gap);
-  const y = tile.row * (cellSize + gap);
+  // Same formula as background cells
+  const left = gap + tile.col * (cellSize + gap);
+  const top = gap + tile.row * (cellSize + gap);
 
   return (
     <motion.div
-      layout
-      layoutId={`tile-${tile.id}`}
-      className={`absolute rounded-lg flex items-center justify-center font-bold ${fontSize}`}
+      className={`absolute rounded-lg flex items-center justify-center font-bold ${fontSize} z-10`}
       style={{
         width: cellSize,
         height: cellSize,
+        left,
+        top,
         backgroundColor: bg,
         color: text,
       }}
-      initial={tile.isNew ? { scale: 0, x, y } : tile.mergedFrom ? { scale: 0.8, x, y } : { x, y }}
-      animate={{ scale: 1, x, y }}
+      initial={tile.isNew ? { scale: 0 } : tile.mergedFrom ? { scale: 0.8 } : false}
+      animate={{ scale: 1 }}
       transition={{ type: 'spring', stiffness: 300, damping: 25, duration: 0.15 }}
     >
       {tile.value}

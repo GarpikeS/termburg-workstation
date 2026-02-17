@@ -195,41 +195,62 @@ export function ProfileScreen() {
             ))}
           </div>
 
-          {/* Purchased tickets */}
-          {ticketOrders.length > 0 && (
-            <div>
-              <h3 className="font-heading text-xs font-semibold uppercase tracking-wider text-primary mb-3">
-                Мои билеты
-              </h3>
+          {/* Purchased tickets & orders */}
+          <div>
+            <h3 className="font-heading text-xs font-semibold uppercase tracking-wider text-primary mb-3">
+              Мои билеты и заказы
+            </h3>
+            {progress.orders.length === 0 ? (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Ticket size={18} className="text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-white/40 text-sm">Нет заказов</p>
+                  <p className="text-white/25 text-[10px]">Купите билеты или мерч в магазине</p>
+                </div>
+              </div>
+            ) : (
               <div className="space-y-2">
-                {ticketOrders.map((t, i) => (
+                {progress.orders.map(order => (
                   <div
-                    key={`${t.order.id}-${t.product.id}-${i}`}
-                    className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3"
+                    key={order.id}
+                    className="bg-white/5 border border-white/10 rounded-xl p-3"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Ticket size={18} className="text-primary" />
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Ticket size={14} className="text-primary" />
+                        <span className="text-white/70 text-xs font-medium">{order.id}</span>
+                      </div>
+                      <span className={cn(
+                        'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                        order.status === 'completed' ? 'bg-green-500/15 text-green-400'
+                          : order.status === 'confirmed' ? 'bg-blue-500/15 text-blue-400'
+                          : 'bg-yellow-500/15 text-yellow-400',
+                      )}>
+                        {order.status === 'completed' ? 'Готов' : order.status === 'confirmed' ? 'Подтверждён' : 'Ожидание'}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white/90 text-sm font-medium">{t.product.name}</p>
-                      <p className="text-white/40 text-[10px]">
-                        {t.qty > 1 ? `${t.qty} шт. — ` : ''}
-                        Заказ {t.order.id}
-                      </p>
+                    <div className="space-y-1">
+                      {order.items.map((item, idx) => {
+                        const product = getProductById(item.productId);
+                        return (
+                          <div key={idx} className="flex justify-between text-xs">
+                            <span className="text-white/50">{product?.name ?? item.productId} {item.quantity > 1 ? `×${item.quantity}` : ''}</span>
+                            <span className="text-white/30">{product ? (product.currency === 'rub' ? `${product.price * item.quantity} ₽` : `${product.price * item.quantity} T`) : ''}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <span className={cn(
-                      'text-[10px] px-2 py-0.5 rounded-full font-medium',
-                      t.order.status === 'completed' ? 'bg-green-500/15 text-green-400'
-                        : t.order.status === 'confirmed' ? 'bg-blue-500/15 text-blue-400'
-                        : 'bg-yellow-500/15 text-yellow-400',
-                    )}>
-                      {t.order.status === 'completed' ? 'Готов' : t.order.status === 'confirmed' ? 'Подтверждён' : 'Ожидание'}
-                    </span>
+                    <div className="flex justify-between mt-2 pt-2 border-t border-white/5">
+                      <span className="text-white/30 text-[10px]">{new Date(order.createdAt).toLocaleDateString('ru')}</span>
+                      <span className="text-primary text-xs font-bold">{order.total} ₽</span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Game progress cards */}
           <div>

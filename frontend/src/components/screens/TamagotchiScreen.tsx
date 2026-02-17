@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Utensils, Gamepad2, Moon, Droplets, AlertTriangle, Sparkles } from 'lucide-react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
+import { CharacterAbilityBar } from '@/components/game/CharacterAbilityBar';
 import { usePet } from '@/hooks/usePet';
 import { useGameContext } from '@/store/GameContext';
 import { termliny, ELEMENT_COLORS, getTermlinById } from '@/data/termliny';
@@ -113,7 +114,7 @@ export function TamagotchiScreen() {
   return (
     <div className="h-full flex flex-col bg-dark-surface">
       {/* Header */}
-      <div className="pt-10 pb-3 px-5">
+      <div className="pt-8 pb-2 px-4">
         <div className="flex items-center justify-between">
           <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
@@ -207,18 +208,7 @@ export function TamagotchiScreen() {
             </motion.p>
           )}
 
-          {/* Character ability */}
-          {termlin?.ability.pet && (
-            <div
-              className="mt-2 flex items-center gap-1.5 px-3 py-1 rounded-lg border"
-              style={{ backgroundColor: `${color}08`, borderColor: `${color}15` }}
-            >
-              <Sparkles size={10} style={{ color }} />
-              <span className="text-[9px]" style={{ color: `${color}CC` }}>
-                {termlin.ability.pet}
-              </span>
-            </div>
-          )}
+          {/* Character ability - shown in bottom bar */}
         </motion.div>
 
         {/* Stats */}
@@ -275,6 +265,9 @@ export function TamagotchiScreen() {
           })}
         </div>
       </div>
+
+      {/* Character ability bar */}
+      <CharacterAbilityBar game="pet" />
     </div>
   );
 }
