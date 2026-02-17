@@ -1,145 +1,131 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, Lock, Droplets, TreePine, Mountain, Wind, Waves, Moon, Flame, Snowflake, Gem, Sparkles } from 'lucide-react';
-import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
+import { ArrowLeft, Lock, Coins } from 'lucide-react';
 import { useGameContext } from '@/store/GameContext';
 import { bathhouses } from '@/data/bathhouses';
 import { cn } from '@/utils/cn';
 
-const BATH_ICONS = [Droplets, TreePine, Mountain, Wind, Waves, Moon, Flame, Snowflake, Gem, Sparkles];
+// Positions of bathhouses on the 768x1376 image (%)
+// Symmetric around center axis (50%), offset ±22%
+const MAP_POSITIONS = [
+  { x: 50, y: 92 },  // 1 — center
+  { x: 28, y: 83 },  // 2 — left
+  { x: 72, y: 73 },  // 3 — right
+  { x: 28, y: 65 },  // 4 — left
+  { x: 72, y: 56 },  // 5 — right
+  { x: 28, y: 47 },  // 6 — left
+  { x: 72, y: 38 },  // 7 — right
+  { x: 50, y: 29 },  // 8 — center (crystal)
+  { x: 28, y: 20 },  // 9 — left
+  { x: 72, y: 11 },  // 10 — right
+] as const;
 
 export function BathhouseMap() {
   const navigate = useNavigate();
   const { progress } = useGameContext();
 
-  // Build curved SVG path between nodes
-  const buildPath = () => {
-    const points = bathhouses.map(bh => ({
-      x: bh.position.x,
-      y: bh.position.y,
-    }));
-
-    let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p = points[i];
-      const n = points[i + 1];
-      const cpx1 = p.x;
-      const cpy1 = (p.y + n.y) / 2;
-      const cpx2 = n.x;
-      const cpy2 = (p.y + n.y) / 2;
-      d += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${n.x} ${n.y}`;
-    }
-    return d;
-  };
-
   return (
-    <div className="h-full flex flex-col bg-dark-surface pb-20 ornament-pattern">
-      {/* Header */}
-      <div className="pt-10 pb-4 px-5">
-        <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
-            <ArrowLeft size={20} />
-          </button>
-          <h2 className="font-heading text-base font-bold text-primary tracking-wider uppercase">Карта бань</h2>
-          <CurrencyDisplay amount={progress.currency} />
-        </div>
+    <div className="h-full relative bg-[#080c08] overflow-hidden flex flex-col">
+      {/* Header — over the map */}
+      <div className="absolute top-7 left-4 right-4 flex items-center justify-between z-20">
+        <motion.button
+          className="bg-black/50 backdrop-blur-sm border border-white/20 rounded-full p-2.5"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate('/games')}
+        >
+          <ArrowLeft size={16} className="text-white/80" />
+        </motion.button>
+
+        <motion.div
+          className="flex items-center gap-1.5 bg-black/50 backdrop-blur-sm border border-primary/30 rounded-full px-3 py-1.5"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+        >
+          <Coins size={14} className="text-primary" />
+          <span className="text-primary font-bold text-sm">{progress.currency}</span>
+        </motion.div>
       </div>
-      <div className="gold-separator" />
 
-      {/* Map content */}
-      <div className="flex-1 overflow-y-auto phone-scroll px-4 py-4">
-        <div className="relative" style={{ minHeight: 700 }}>
-          {/* Path SVG — curved */}
-          <svg
+      {/* Dark gradient for top UI */}
+      <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/50 to-transparent z-10" />
+
+      {/* Scrollable map */}
+      <div className="flex-1 overflow-y-auto phone-scroll">
+        <div
+          className="relative w-full"
+          style={{ paddingBottom: '179.2%' /* 1376/768 * 100 */ }}
+        >
+          <img
+            src="/images/ui/bathhouse-map-bg.jpg"
+            alt="Карта бань"
             className="absolute inset-0 w-full h-full"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            style={{ minHeight: 700 }}
-          >
-            <defs>
-              <linearGradient id="pathGrad" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stopColor="#BA9B4F" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#D4956A" stopOpacity={0.1} />
-              </linearGradient>
-            </defs>
-            <path
-              d={buildPath()}
-              fill="none"
-              stroke="url(#pathGrad)"
-              strokeWidth={0.6}
-              strokeDasharray="2,1.5"
-              strokeLinecap="round"
-            />
-          </svg>
+            draggable={false}
+          />
 
-          {/* Nodes */}
+          {/* Bathhouse hotspots */}
           {bathhouses.map((bh, idx) => {
+            const pos = MAP_POSITIONS[idx];
+            if (!pos) return null;
             const unlocked = bh.levelsRange[0] <= progress.currentLevel;
             const completed = bh.levelsRange[1] < progress.currentLevel;
             const current = unlocked && !completed;
-            const Icon = BATH_ICONS[idx] ?? Droplets;
 
             return (
               <motion.button
                 key={bh.id}
-                className="absolute flex flex-col items-center"
+                className="absolute flex flex-col items-center z-10"
                 style={{
-                  left: `${bh.position.x}%`,
-                  top: `${bh.position.y}%`,
+                  left: `${pos.x}%`,
+                  top: `${pos.y}%`,
+                  width: '18%',
+                  height: '7%',
                   transform: 'translate(-50%, -50%)',
                 }}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: idx * 0.06 }}
-                whileTap={unlocked ? { scale: 0.93 } : undefined}
+                transition={{ delay: idx * 0.05 }}
                 onClick={() => unlocked && navigate(`/games/match3/levels/${bh.id}`)}
                 disabled={!unlocked}
               >
-                {/* Glow ring for current */}
+                {/* Glow for current level */}
                 {current && (
                   <motion.div
-                    className="absolute rounded-full"
-                    style={{
-                      width: 56,
-                      height: 56,
-                      border: `2px solid ${bh.color}`,
-                      opacity: 0.3,
-                    }}
-                    animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0, 0.3] }}
+                    className="absolute inset-0 rounded-full"
+                    style={{ boxShadow: `0 0 20px 6px ${bh.color}60` }}
+                    animate={{ opacity: [0.4, 0.8, 0.4] }}
                     transition={{ repeat: Infinity, duration: 2 }}
                   />
                 )}
 
-                <div className={cn(
-                  'w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all',
-                  unlocked
-                    ? completed
-                      ? 'border-green-500/50 bg-green-500/15'
-                      : 'shadow-lg'
-                    : 'bg-white/5 border-white/10 opacity-40',
+                {/* Lock overlay for locked bathhouses */}
+                {!unlocked && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="bg-black/60 rounded-full p-1.5">
+                      <Lock size={12} className="text-white/40" />
+                    </div>
+                  </div>
                 )}
-                  style={unlocked && !completed ? {
-                    borderColor: `${bh.color}80`,
-                    backgroundColor: `${bh.color}20`,
-                    boxShadow: `0 0 15px ${bh.color}25`,
-                  } : undefined}
-                >
-                  {unlocked ? (
-                    <Icon size={18} style={{ color: completed ? '#5DB879' : bh.color }} />
-                  ) : (
-                    <Lock size={14} className="text-white/30" />
-                  )}
-                </div>
-                <span className={cn(
-                  'text-[9px] font-medium text-center max-w-[80px] leading-tight mt-1.5',
-                  unlocked ? 'text-white/70' : 'text-white/20',
-                )}>
-                  {bh.name}
-                </span>
+
+                {/* Level range label */}
                 {unlocked && (
-                  <span className="text-[8px] text-white/30 mt-0.5">
-                    {bh.levelsRange[0]}–{bh.levelsRange[1]}
-                  </span>
+                  <div
+                    className="absolute -bottom-1 left-1/2 -translate-x-1/2"
+                    style={{ transform: 'translateX(-50%) translateY(100%)' }}
+                  >
+                    <span
+                      className={cn(
+                        'text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
+                        completed
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-black/50 text-white/70',
+                      )}
+                      style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
+                    >
+                      {bh.levelsRange[0]}–{bh.levelsRange[1]}
+                    </span>
+                  </div>
                 )}
               </motion.button>
             );

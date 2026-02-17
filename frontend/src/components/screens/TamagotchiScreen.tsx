@@ -40,10 +40,10 @@ export function TamagotchiScreen() {
   // Adoption screen
   if (!pet) {
     return (
-      <div className="h-full flex flex-col bg-dark-surface">
-        <div className="pt-10 pb-4 px-5">
+      <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-pet-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+        <div className="pt-10 pb-4 px-5 bg-black/50 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
+            <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors">
               <ArrowLeft size={20} />
             </button>
             <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Тамагочи</h2>
@@ -52,9 +52,9 @@ export function TamagotchiScreen() {
         </div>
         <div className="gold-separator" />
 
-        <div className="flex-1 overflow-y-auto phone-scroll px-5 py-4">
-          <p className="text-white/60 text-sm text-center mb-1">Выбери своего питомца-Термлина!</p>
-          <p className="text-white/30 text-[10px] text-center mb-4">Каждый персонаж даёт уникальный бонус</p>
+        <div className="flex-1 overflow-y-auto phone-scroll px-5 py-4 bg-black/30">
+          <p className="text-white/70 text-sm text-center mb-1">Выбери своего питомца-Термлина!</p>
+          <p className="text-white/40 text-[10px] text-center mb-4">Каждый персонаж даёт уникальный бонус</p>
           <div className="grid grid-cols-2 gap-3">
             {termliny.map((t, i) => {
               const color = ELEMENT_COLORS[t.element] ?? '#BA9B4F';
@@ -62,7 +62,7 @@ export function TamagotchiScreen() {
                 <motion.button
                   key={t.id}
                   className={cn(
-                    'bg-white/5 border border-white/10 rounded-2xl p-3 text-center hover:border-white/20 transition-all',
+                    'bg-black/40 backdrop-blur-sm border border-white/15 rounded-2xl p-3 text-center hover:border-white/20 transition-all',
                     t.isLegendary && 'border-yellow-500/30',
                   )}
                   initial={{ opacity: 0, y: 20 }}
@@ -112,11 +112,11 @@ export function TamagotchiScreen() {
   const avgStat = (pet.hunger + pet.happiness + pet.energy + pet.cleanliness) / 4;
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface">
+    <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-pet-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       {/* Header */}
-      <div className="pt-8 pb-2 px-4">
+      <div className="pt-8 pb-2 px-4 bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
+          <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">
@@ -127,7 +127,7 @@ export function TamagotchiScreen() {
       </div>
       <div className="gold-separator" />
 
-      <div className="flex-1 overflow-y-auto phone-scroll px-5 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto phone-scroll px-5 py-4 space-y-4 bg-black/30">
         {/* Warning */}
         <AnimatePresence>
           {warning && (
@@ -212,7 +212,7 @@ export function TamagotchiScreen() {
         </motion.div>
 
         {/* Stats */}
-        <div className="space-y-3">
+        <div className="space-y-3 bg-black/40 backdrop-blur-sm rounded-2xl p-4 border border-white/10">
           {stats.map(s => {
             const val = pet[s.key];
             const low = val < 20;
@@ -241,7 +241,7 @@ export function TamagotchiScreen() {
               <motion.button
                 key={a.action}
                 className={cn(
-                  'bg-white/5 border border-white/10 rounded-xl p-3 flex flex-col items-center gap-1.5 transition-all',
+                  'bg-black/40 backdrop-blur-sm border border-white/15 rounded-xl p-3 flex flex-col items-center gap-1.5 transition-all',
                   onCd ? 'opacity-50' : 'hover:border-white/20',
                 )}
                 whileTap={onCd ? undefined : { scale: 0.93 }}

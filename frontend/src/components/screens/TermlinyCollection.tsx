@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Lock, Crown } from 'lucide-react';
+import { Lock, Crown, ArrowLeft } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { useGameContext } from '@/store/GameContext';
 import { termliny, ELEMENT_COLORS } from '@/data/termliny';
@@ -16,7 +16,9 @@ export function TermlinyCollection() {
       <div className="pt-10 pb-4 px-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/images/ui/splash-logo.svg" alt="" className="w-6 h-6" />
+            <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors p-1">
+              <ArrowLeft size={20} />
+            </button>
             <div>
               <h2 className="font-heading text-base font-bold text-primary tracking-wider uppercase">Термлины</h2>
               <p className="text-white/40 text-[10px] mt-0.5">

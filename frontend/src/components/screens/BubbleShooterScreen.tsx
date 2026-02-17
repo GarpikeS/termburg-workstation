@@ -14,15 +14,17 @@ import { CharacterAbilityBar } from '@/components/game/CharacterAbilityBar';
 const FIELD_WIDTH = 280;
 
 function BubbleCircle({ x, y, color, size = BUBBLE_RADIUS }: { x: number; y: number; color: BubbleColor; size?: number }) {
+  const hex = BUBBLE_HEX_COLORS[color];
   return (
     <div
-      className="absolute rounded-full border border-white/20"
+      className="absolute rounded-full border-2 border-white/40"
       style={{
         width: size * 2,
         height: size * 2,
         left: x - size,
         top: y - size,
-        backgroundColor: BUBBLE_HEX_COLORS[color],
+        backgroundColor: hex,
+        boxShadow: `0 0 8px ${hex}80, inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.25)`,
       }}
     />
   );
@@ -95,31 +97,31 @@ export function BubbleShooterScreen() {
   const displayScore = Math.round(state.score * scoreMult);
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface">
+    <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-bubbles-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       {/* Header */}
-      <div className="pt-8 pb-2 px-4">
+      <div className="pt-8 pb-2 px-4 bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors p-1">
+          <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors p-1">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-sm font-bold text-primary tracking-wider">
             Шарики — Ур. {state.level}
           </h2>
-          <button onClick={restart} className="text-white/50 hover:text-primary transition-colors p-1">
+          <button onClick={restart} className="text-white/80 hover:text-primary transition-colors p-1">
             <RotateCcw size={18} />
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="px-4 pb-1">
+      <div className="px-4 pb-1 bg-black/40">
         <div className="flex gap-2">
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2 text-center">
-            <p className="text-white/40 text-[9px]">Очки</p>
+          <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2 text-center backdrop-blur-sm">
+            <p className="text-white/50 text-[9px]">Очки</p>
             <p className="text-primary font-bold text-base">{displayScore}</p>
           </div>
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2 text-center">
-            <p className="text-white/40 text-[9px]">Выстрелов</p>
+          <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2 text-center backdrop-blur-sm">
+            <p className="text-white/50 text-[9px]">Выстрелов</p>
             <p className="text-primary font-bold text-base">{state.shotsLeft + bonusShots}</p>
           </div>
           {hasActiveAbility && (
@@ -138,7 +140,7 @@ export function BubbleShooterScreen() {
       <div className="flex-1 flex items-start justify-center pt-1 overflow-hidden">
         <div
           ref={fieldRef}
-          className="relative bg-white/3 rounded-xl overflow-hidden touch-none"
+          className="relative bg-black/40 backdrop-blur-sm rounded-xl overflow-hidden touch-none border border-white/10"
           style={{ width: FIELD_WIDTH, height: fieldHeight }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -168,23 +170,31 @@ export function BubbleShooterScreen() {
           {/* Shooter */}
           <div
             className="absolute flex flex-col items-center"
-            style={{ left: shooterX - 18, top: shooterY - 18 }}
+            style={{ left: shooterX - 22, top: shooterY - 22 }}
           >
             <div
-              className="w-9 h-9 rounded-full border-2 border-white/30"
-              style={{ backgroundColor: BUBBLE_HEX_COLORS[state.shooterColor] }}
+              className="w-11 h-11 rounded-full border-3 border-white/60"
+              style={{
+                backgroundColor: BUBBLE_HEX_COLORS[state.shooterColor],
+                boxShadow: `0 0 16px ${BUBBLE_HEX_COLORS[state.shooterColor]}90, 0 0 30px ${BUBBLE_HEX_COLORS[state.shooterColor]}40, inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3)`,
+              }}
             />
+            {/* Cannon base */}
+            <div className="w-14 h-3 -mt-1 rounded-b-lg bg-white/15 border border-white/20 border-t-0" />
           </div>
 
           {/* Next color */}
           <div
-            className="absolute flex items-center gap-1"
-            style={{ left: shooterX + 26, top: shooterY - 6 }}
+            className="absolute flex items-center gap-1.5"
+            style={{ left: shooterX + 30, top: shooterY - 8 }}
           >
-            <span className="text-white/30 text-[9px]">След:</span>
+            <span className="text-white/50 text-[9px] font-medium">След:</span>
             <div
-              className="w-4 h-4 rounded-full border border-white/20"
-              style={{ backgroundColor: BUBBLE_HEX_COLORS[state.nextColor] }}
+              className="w-5 h-5 rounded-full border-2 border-white/30"
+              style={{
+                backgroundColor: BUBBLE_HEX_COLORS[state.nextColor],
+                boxShadow: `0 0 6px ${BUBBLE_HEX_COLORS[state.nextColor]}60`,
+              }}
             />
           </div>
 

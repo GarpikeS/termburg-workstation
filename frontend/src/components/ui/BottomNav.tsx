@@ -11,7 +11,7 @@ const tabs = [
   { path: '/profile', icon: User, label: 'Профиль' },
 ];
 
-const HIDDEN_PREFIXES = ['/games/match3/play/', '/games/2048', '/games/bubbles', '/games/pet'];
+const HIDDEN_PREFIXES = ['/games/match3', '/games/2048', '/games/bubbles', '/games/pet'];
 
 export function BottomNav() {
   const location = useLocation();
@@ -19,6 +19,7 @@ export function BottomNav() {
   const { progress } = useGameContext();
 
   const hidden = location.pathname === '/' ||
+    location.pathname === '/games' ||
     HIDDEN_PREFIXES.some(p => location.pathname.startsWith(p));
 
   if (hidden) return null;

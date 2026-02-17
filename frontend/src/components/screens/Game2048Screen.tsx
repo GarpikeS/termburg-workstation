@@ -77,29 +77,29 @@ export function Game2048Screen() {
   const tiles = state.grid.flatMap(row => row.filter((t): t is NonNullable<typeof t> => t !== null));
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface">
+    <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-2048-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
       {/* Header */}
-      <div className="pt-8 pb-2 px-4">
+      <div className="pt-8 pb-2 px-4 bg-black/50 backdrop-blur-sm">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors p-1">
+          <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors p-1">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-base font-bold text-primary tracking-wider">2048</h2>
-          <button onClick={restart} className="text-white/50 hover:text-primary transition-colors p-1">
+          <button onClick={restart} className="text-white/80 hover:text-primary transition-colors p-1">
             <RotateCcw size={18} />
           </button>
         </div>
       </div>
 
       {/* Scores */}
-      <div className="px-4 pb-2">
+      <div className="px-4 pb-2 bg-black/40">
         <div className="flex gap-2">
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2.5 text-center">
-            <p className="text-white/40 text-[10px] uppercase">Очки</p>
+          <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2.5 text-center backdrop-blur-sm">
+            <p className="text-white/50 text-[10px] uppercase">Очки</p>
             <p className="text-primary font-bold text-lg">{displayScore}</p>
           </div>
-          <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2.5 text-center">
-            <p className="text-white/40 text-[10px] uppercase">Рекорд</p>
+          <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2.5 text-center backdrop-blur-sm">
+            <p className="text-white/50 text-[10px] uppercase">Рекорд</p>
             <p className="text-primary font-bold text-lg">{state.bestScore}</p>
           </div>
           {hasActiveAbility && (
@@ -132,7 +132,7 @@ export function Game2048Screen() {
         onTouchEnd={handleTouchEnd}
       >
         <div
-          className="relative bg-white/5 rounded-xl"
+          className="relative bg-black/50 rounded-xl backdrop-blur-sm border border-white/10"
           style={{
             width: containerSize,
             height: containerSize,
