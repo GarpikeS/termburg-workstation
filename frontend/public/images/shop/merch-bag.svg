@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="mg4" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#5DB879"/>
+      <stop offset="100%" stop-color="#3a8a55"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="100" height="100" rx="20" fill="url(#mg4)" opacity="0.12"/>
+  <!-- Bag body -->
+  <rect x="30" y="45" width="60" height="45" rx="4" fill="none" stroke="#5DB879" stroke-width="2.5"/>
+  <!-- Handles -->
+  <path d="M42 45 L42 35 C42 28 52 25 60 25 C68 25 78 28 78 35 L78 45" fill="none" stroke="#5DB879" stroke-width="2.5"/>
+  <!-- Logo -->
+  <circle cx="60" cy="67" r="10" fill="#5DB879" opacity="0.15"/>
+  <text x="60" y="71" text-anchor="middle" fill="#5DB879" font-size="11" font-weight="bold" font-family="sans-serif">T</text>
+</svg>

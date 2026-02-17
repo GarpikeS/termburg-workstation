@@ -21,6 +21,7 @@ export function ShopScreen() {
 
   const items = getProductsByCategory(activeTab);
   const cartCount = progress.cart.reduce((s, c) => s + c.quantity, 0);
+  const isMerch = activeTab === 'merch';
 
   const handleBuy = (product: Product) => {
     if (product.currency === 'coins') {
@@ -76,42 +77,70 @@ export function ShopScreen() {
       </div>
 
       {/* Items */}
-      <div className="flex-1 overflow-y-auto phone-scroll px-5 py-2 space-y-3">
-        {items.map((item, i) => (
-          <motion.div
-            key={item.id}
-            className="bg-white/5 border border-white/10 rounded-xl p-4"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-bold text-sm text-white/90">{item.name}</h4>
-                  {item.badge && (
-                    <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">
-                      {item.badge}
-                    </span>
-                  )}
+      <div className="flex-1 overflow-y-auto phone-scroll px-5 py-2">
+        {isMerch ? (
+          /* Grid layout for merch */
+          <div className="grid grid-cols-2 gap-3">
+            {items.map((item, i) => (
+              <motion.div
+                key={item.id}
+                className="bg-white/5 border border-white/10 rounded-xl overflow-hidden"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+              >
+                <div className="aspect-square flex items-center justify-center p-4 bg-white/3">
+                  <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
                 </div>
-                <p className="text-white/40 text-xs mt-1">{item.description}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="text-primary font-bold text-sm">
-                  {item.price === 0 ? 'Бесплатно' : item.currency === 'rub' ? `${item.price} ₽` : `${item.price} T`}
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              className="w-full mt-3"
-              onClick={() => handleBuy(item)}
-            >
-              {item.currency === 'coins' ? 'Купить' : 'В корзину'}
-            </Button>
-          </motion.div>
-        ))}
+                <div className="p-3">
+                  <h4 className="font-bold text-xs text-white/90 truncate">{item.name}</h4>
+                  <p className="text-primary font-bold text-sm mt-1">{item.price} ₽</p>
+                  <Button size="sm" className="w-full mt-2" onClick={() => handleBuy(item)}>
+                    В корзину
+                  </Button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          /* List layout for tickets & boosters */
+          <div className="space-y-3">
+            {items.map((item, i) => (
+              <motion.div
+                key={item.id}
+                className="bg-white/5 border border-white/10 rounded-xl p-4"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-white/3 flex items-center justify-center p-2">
+                    <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-white/90">{item.name}</h4>
+                      {item.badge && (
+                        <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white/40 text-xs mt-1">{item.description}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-primary font-bold text-sm">
+                        {item.price === 0 ? 'Бесплатно' : item.currency === 'rub' ? `${item.price} ₽` : `${item.price} T`}
+                      </p>
+                      <Button size="sm" onClick={() => handleBuy(item)}>
+                        {item.currency === 'coins' ? 'Купить' : 'В корзину'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

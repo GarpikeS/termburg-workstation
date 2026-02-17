@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="mg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9B7EC8"/>
+      <stop offset="100%" stop-color="#7a5eaa"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="100" height="100" rx="20" fill="url(#mg3)" opacity="0.12"/>
+  <!-- Rolled towel -->
+  <ellipse cx="60" cy="48" rx="28" ry="14" fill="none" stroke="#9B7EC8" stroke-width="2.5"/>
+  <path d="M32 48 L32 78 C32 84 60 90 60 90 C60 90 88 84 88 78 L88 48" fill="none" stroke="#9B7EC8" stroke-width="2.5"/>
+  <!-- Spiral inside -->
+  <path d="M50 48 C50 42 70 42 70 48 C70 52 54 52 54 48" fill="none" stroke="#9B7EC8" stroke-width="1.5" opacity="0.4"/>
+  <!-- Stripe -->
+  <line x1="32" y1="65" x2="88" y2="65" stroke="#9B7EC8" stroke-width="1.5" opacity="0.3"/>
+  <line x1="34" y1="70" x2="86" y2="70" stroke="#9B7EC8" stroke-width="1.5" opacity="0.3"/>
+</svg>

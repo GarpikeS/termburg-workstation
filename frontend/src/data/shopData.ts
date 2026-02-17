@@ -6,7 +6,7 @@ export interface Product {
   price: number;
   currency: 'rub' | 'coins';
   badge?: string;
-  image?: string;
+  image: string;
 }
 
 export const products: Product[] = [
@@ -19,6 +19,7 @@ export const products: Product[] = [
     price: 0,
     currency: 'coins',
     badge: 'Бесплатно',
+    image: '/images/shop/ticket-free.svg',
   },
   {
     id: 'ticket-vip',
@@ -28,6 +29,7 @@ export const products: Product[] = [
     price: 500,
     currency: 'rub',
     badge: 'VIP',
+    image: '/images/shop/ticket-vip.svg',
   },
   // Мерч
   {
@@ -37,6 +39,7 @@ export const products: Product[] = [
     description: 'Хлопковая футболка с принтом персонажей',
     price: 1490,
     currency: 'rub',
+    image: '/images/shop/merch-tshirt.svg',
   },
   {
     id: 'merch-mug',
@@ -45,6 +48,7 @@ export const products: Product[] = [
     description: 'Керамическая кружка с логотипом',
     price: 590,
     currency: 'rub',
+    image: '/images/shop/merch-mug.svg',
   },
   {
     id: 'merch-towel',
@@ -53,6 +57,7 @@ export const products: Product[] = [
     description: 'Банное полотенце с вышивкой Термбург',
     price: 890,
     currency: 'rub',
+    image: '/images/shop/merch-towel.svg',
   },
   {
     id: 'merch-bag',
@@ -61,6 +66,7 @@ export const products: Product[] = [
     description: 'Тканевая сумка-шоппер с принтом',
     price: 490,
     currency: 'rub',
+    image: '/images/shop/merch-bag.svg',
   },
   // Бустеры
   {
@@ -70,6 +76,7 @@ export const products: Product[] = [
     description: 'Показать лучший ход на поле',
     price: 20,
     currency: 'coins',
+    image: '/images/shop/booster-hint.svg',
   },
   {
     id: 'booster-shuffle',
@@ -78,6 +85,7 @@ export const products: Product[] = [
     description: 'Перемешать все фишки на поле',
     price: 30,
     currency: 'coins',
+    image: '/images/shop/booster-shuffle.svg',
   },
   {
     id: 'booster-bomb',
@@ -86,6 +94,7 @@ export const products: Product[] = [
     description: 'Уничтожить область 3×3',
     price: 50,
     currency: 'coins',
+    image: '/images/shop/booster-bomb.svg',
   },
 ];
 
