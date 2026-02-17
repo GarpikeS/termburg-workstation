@@ -17,16 +17,16 @@ export function LevelStartPopup({ open, config, onStart, onBack }: LevelStartPop
     <Modal open={open}>
       <div className="text-center space-y-4">
         <h2 className="font-heading text-2xl text-primary font-bold">{config.name}</h2>
-        <p className="text-muted-foreground text-sm">Уровень {config.id}</p>
+        <p className="text-white/50 text-sm">Уровень {config.id}</p>
 
         <div className="space-y-2">
-          <p className="text-muted-foreground text-xs uppercase tracking-wider">Собери</p>
-          <div className="bg-primary/5 rounded-2xl p-3">
+          <p className="text-white/40 text-xs uppercase tracking-wider">Собери</p>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-3">
             <ObjectiveDisplay objectives={objectives} />
           </div>
         </div>
 
-        <p className="text-muted-foreground text-sm">{config.moves} ходов</p>
+        <p className="text-white/50 text-sm">{config.moves} ходов</p>
 
         <div className="flex gap-3 pt-2">
           <Button variant="secondary" onClick={onBack} className="flex-1">Назад</Button>

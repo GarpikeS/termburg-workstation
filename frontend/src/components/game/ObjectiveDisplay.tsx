@@ -18,17 +18,18 @@ export function ObjectiveDisplay({ objectives }: ObjectiveDisplayProps) {
       {objectives.map((obj, i) => {
         const done = obj.current >= obj.target;
         const Icon = GEM_ICONS[obj.type];
+        const color = TOKEN_COLORS[obj.type];
         return (
-          <div key={i} className="flex items-center gap-1.5 bg-white/10 backdrop-blur-sm rounded-lg px-2.5 py-1.5">
+          <div key={i} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5">
             <div
               className="w-6 h-6 rounded flex items-center justify-center"
-              style={{ backgroundColor: TOKEN_COLORS[obj.type] }}
+              style={{ backgroundColor: `${color}30` }}
             >
               {Icon && <Icon size={12} />}
             </div>
             <span
               className="text-sm font-bold tabular-nums"
-              style={{ color: done ? '#6EAA5E' : 'white' }}
+              style={{ color: done ? '#5DB879' : '#D9CBA1' }}
             >
               {Math.min(obj.current, obj.target)}/{obj.target}
             </span>

@@ -63,10 +63,10 @@ export function GameBoard({
   else if (phase === 'spawn') scheduleAdvance(250);
 
   return (
-    <div className="w-full max-w-md mx-auto p-4">
-      <div className="bg-white/60 backdrop-blur-sm rounded-3xl p-4 shadow-xl">
+    <div className="w-full max-w-md mx-auto p-3">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
         <div
-          className="grid gap-2"
+          className="grid gap-1.5"
           style={{
             gridTemplateColumns: `repeat(${cols}, 1fr)`,
             touchAction: 'none',

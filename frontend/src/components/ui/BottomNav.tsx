@@ -14,17 +14,16 @@ export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Don't show on splash or game screens
   if (location.pathname === '/' || location.pathname.startsWith('/game/')) return null;
 
   return (
     <motion.div
-      className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40"
+      className="absolute bottom-0 left-0 right-0 bg-dark-surface border-t border-dark-border z-40"
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ type: 'spring', stiffness: 200, damping: 30 }}
     >
-      <div className="flex items-center justify-around px-6 py-4 max-w-md mx-auto">
+      <div className="flex items-center justify-around px-4 py-3">
         {tabs.map(tab => {
           const active = location.pathname === tab.path;
           return (
@@ -33,10 +32,10 @@ export function BottomNav() {
               onClick={() => navigate(tab.path)}
               className={cn(
                 'flex flex-col items-center gap-1 px-3 py-1 rounded-lg transition-colors relative',
-                active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                active ? 'text-primary' : 'text-white/50 hover:text-white/80',
               )}
             >
-              <tab.icon size={22} />
+              <tab.icon size={20} />
               <span className="text-[10px] font-medium">{tab.label}</span>
               {active && (
                 <motion.div
@@ -48,6 +47,7 @@ export function BottomNav() {
           );
         })}
       </div>
+      <div className="gold-separator" />
     </motion.div>
   );
 }

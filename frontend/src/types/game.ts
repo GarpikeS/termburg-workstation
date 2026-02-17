@@ -10,12 +10,12 @@ export const TokenType = {
 export type TokenType = (typeof TokenType)[keyof typeof TokenType];
 
 export const TOKEN_COLORS: Record<TokenType, string> = {
-  water: '#6DB4C9',
-  leaf: '#6EAA5E',
-  stone: '#8B8D8F',
-  steam: '#B8C9D9',
-  fire: '#E88B5C',
-  wood: '#8B6F47',
+  water: '#6AABDA',
+  leaf: '#5DB879',
+  stone: '#8E8E9E',
+  steam: '#9B7EC8',
+  fire: '#D4956A',
+  wood: '#A0784C',
 };
 
 export const ALL_TOKEN_TYPES: TokenType[] = Object.values(TokenType) as TokenType[];

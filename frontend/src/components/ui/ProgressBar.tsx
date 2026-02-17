@@ -7,11 +7,11 @@ interface ProgressBarProps {
   className?: string;
 }
 
-export function ProgressBar({ current, max, color = '#4A7C59', className }: ProgressBarProps) {
+export function ProgressBar({ current, max, color = '#BA9B4F', className }: ProgressBarProps) {
   const pct = Math.min((current / max) * 100, 100);
 
   return (
-    <div className={cn('w-full h-2 bg-muted rounded-full overflow-hidden', className)}>
+    <div className={cn('w-full h-2 bg-white/10 rounded-full overflow-hidden', className)}>
       <div
         className="h-full rounded-full transition-all duration-500 ease-out"
         style={{ width: `${pct}%`, backgroundColor: color }}

@@ -61,14 +61,14 @@ export function GameScreen() {
 
   if (!config) {
     return (
-      <div className="h-full flex items-center justify-center bg-background">
-        <p className="text-muted-foreground">Уровень не найден</p>
+      <div className="h-full flex items-center justify-center bg-dark-surface">
+        <p className="text-white/50">Уровень не найден</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-dark-surface">
       <GameHUD
         levelName={config.name}
         score={state.score}

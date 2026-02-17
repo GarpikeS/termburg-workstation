@@ -26,8 +26,8 @@ export function GemComponent({ type, selected, matched, onClick }: GemProps) {
 
   return (
     <motion.button
-      className="w-full aspect-square rounded-2xl shadow-lg flex items-center justify-center relative"
-      style={{ backgroundColor: color }}
+      className="w-full aspect-square rounded-xl flex items-center justify-center relative"
+      style={{ backgroundColor: `${color}25`, border: `1.5px solid ${color}50` }}
       onClick={onClick}
       initial={false}
       animate={{
@@ -37,16 +37,17 @@ export function GemComponent({ type, selected, matched, onClick }: GemProps) {
       whileTap={{ scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
     >
-      <Icon size={24} strokeWidth={2.5} color="white" />
+      <Icon size={20} strokeWidth={2.5} color={color} />
       {selected && (
         <>
           <motion.div
-            className="absolute inset-0 rounded-2xl ring-4 ring-white ring-offset-2 ring-offset-background"
+            className="absolute inset-0 rounded-xl ring-2 ring-primary"
             layoutId="gem-selection"
           />
           <motion.div
-            className="absolute inset-0 rounded-2xl bg-white"
-            animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0, 0.2] }}
+            className="absolute inset-0 rounded-xl"
+            style={{ backgroundColor: color }}
+            animate={{ scale: [1, 1.1, 1], opacity: [0.15, 0, 0.15] }}
             transition={{ duration: 1.5, repeat: Infinity }}
           />
         </>

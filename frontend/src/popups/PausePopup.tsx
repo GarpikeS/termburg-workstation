@@ -12,7 +12,7 @@ export function PausePopup({ open, onResume, onRestart, onQuit }: PausePopupProp
   return (
     <Modal open={open}>
       <div className="text-center space-y-4">
-        <h2 className="font-heading text-2xl text-foreground font-bold">Пауза</h2>
+        <h2 className="font-heading text-2xl text-primary font-bold">Пауза</h2>
         <div className="space-y-2">
           <Button onClick={onResume} className="w-full">Продолжить</Button>
           <Button variant="secondary" onClick={onRestart} className="w-full">Заново</Button>
