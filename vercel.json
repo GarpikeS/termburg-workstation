@@ -1,6 +1,20 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/build",
-  "framework": null
+  "public": true,
+  "builds": [
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    { "src": "/assets/(.*)", "dest": "/frontend/build/assets/$1" },
+    { "src": "/images/(.*)", "dest": "/frontend/build/images/$1" },
+    { "src": "/fonts/(.*)", "dest": "/frontend/build/fonts/$1" },
+    { "src": "/sounds/(.*)", "dest": "/frontend/build/sounds/$1" },
+    { "src": "/(.*)", "dest": "/frontend/build/index.html" }
+  ]
 }
