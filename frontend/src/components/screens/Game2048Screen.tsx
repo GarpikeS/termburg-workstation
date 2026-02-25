@@ -84,7 +84,7 @@ export function Game2048Screen() {
           <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors p-1">
             <ArrowLeft size={20} />
           </button>
-          <h2 className="font-heading text-base font-bold text-primary tracking-wider">2048</h2>
+          <h2 className="font-heading text-base font-bold text-primary tracking-wider">Славич</h2>
           <button onClick={restart} className="text-white/80 hover:text-primary transition-colors p-1">
             <RotateCcw size={18} />
           </button>

@@ -28,9 +28,9 @@ export function Win2048Popup({ open, score, onContinue, onRestart }: Win2048Popu
             <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
               <Trophy size={32} className="text-primary" />
             </div>
-            <h3 className="font-heading text-2xl font-bold text-primary">2048!</h3>
+            <h3 className="font-heading text-2xl font-bold text-primary">Славич!</h3>
             <p className="text-white/50 text-sm mt-2">Очки: {score}</p>
-            <p className="text-white/40 text-xs mt-1">+50 монет!</p>
+            <p className="text-white/40 text-xs mt-1">+50 веников! 🌿</p>
             <div className="space-y-2 mt-5">
               <Button className="w-full" onClick={onContinue}>Продолжить</Button>
               <button

@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Gamepad2, ShoppingBag, Users, User } from 'lucide-react';
+import { Gamepad2, ShoppingBag, Users, User, Building2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useGameContext } from '@/store/GameContext';
 
 const tabs = [
   { path: '/games', icon: Gamepad2, label: 'Игры' },
+  { path: '/bathhouses', icon: Building2, label: 'Термбурги' },
   { path: '/shop', icon: ShoppingBag, label: 'Магазин', badge: true },
   { path: '/collection', icon: Users, label: 'Термлины' },
   { path: '/profile', icon: User, label: 'Профиль' },
@@ -19,7 +20,6 @@ export function BottomNav() {
   const { progress } = useGameContext();
 
   const hidden = location.pathname === '/' ||
-    location.pathname === '/games' ||
     HIDDEN_PREFIXES.some(p => location.pathname.startsWith(p));
 
   if (hidden) return null;
@@ -37,6 +37,7 @@ export function BottomNav() {
         {tabs.map(tab => {
           const active = location.pathname === tab.path ||
             (tab.path === '/games' && location.pathname.startsWith('/games')) ||
+            (tab.path === '/bathhouses' && location.pathname.startsWith('/bathhouses')) ||
             (tab.path === '/shop' && location.pathname.startsWith('/shop')) ||
             (tab.path === '/collection' && location.pathname.startsWith('/collection'));
           return (

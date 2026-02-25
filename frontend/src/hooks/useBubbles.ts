@@ -1,10 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Bubble, BubbleColor } from '@/engine/engine-bubbles/bubbleTypes';
-import { ALL_BUBBLE_COLORS, BUBBLE_HEX_COLORS } from '@/engine/engine-bubbles/bubbleTypes';
+import { ALL_BUBBLE_COLORS } from '@/engine/engine-bubbles/bubbleTypes';
 import { BUBBLE_RADIUS, snapToHex, GRID_ROWS } from '@/engine/engine-bubbles/hexGrid';
 import { calculateTrajectory } from '@/engine/engine-bubbles/bubblePhysics';
 import { findColorGroup, findFloating, checkCollision, isLevelCleared } from '@/engine/engine-bubbles/bubbleMatching';
-import { getBubbleLevel, generateBubbles, nextBubbleId, type BubbleLevel } from '@/engine/engine-bubbles/bubbleLevels';
+import { getBubbleLevel, generateBubbles, nextBubbleId } from '@/engine/engine-bubbles/bubbleLevels';
 import { useGameContext } from '@/store/GameContext';
 
 interface BubbleGameState {
@@ -13,6 +13,7 @@ interface BubbleGameState {
   nextColor: BubbleColor;
   score: number;
   level: number;
+  levelName: string;
   isWon: boolean;
   isLost: boolean;
   shotsLeft: number;
@@ -34,9 +35,10 @@ export function useBubbles(fieldWidth: number) {
       nextColor: randomColor(colors),
       score: 0,
       level: 1,
+      levelName: level.name,
       isWon: false,
       isLost: false,
-      shotsLeft: 30,
+      shotsLeft: level.shots,
     };
   });
 
@@ -168,9 +170,10 @@ export function useBubbles(fieldWidth: number) {
       nextColor: randomColor(next.colors),
       score: 0,
       level: state.level + 1,
+      levelName: next.name,
       isWon: false,
       isLost: false,
-      shotsLeft: 30 + state.level * 2,
+      shotsLeft: next.shots,
     });
   }, [state.level, fieldWidth]);
 
@@ -182,9 +185,10 @@ export function useBubbles(fieldWidth: number) {
       nextColor: randomColor(level.colors),
       score: 0,
       level: state.level,
+      levelName: level.name,
       isWon: false,
       isLost: false,
-      shotsLeft: 30 + (state.level - 1) * 2,
+      shotsLeft: level.shots,
     });
   }, [state.level, fieldWidth]);
 

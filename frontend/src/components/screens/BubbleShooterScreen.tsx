@@ -5,28 +5,41 @@ import { ArrowLeft, RotateCcw, Trophy, Sparkles } from 'lucide-react';
 import { useBubbles } from '@/hooks/useBubbles';
 import { useGameContext } from '@/store/GameContext';
 import { getTermlinById, ELEMENT_COLORS } from '@/data/termliny';
-import { BUBBLE_HEX_COLORS, type BubbleColor } from '@/engine/engine-bubbles/bubbleTypes';
+import { BUBBLE_HEX_COLORS, BUBBLE_NAMES, type BubbleColor } from '@/engine/engine-bubbles/bubbleTypes';
 import { BUBBLE_RADIUS } from '@/engine/engine-bubbles/hexGrid';
 import { getAimLine } from '@/engine/engine-bubbles/bubblePhysics';
+import { getTotalLevels } from '@/engine/engine-bubbles/bubbleLevels';
 import { Button } from '@/components/ui/Button';
 import { CharacterAbilityBar } from '@/components/game/CharacterAbilityBar';
 
 const FIELD_WIDTH = 280;
 
-function BubbleCircle({ x, y, color, size = BUBBLE_RADIUS }: { x: number; y: number; color: BubbleColor; size?: number }) {
+// Компонент веника вместо шарика
+function VenikBubble({ x, y, color, size = BUBBLE_RADIUS }: { x: number; y: number; color: BubbleColor; size?: number }) {
   const hex = BUBBLE_HEX_COLORS[color];
   return (
     <div
-      className="absolute rounded-full border-2 border-white/40"
+      className="absolute flex items-center justify-center"
       style={{
         width: size * 2,
         height: size * 2,
         left: x - size,
         top: y - size,
-        backgroundColor: hex,
-        boxShadow: `0 0 8px ${hex}80, inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.25)`,
       }}
-    />
+    >
+      {/* Фоновый круг */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          backgroundColor: hex,
+          boxShadow: `0 0 8px ${hex}80, inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.25)`,
+        }}
+      />
+      {/* Иконка веника */}
+      <span className="relative text-base" style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}>
+        🌿
+      </span>
+    </div>
   );
 }
 
@@ -49,6 +62,8 @@ export function BubbleShooterScreen() {
   const shooterX = FIELD_WIDTH / 2;
   const fieldHeight = FIELD_WIDTH * 1.4;
   const shooterY = fieldHeight - 30;
+
+  const totalLevels = getTotalLevels();
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     dragging.current = true;
@@ -95,6 +110,7 @@ export function BubbleShooterScreen() {
   }, [aimAngle, shooterX, shooterY, state.isWon, state.isLost, showTrajectory]);
 
   const displayScore = Math.round(state.score * scoreMult);
+  const currentVenikName = BUBBLE_NAMES[state.shooterColor] || 'Веник';
 
   return (
     <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-bubbles-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -104,9 +120,12 @@ export function BubbleShooterScreen() {
           <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors p-1">
             <ArrowLeft size={20} />
           </button>
-          <h2 className="font-heading text-sm font-bold text-primary tracking-wider">
-            Шарики — Ур. {state.level}
-          </h2>
+          <div className="text-center">
+            <h2 className="font-heading text-sm font-bold text-primary tracking-wider">
+              Бирюльки — Ур. {state.level}/{totalLevels}
+            </h2>
+            <p className="text-white/40 text-[10px]">{state.levelName}</p>
+          </div>
           <button onClick={restart} className="text-white/80 hover:text-primary transition-colors p-1">
             <RotateCcw size={18} />
           </button>
@@ -121,7 +140,7 @@ export function BubbleShooterScreen() {
             <p className="text-primary font-bold text-base">{displayScore}</p>
           </div>
           <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2 text-center backdrop-blur-sm">
-            <p className="text-white/50 text-[9px]">Выстрелов</p>
+            <p className="text-white/50 text-[9px]">Бросков</p>
             <p className="text-primary font-bold text-base">{state.shotsLeft + bonusShots}</p>
           </div>
           {hasActiveAbility && (
@@ -148,11 +167,11 @@ export function BubbleShooterScreen() {
           onPointerLeave={() => { dragging.current = false; }}
         >
           {state.bubbles.map(b => (
-            <BubbleCircle key={b.id} x={b.x} y={b.y} color={b.color} />
+            <VenikBubble key={b.id} x={b.x} y={b.y} color={b.color} />
           ))}
 
           {flying && (
-            <BubbleCircle x={flying.x} y={flying.y} color={flying.color} />
+            <VenikBubble x={flying.x} y={flying.y} color={flying.color} />
           )}
 
           {!flying && aimLine.length > 1 && (
@@ -173,12 +192,14 @@ export function BubbleShooterScreen() {
             style={{ left: shooterX - 22, top: shooterY - 22 }}
           >
             <div
-              className="w-11 h-11 rounded-full border-3 border-white/60"
+              className="w-11 h-11 rounded-full border-3 border-white/60 flex items-center justify-center"
               style={{
                 backgroundColor: BUBBLE_HEX_COLORS[state.shooterColor],
                 boxShadow: `0 0 16px ${BUBBLE_HEX_COLORS[state.shooterColor]}90, 0 0 30px ${BUBBLE_HEX_COLORS[state.shooterColor]}40, inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3)`,
               }}
-            />
+            >
+              <span className="text-lg">🌿</span>
+            </div>
             {/* Cannon base */}
             <div className="w-14 h-3 -mt-1 rounded-b-lg bg-white/15 border border-white/20 border-t-0" />
           </div>
@@ -190,12 +211,22 @@ export function BubbleShooterScreen() {
           >
             <span className="text-white/50 text-[9px] font-medium">След:</span>
             <div
-              className="w-5 h-5 rounded-full border-2 border-white/30"
+              className="w-5 h-5 rounded-full border-2 border-white/30 flex items-center justify-center"
               style={{
                 backgroundColor: BUBBLE_HEX_COLORS[state.nextColor],
                 boxShadow: `0 0 6px ${BUBBLE_HEX_COLORS[state.nextColor]}60`,
               }}
-            />
+            >
+              <span className="text-[10px]">🌿</span>
+            </div>
+          </div>
+
+          {/* Current venik name */}
+          <div
+            className="absolute text-center"
+            style={{ left: 8, top: shooterY - 10 }}
+          >
+            <span className="text-white/40 text-[8px]">{currentVenikName}</span>
           </div>
 
           {/* Win/Lose */}
@@ -207,9 +238,12 @@ export function BubbleShooterScreen() {
               >
                 <Trophy size={40} className="text-primary mb-3" />
                 <p className="text-primary font-bold text-lg mb-1">Победа!</p>
+                <p className="text-white/70 text-xs mb-1">{state.levelName}</p>
                 <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
                 <div className="space-y-2">
-                  <Button onClick={nextLevel} size="sm">Следующий уровень</Button>
+                  {state.level < totalLevels && (
+                    <Button onClick={nextLevel} size="sm">Следующий уровень</Button>
+                  )}
                   <button onClick={restart} className="block text-white/40 text-xs mx-auto hover:text-white/60">Заново</button>
                 </div>
               </motion.div>
@@ -219,9 +253,9 @@ export function BubbleShooterScreen() {
                 className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-10"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               >
-                <p className="text-white font-bold text-lg mb-1">Проиграли</p>
+                <p className="text-white font-bold text-lg mb-1">Бирюльки закончились!</p>
                 <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
-                <Button onClick={restart} size="sm">Заново</Button>
+                <Button onClick={restart} size="sm">Попробовать снова</Button>
               </motion.div>
             )}
           </AnimatePresence>

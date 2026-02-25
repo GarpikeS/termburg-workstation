@@ -1,23 +1,23 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, Lock, Coins } from 'lucide-react';
+import { ArrowLeft, Lock } from 'lucide-react';
 import { useGameContext } from '@/store/GameContext';
 import { bathhouses } from '@/data/bathhouses';
 import { cn } from '@/utils/cn';
 
 // Positions of bathhouses on the 768x1376 image (%)
-// Symmetric around center axis (50%), offset ±22%
+// Нечётные слева (1,3,5,7,9), чётные справа (2,4,6,8,10)
 const MAP_POSITIONS = [
-  { x: 50, y: 92 },  // 1 — center
-  { x: 28, y: 83 },  // 2 — left
-  { x: 72, y: 73 },  // 3 — right
-  { x: 28, y: 65 },  // 4 — left
-  { x: 72, y: 56 },  // 5 — right
-  { x: 28, y: 47 },  // 6 — left
-  { x: 72, y: 38 },  // 7 — right
-  { x: 50, y: 29 },  // 8 — center (crystal)
-  { x: 28, y: 20 },  // 9 — left
-  { x: 72, y: 11 },  // 10 — right
+  { x: 22, y: 83 },  // 1 — Русская баня (слева внизу)
+  { x: 60, y: 75 },  // 2 — Финская сауна (справа)
+  { x: 22, y: 67 },  // 3 — Турецкий хаммам (слева)
+  { x: 60, y: 59 },  // 4 — Сибирская парная (справа)
+  { x: 22, y: 51 },  // 5 — Баня-бочка (слева)
+  { x: 60, y: 45 },  // 6 — Липовая сауна (справа)
+  { x: 22, y: 35 },  // 7 — Травяная сауна (слева)
+  { x: 60, y: 29 },  // 8 — Инфракрасная сауна (справа)
+  { x: 22, y: 19 },  // 9 — Соляная парная (слева)
+  { x: 60, y: 13 },  // 10 — Мультикаменная баня (справа вверху)
 ] as const;
 
 export function BathhouseMap() {
@@ -43,7 +43,7 @@ export function BathhouseMap() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
         >
-          <Coins size={14} className="text-primary" />
+          <span className="text-base">🌿</span>
           <span className="text-primary font-bold text-sm">{progress.currency}</span>
         </motion.div>
       </div>
@@ -80,7 +80,7 @@ export function BathhouseMap() {
                   left: `${pos.x}%`,
                   top: `${pos.y}%`,
                   width: '18%',
-                  height: '7%',
+                  height: '9%',
                   transform: 'translate(-50%, -50%)',
                 }}
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -108,26 +108,7 @@ export function BathhouseMap() {
                   </div>
                 )}
 
-                {/* Level range label */}
-                {unlocked && (
-                  <div
-                    className="absolute -bottom-1 left-1/2 -translate-x-1/2"
-                    style={{ transform: 'translateX(-50%) translateY(100%)' }}
-                  >
-                    <span
-                      className={cn(
-                        'text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap',
-                        completed
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-black/50 text-white/70',
-                      )}
-                      style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
-                    >
-                      {bh.levelsRange[0]}–{bh.levelsRange[1]}
-                    </span>
-                  </div>
-                )}
-              </motion.button>
+                              </motion.button>
             );
           })}
         </div>

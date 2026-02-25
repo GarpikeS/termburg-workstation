@@ -4,6 +4,7 @@ import { BottomNav } from '@/components/ui/BottomNav';
 import { SplashScreen } from '@/components/screens/SplashScreen';
 import { GameHub } from '@/components/screens/GameHub';
 import { BathhouseMap } from '@/components/screens/BathhouseMap';
+import { BathhousesScreen } from '@/components/screens/BathhousesScreen';
 import { LevelMap } from '@/components/screens/LevelMap';
 import { GameScreen } from '@/components/screens/GameScreen';
 import { Game2048Screen } from '@/components/screens/Game2048Screen';
@@ -32,6 +33,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<SplashScreen />} />
                 <Route path="/games" element={<GameHub />} />
+                <Route path="/bathhouses" element={<BathhousesScreen />} />
                 <Route path="/games/match3" element={<BathhouseMap />} />
                 <Route path="/games/match3/levels/:bathhouseId" element={<LevelMap />} />
                 <Route path="/games/match3/play/:id" element={<GameScreen />} />

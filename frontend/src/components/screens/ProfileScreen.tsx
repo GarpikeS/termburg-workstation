@@ -11,11 +11,11 @@ import { cn } from '@/utils/cn';
 
 const achievements = [
   { name: 'Новичок', desc: 'Пройти 1 уровень', icon: Trophy, color: '#6AABDA', check: (p: Stat) => p.completedLevels >= 1 },
-  { name: 'Коллекционер', desc: 'Заработать 100 монет', icon: Star, color: '#D4956A', check: (p: Stat) => p.currency >= 100 },
+  { name: 'Коллекционер', desc: 'Заработать 100 веников', icon: Star, color: '#D4956A', check: (p: Stat) => p.currency >= 100 },
   { name: 'Мастер уровней', desc: 'Пройти 5 уровней', icon: Target, color: '#5DB879', check: (p: Stat) => p.completedLevels >= 5 },
   { name: 'Перфекционист', desc: '3 звезды на 10 уровнях', icon: Award, color: '#9B7EC8', check: (p: Stat) => p.threeStarLevels >= 10 },
-  { name: 'Рекордсмен', desc: 'Набрать 512 в 2048', icon: Grid3x3, color: '#6AABDA', check: (p: Stat) => p.best2048 >= 512 },
-  { name: 'Снайпер', desc: 'Пройти 5 уровней шариков', icon: Circle, color: '#5DB879', check: (p: Stat) => p.bubbleLevels >= 5 },
+  { name: 'Рекордсмен', desc: 'Набрать 512 в Славиче', icon: Grid3x3, color: '#6AABDA', check: (p: Stat) => p.best2048 >= 512 },
+  { name: 'Снайпер', desc: 'Пройти 5 уровней Бирюлек', icon: Circle, color: '#5DB879', check: (p: Stat) => p.bubbleLevels >= 5 },
   { name: 'Заботливый', desc: 'Вырастить взрослого питомца', icon: Heart, color: '#E87CA0', check: (p: Stat) => p.petAdult },
 ];
 

@@ -46,7 +46,7 @@ export function TamagotchiScreen() {
             <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors">
               <ArrowLeft size={20} />
             </button>
-            <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Тамагочи</h2>
+            <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Пестун</h2>
             <div className="w-5" />
           </div>
         </div>
