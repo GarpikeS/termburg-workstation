@@ -1,10 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <radialGradient id="lg" cx="40%" cy="35%" r="60%">
-      <stop offset="0%" stop-color="#7ED99B"/>
-      <stop offset="100%" stop-color="#3D9E5A"/>
-    </radialGradient>
+    <linearGradient id="venik-leaf" x1="13" y1="12" x2="49" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78D58D"/><stop offset="1" stop-color="#389451"/>
+    </linearGradient>
+    <linearGradient id="venik-handle" x1="37" y1="34" x2="50" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C99559"/><stop offset="1" stop-color="#80502E"/>
+    </linearGradient>
   </defs>
-  <path d="M32 8C16 20 10 36 18 48C24 56 36 58 46 50C56 42 54 26 44 16C38 10 32 8 32 8Z" fill="url(#lg)"/>
-  <path d="M32 48V20M32 28L24 36M32 34L40 28" stroke="white" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+  <path d="M31 36C35 42 40 49 45 57" stroke="url(#venik-handle)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M27 38C32 44 37 51 41 58" stroke="#E1B471" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+  <path d="M31 38C24 36 17 31 13 24C19 22 26 24 31 29C28 22 29 15 34 9C39 14 40 22 37 29C42 23 49 20 56 21C54 29 48 35 40 38C45 38 50 41 53 46C45 49 36 46 31 38Z" fill="url(#venik-leaf)" stroke="#ACE4A9" stroke-width="1.25" stroke-linejoin="round"/>
+  <path d="M33 37L20 26M34 35L35 16M36 36L49 26M31 36L46 43" stroke="#27743D" stroke-width="1.7" stroke-linecap="round" opacity=".72"/>
+  <path d="M31 39L39 36L43 42L35 46Z" fill="#D8B56D" stroke="#80502E" stroke-width="1.2"/>
 </svg>

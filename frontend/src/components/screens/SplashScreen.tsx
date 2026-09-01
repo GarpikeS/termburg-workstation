@@ -51,9 +51,11 @@ export function SplashScreen() {
       >
         {/* Термбург logo */}
         <img
-          src="/images/ui/splash-logo.svg"
+          src="/images/brand/termburg-fish-192-v2.webp"
           alt="Термбург"
           className="w-28 h-28"
+          width="112"
+          height="112"
         />
         <div className="text-center">
           <h1 className="text-3xl font-bold text-primary font-heading tracking-[0.15em]">

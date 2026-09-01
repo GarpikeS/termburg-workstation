@@ -1,0 +1,15 @@
+export const DEFAULT_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/redemptions';
+export const DEFAULT_HEALTH_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/health';
+export const DEFAULT_SOURCE_CONFIG_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/source-config';
+export const DEFAULT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+export const HTTP_TIMEOUT_MS = 10_000;
+export const MAX_HTTP_ATTEMPTS = 2;
+export const MAX_BATCH_ROWS = 200;
+export const MAX_SOURCE_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_SOURCE_ROWS = 10_000;
+export const UNKNOWN_RETRY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const LOG_ROTATE_BYTES = 2 * 1024 * 1024;
+export const MAX_SOURCE_API_BYTES = 5 * 1024 * 1024;
+export const MAX_SOURCE_API_ROWS = 10_000;
+export const SUPPORTED_EXTENSIONS = new Set(['.xls', '.xlsx', '.csv', '.tsv', '.json']);
+export const DOLPHIN_EXPORT_NAME_PATTERN = /(штрих|льгот|barcode|benefit|redeem|погаш)/i;

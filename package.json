@@ -1,8 +1,64 @@
 {
   "name": "termliny-game-root",
+  "version": "1.0.43",
+  "description": "Термбург — единое расписание мероприятий для редактора, экранов и приложения",
+  "author": "Термбург",
   "private": true,
+  "main": "desktop/main.mjs",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
-    "dev": "cd frontend && npm run dev"
+    "build": "npm --prefix frontend ci && npm --prefix frontend run build",
+    "dev": "npm --prefix frontend run dev",
+    "lint": "npm --prefix frontend run lint",
+    "schedule:start": "node server/schedule-server.mjs",
+    "schedule:desktop": "npm --prefix frontend run build && electron desktop/main.mjs",
+    "schedule:exe": "npm --prefix frontend run build && electron-builder --win portable --x64 && node scripts/write-schedule-release-checksum.mjs && node scripts/cleanup-schedule-releases.mjs",
+    "schedule:test": "node --test server/schedule-service.test.mjs server/wordpress-schedule.test.mjs",
+    "dolphin:desktop": "electron dolphin-agent/main.mjs",
+    "dolphin:exe": "node scripts/build-dolphin-zero-config.mjs",
+    "dolphin:test": "node --test dolphin-agent/core/redemption-extractor.test.mjs dolphin-agent/core/source-api-client.test.mjs dolphin-agent/core/sync-agent.test.mjs dolphin-agent/core/server-client.test.mjs",
+    "workstation:desktop": "npm --prefix frontend run build && electron desktop/main.mjs --workstation",
+    "workstation:exe": "node scripts/build-workstation-zero-config.mjs",
+    "workstation:test": "node --test workstation/migration.test.mjs workstation/status.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "ru.termburg.schedule",
+    "productName": "Термбург Расписание",
+    "asar": true,
+    "compression": "normal",
+    "directories": {
+      "output": "release/schedule-desktop",
+      "buildResources": "desktop/assets"
+    },
+    "files": [
+      "desktop/**/*",
+      "workstation/status.mjs",
+      "server/schedule-auth.mjs",
+      "server/schedule-service.mjs",
+      "server/schedule-server.mjs",
+      "server/wordpress-schedule.mjs",
+      "frontend/build/**/*",
+      "frontend/public/data/default-schedule.json",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/assets/icon.png",
+      "artifactName": "Termburg-Schedule-${version}-portable.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "portable": {
+      "artifactName": "Termburg-Schedule-${version}-portable.${ext}"
+    }
   }
 }

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="barrel-wood" x1="17" y1="11" x2="48" y2="55" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0A45B"/>
+      <stop offset="0.52" stop-color="#A45A2A"/>
+      <stop offset="1" stop-color="#66331F"/>
+    </linearGradient>
+    <linearGradient id="barrel-band" x1="12" y1="0" x2="52" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C7B83"/>
+      <stop offset="0.5" stop-color="#D4C9A7"/>
+      <stop offset="1" stop-color="#596269"/>
+    </linearGradient>
+  </defs>
+  <path d="M18 13C23 9 41 9 46 13C50 22 50 43 46 52C40 57 24 57 18 52C14 42 14 23 18 13Z" fill="url(#barrel-wood)" stroke="#4D2C1F" stroke-width="2"/>
+  <path d="M23 12C21 24 21 43 23 54M32 10V56M41 12C43 24 43 43 41 54" stroke="#754022" stroke-width="2" opacity="0.65"/>
+  <path d="M16 20C24 22 40 22 48 20M15 44C24 42 40 42 49 44" stroke="url(#barrel-band)" stroke-width="5"/>
+  <path d="M40 12C40 7 43 5 48 7" stroke="#34251C" stroke-width="3" stroke-linecap="round"/>
+  <path d="M48 7L52 4M48 7L53 9M48 7L47 2" stroke="#F2C45D" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="32" cy="32" r="8" fill="#5D2B27" stroke="#F0C56A" stroke-width="2"/>
+  <path d="M32 26L34 30L39 31L35 35L36 40L32 37L28 40L29 35L25 31L30 30L32 26Z" fill="#F2C45D"/>
+  <path d="M20 15C25 12 31 12 36 13" stroke="#F5C879" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+</svg>

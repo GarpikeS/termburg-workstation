@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:;" />
+    <title>Термбург · Dolphin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Термбург</p>
+          <h1>Погашение билетов Dolphin</h1>
+        </div>
+        <button class="icon-button" id="hideButton" type="button" title="Скрыть в трей">—</button>
+      </header>
+
+      <section class="status-card" id="statusCard" data-tone="waiting">
+        <div class="status-orb" aria-hidden="true"><span></span></div>
+        <div class="status-copy">
+          <p class="status-title" id="statusTitle">Запуск…</p>
+          <p class="status-message" id="statusMessage">Проверяем настройки.</p>
+        </div>
+        <button class="primary compact" id="syncButton" type="button">Проверить сейчас</button>
+      </section>
+
+      <section class="metrics" aria-label="Статистика">
+        <article><strong id="queueMetric">0</strong><span>ждут отправки</span></article>
+        <article><strong id="redeemedMetric">0</strong><span>погашено</span></article>
+        <article><strong id="apiMetric">0</strong><span>строк из Dolphin</span></article>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Автоматически</p>
+            <h2>Резервная папка выгрузок</h2>
+          </div>
+          <span class="badge" id="configuredBadge">Подключаем</span>
+        </div>
+
+        <label class="field">
+          <span>Основной источник — локальный API Dolphin. Файлы используются как запасной вариант.</span>
+          <div class="input-row">
+            <input id="folderInput" type="text" readonly />
+            <button class="secondary" id="chooseFolderButton" type="button">Выбрать</button>
+          </div>
+        </label>
+
+        <div class="toggles">
+          <label><input id="autoSyncInput" type="checkbox" checked /><span>Проверять каждые 5 минут</span></label>
+          <label><input id="autoStartInput" type="checkbox" checked /><span>Запускать вместе с Windows</span></label>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="saveButton" type="button">Сохранить изменения</button>
+          <button class="secondary" id="rescanButton" type="button">Перечитать все файлы</button>
+        </div>
+        <p class="inline-result" id="actionResult" role="status"></p>
+      </section>
+
+      <section class="panel compact-panel">
+        <div>
+          <p class="eyebrow">Диагностика</p>
+          <p class="detail" id="lastSyncDetail">Ещё не запускалось.</p>
+        </div>
+        <button class="text-button" id="openDataButton" type="button">Открыть журнал</button>
+      </section>
+
+      <footer>Ничего настраивать не нужно. В интернет уходят только код билета, время входа, номер операции и технический статус агента.</footer>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

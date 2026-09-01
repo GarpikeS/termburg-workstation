@@ -1,23 +1,45 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, Trophy, Star, Target, Award, Grid3x3, Circle, Heart, Droplets, Sparkles, Ticket } from 'lucide-react';
+import { ArrowLeft, Trophy, Star, Target, Award, Grid3x3, Circle, Heart, Droplets, Sparkles, Ticket, MessageCircle, ChevronRight, Cloud, CloudAlert, LogIn, LogOut, UserRound } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { useGameContext } from '@/store/GameContext';
 import { getTermlinById, ELEMENT_COLORS } from '@/data/termliny';
 import { STAGE_LABELS, MOOD_LABELS, getMood } from '@/engine/engine-pet/petEngine';
 import { getProductById } from '@/data/shopData';
+import { formatRewardDate, isRewardClaimRedeemed } from '@/features/rewards/rewardRules';
+import { GAME_NAMES } from '@/data/gameNames';
+import {
+  DAILY_GAME_REWARD_LIMIT,
+  DAILY_TOTAL_REWARD_LIMIT,
+  GAME_REWARD_LABELS,
+  GAME_REWARD_SOURCES,
+  getDailyRewardTotal,
+  normalizeDailyGameRewards,
+} from '@/data/economy';
 import { cn } from '@/utils/cn';
+import { useAuth } from '@/features/account/AuthContext';
 
 const achievements = [
   { name: 'Новичок', desc: 'Пройти 1 уровень', icon: Trophy, color: '#6AABDA', check: (p: Stat) => p.completedLevels >= 1 },
-  { name: 'Коллекционер', desc: 'Заработать 100 веников', icon: Star, color: '#D4956A', check: (p: Stat) => p.currency >= 100 },
+  { name: 'Коллекционер', desc: 'Заработать 100 термокоинов', icon: Star, color: '#D4956A', check: (p: Stat) => p.currency >= 100 },
   { name: 'Мастер уровней', desc: 'Пройти 5 уровней', icon: Target, color: '#5DB879', check: (p: Stat) => p.completedLevels >= 5 },
   { name: 'Перфекционист', desc: '3 звезды на 10 уровнях', icon: Award, color: '#9B7EC8', check: (p: Stat) => p.threeStarLevels >= 10 },
   { name: 'Рекордсмен', desc: 'Набрать 512 в Славиче', icon: Grid3x3, color: '#6AABDA', check: (p: Stat) => p.best2048 >= 512 },
   { name: 'Снайпер', desc: 'Пройти 5 уровней Бирюлек', icon: Circle, color: '#5DB879', check: (p: Stat) => p.bubbleLevels >= 5 },
   { name: 'Заботливый', desc: 'Вырастить взрослого питомца', icon: Heart, color: '#E87CA0', check: (p: Stat) => p.petAdult },
 ];
+
+const ELEMENT_LABELS: Record<string, string> = {
+  fire: 'Огонь',
+  herb: 'Травы',
+  home: 'Дом',
+  wind: 'Ветер',
+  wisdom: 'Мудрость',
+  love: 'Любовь',
+  water: 'Вода',
+};
 
 interface Stat {
   completedLevels: number;
@@ -32,6 +54,24 @@ interface Stat {
 export function ProfileScreen() {
   const navigate = useNavigate();
   const { progress } = useGameContext();
+  const { status: authStatus, session: authSession, config: authConfig, startupError, syncState, lastSyncedAt, logout } = useAuth();
+  const [screenOpenedAt] = useState(Date.now);
+  const [logoutPending, setLogoutPending] = useState(false);
+  const [accountError, setAccountError] = useState('');
+
+  const handleLogout = async () => {
+    const confirmed = window.confirm('Выйти из профиля? Прогресс останется в профиле, а на этом устройстве откроется новая гостевая игра.');
+    if (!confirmed) return;
+    setLogoutPending(true);
+    setAccountError('');
+    try {
+      await logout();
+    } catch {
+      setAccountError('Не удалось выйти. Проверьте интернет и попробуйте ещё раз.');
+    } finally {
+      setLogoutPending(false);
+    }
+  };
 
   const character = getTermlinById(progress.selectedCharacter);
   const color = character ? (ELEMENT_COLORS[character.element] ?? '#BA9B4F') : '#BA9B4F';
@@ -45,6 +85,8 @@ export function ProfileScreen() {
     bubbleLevels: progress.bubbleLevelsCompleted,
     petAdult: progress.pet?.stage === 'adult',
   })).length;
+  const dailyGameRewards = normalizeDailyGameRewards(progress.dailyGameRewards);
+  const dailyRewardTotal = getDailyRewardTotal(dailyGameRewards);
 
   const stat: Stat = {
     completedLevels,
@@ -61,22 +103,12 @@ export function ProfileScreen() {
   const playerLevel = Math.floor(xpCurrent / 50) + 1;
   const xpInLevel = xpCurrent % 50;
 
-  // Orders with ticket products
-  const ticketOrders = progress.orders.flatMap(order =>
-    order.items
-      .map(item => {
-        const product = getProductById(item.productId);
-        return product && product.category === 'tickets' ? { order, product, qty: item.quantity } : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null),
-  );
-
   return (
-    <div className="h-full flex flex-col bg-dark-surface pb-20">
+    <div className="h-full flex flex-col bg-dark-surface">
       {/* Header */}
-      <div className="pt-10 pb-4 px-5">
+      <div className="screen-safe-header pb-4 px-5">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
+          <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/50 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Профиль</h2>
@@ -86,99 +118,132 @@ export function ProfileScreen() {
       <div className="gold-separator" />
 
       <div className="flex-1 overflow-y-auto phone-scroll">
-        {/* Hero profile card */}
-        <div
-          className="relative px-5 pt-6 pb-8"
-          style={{
-            background: `linear-gradient(180deg, ${color}15 0%, transparent 100%)`,
-          }}
-        >
+        <section className="px-4 pt-4" aria-labelledby="account-status-title" data-account-status>
           <motion.div
-            className="flex flex-col items-center"
-            initial={{ opacity: 0, y: 15 }}
+            className="relative overflow-hidden rounded-[28px] border border-primary/30 bg-[#211B2A] p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)]"
+            style={{ background: `linear-gradient(145deg, ${color}18 0%, #26202f 42%, #19151f 100%)` }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            {/* Avatar with ring */}
-            <div className="relative">
-              {character ? (
-                <img
-                  src={character.image}
-                  alt={character.name}
-                  className="w-24 h-24 rounded-full object-cover border-3 shadow-lg"
-                  style={{ borderColor: color, boxShadow: `0 0 30px ${color}30` }}
-                />
-              ) : (
-                <div
-                  className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center border-3 border-primary/40"
+            <span className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full blur-3xl" style={{ backgroundColor: `${color}20` }} aria-hidden="true" />
+            <span className="pointer-events-none absolute -bottom-24 -left-16 h-44 w-44 rounded-full bg-primary/10 blur-3xl" aria-hidden="true" />
+
+            <div className="relative flex items-start gap-4">
+              <div className="relative shrink-0">
+                {character ? (
+                  <img
+                    src={character.image}
+                    alt={character.name}
+                    className="h-[92px] w-[92px] rounded-[25px] border-2 object-cover shadow-lg"
+                    style={{ borderColor: `${color}B0`, boxShadow: `0 12px 30px ${color}25` }}
+                  />
+                ) : (
+                  <span className="flex h-[92px] w-[92px] items-center justify-center rounded-[25px] border-2 border-primary/40 bg-primary/15">
+                    <UserRound size={36} className="text-primary" />
+                  </span>
+                )}
+                <span
+                  className="absolute -bottom-2 left-1/2 min-w-[56px] -translate-x-1/2 rounded-full border bg-[#19151f] px-2 py-1 text-center text-[10px] font-bold"
+                  style={{ borderColor: `${color}70`, color }}
                 >
-                  <Droplets size={36} className="text-primary" />
+                  Ур. {playerLevel}
+                </span>
+              </div>
+
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary/80">Профиль игрока</p>
+                {authStatus === 'loading' ? (
+                  <div className="mt-2" role="status">
+                    <h2 id="account-status-title" className="text-lg font-bold text-white">Проверяем вход</h2>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-white/55"><Cloud className="animate-pulse text-primary" size={14} /> Загружаем профиль…</p>
+                  </div>
+                ) : authStatus === 'authenticated' && authSession ? (
+                  <>
+                    <h2 id="account-status-title" className="mt-1 truncate text-xl font-bold leading-tight text-white">{authSession.account.name}</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-white/60">{authSession.account.phoneMasked}<br />г. {authSession.account.city}</p>
+                    <p className={cn('mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold', syncState === 'error' ? 'border-red-300/25 bg-red-400/10 text-red-200' : 'border-green-300/20 bg-green-400/10 text-green-200')} aria-live="polite">
+                      {syncState === 'error' ? <CloudAlert size={13} /> : <Cloud size={13} className={syncState === 'saving' ? 'animate-pulse' : ''} />}
+                      <span className="truncate">
+                        {syncState === 'saving'
+                          ? 'Сохраняем…'
+                          : syncState === 'error'
+                            ? 'Не сохранено'
+                            : lastSyncedAt
+                              ? `Сохранено в ${new Date(lastSyncedAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}`
+                              : 'Прогресс сохранён'}
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 id="account-status-title" className="mt-1 text-xl font-bold leading-tight text-white">Гостевая игра</h2>
+                    <p className="mt-1 text-xs leading-relaxed text-white/55">Прогресс хранится только на этом устройстве.</p>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {character && (
+              <div className="relative mt-5 rounded-2xl border border-white/10 bg-black/20 p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">Ваш термлин</p>
+                    <h3 className="mt-1 truncate font-heading text-sm text-white">{character.name}</h3>
+                    <p className="mt-0.5 truncate text-[11px] text-white/45">{character.title}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold" style={{ backgroundColor: `${color}16`, borderColor: `${color}45`, color }}>
+                    {ELEMENT_LABELS[character.element] ?? character.element}
+                  </span>
                 </div>
-              )}
-              {/* Level badge */}
-              <div
-                className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-bold border"
-                style={{
-                  backgroundColor: `${color}25`,
-                  borderColor: `${color}50`,
-                  color,
-                }}
-              >
-                Ур. {playerLevel}
-              </div>
-            </div>
-
-            {/* Name & title */}
-            <h3 className="font-heading text-lg font-bold text-white mt-5">
-              {character?.name ?? 'Игрок'}
-            </h3>
-            <p className="text-white/40 text-xs mt-0.5">
-              {character?.title ?? 'Новый игрок'}
-            </p>
-
-            {/* Element tag */}
-            {character && (
-              <span
-                className="mt-2 px-3 py-0.5 rounded-full text-[10px] font-medium uppercase tracking-wider"
-                style={{ backgroundColor: `${color}20`, color }}
-              >
-                {character.element}
-              </span>
-            )}
-
-            {/* XP bar */}
-            <div className="w-full max-w-[200px] mt-4">
-              <div className="flex justify-between mb-1">
-                <span className="text-white/30 text-[10px]">Опыт</span>
-                <span className="text-white/30 text-[10px]">{xpInLevel}/50</span>
-              </div>
-              <ProgressBar current={xpInLevel} max={50} color={color} />
-            </div>
-
-            {/* Ability */}
-            {character && (
-              <div
-                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-xl border"
-                style={{ backgroundColor: `${color}10`, borderColor: `${color}20` }}
-              >
-                <Sparkles size={14} style={{ color }} />
-                <span className="text-xs font-medium" style={{ color }}>
-                  {character.ability.name}
-                </span>
-                <span className="text-white/30 text-[10px]">
-                  {character.ability.description}
-                </span>
+                <div className="mt-3 flex items-center justify-between text-[10px] text-white/40">
+                  <span>Опыт уровня</span>
+                  <span className="tabular-nums">{xpInLevel}/50</span>
+                </div>
+                <ProgressBar current={xpInLevel} max={50} color={color} className="mt-1.5 h-2" />
+                <div className="mt-3 flex items-start gap-2 border-t border-white/[0.08] pt-3">
+                  <Sparkles size={15} className="mt-0.5 shrink-0" style={{ color }} />
+                  <p className="min-w-0 text-[11px] leading-relaxed text-white/55">
+                    <strong className="font-semibold" style={{ color }}>{character.ability.name}</strong>
+                    <span> · {character.ability.description}</span>
+                  </p>
+                </div>
               </div>
             )}
+
+            {(startupError || accountError) && (
+              <p className="relative mt-3 rounded-xl border border-red-400/20 bg-red-400/[0.08] px-3 py-2 text-xs text-red-200" role="alert">{accountError || startupError}</p>
+            )}
+
+            {authStatus === 'authenticated' && authSession ? (
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                disabled={logoutPending}
+                className="relative mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-xs font-semibold text-white/45 transition-colors hover:bg-white/[0.05] hover:text-white/75 disabled:opacity-45 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+              >
+                <LogOut size={15} />
+                {logoutPending ? 'Выходим…' : 'Выйти из профиля'}
+              </button>
+            ) : authStatus !== 'loading' ? (
+              <button
+                type="button"
+                onClick={() => navigate('/account')}
+                className="relative mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#171320] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <LogIn size={18} />
+                {authConfig?.available === false ? 'Вход временно недоступен' : 'Войти или зарегистрироваться'}
+              </button>
+            ) : null}
           </motion.div>
-        </div>
+        </section>
 
-        <div className="px-5 space-y-5 pb-5">
+        <div className="space-y-5 px-5 pb-5 pt-5">
           {/* Quick stats row */}
           <div className="grid grid-cols-4 gap-2">
             {[
               { value: completedLevels, label: 'Уровни', icon: Target },
               { value: totalStars, label: 'Звёзды', icon: Star },
-              { value: progress.best2048Score, label: '2048', icon: Grid3x3 },
+              { value: progress.best2048Score, label: GAME_NAMES.game2048, icon: Grid3x3 },
               { value: earnedCount, label: 'Ачивки', icon: Trophy },
             ].map((s, i) => (
               <motion.div
@@ -195,12 +260,50 @@ export function ProfileScreen() {
             ))}
           </div>
 
+          <section className="rounded-2xl border border-primary/25 bg-primary/[0.07] p-4" aria-labelledby="daily-rewards-title" data-daily-game-rewards>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <h3 id="daily-rewards-title" className="font-heading text-sm text-primary">Термокоины за сегодня</h3>
+                <p className="mt-1 text-[11px] text-white/45">До 30 в каждой игре · обновится завтра</p>
+              </div>
+              <strong className="text-base text-white tabular-nums">{dailyRewardTotal}/{DAILY_TOTAL_REWARD_LIMIT}</strong>
+            </div>
+            <ProgressBar current={dailyRewardTotal} max={DAILY_TOTAL_REWARD_LIMIT} className="mt-3 h-2.5" />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {GAME_REWARD_SOURCES.map(source => (
+                <div key={source} className="rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="text-white/60">{GAME_REWARD_LABELS[source]}</span>
+                    <strong className="text-white/85 tabular-nums">{dailyGameRewards.earned[source]}/{DAILY_GAME_REWARD_LIMIT}</strong>
+                  </div>
+                  <ProgressBar current={dailyGameRewards.earned[source]} max={DAILY_GAME_REWARD_LIMIT} className="mt-1.5 h-1.5" />
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <button
+            type="button"
+            onClick={() => navigate('/profile/feedback')}
+            className="w-full min-h-[72px] rounded-xl border border-primary/25 bg-gradient-to-r from-primary/[0.12] to-white/[0.04] p-3 flex items-center gap-3 text-left transition-colors hover:border-primary/45 active:bg-primary/15"
+            data-feedback-entry
+          >
+            <span className="w-11 h-11 shrink-0 rounded-xl bg-primary/15 flex items-center justify-center">
+              <MessageCircle size={21} className="text-primary" />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="block text-white/90 text-sm font-semibold">Обратная связь</span>
+              <span className="block text-white/40 text-xs mt-0.5">Сообщить об ошибке или предложить идею</span>
+            </span>
+            <ChevronRight size={20} className="text-primary/70 shrink-0" />
+          </button>
+
           {/* Purchased tickets & orders */}
           <div>
             <h3 className="font-heading text-xs font-semibold uppercase tracking-wider text-primary mb-3">
               Мои билеты и заказы
             </h3>
-            {progress.orders.length === 0 ? (
+            {progress.orders.length === 0 && progress.rewardClaims.length === 0 ? (
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Ticket size={18} className="text-primary" />
@@ -212,6 +315,37 @@ export function ProfileScreen() {
               </div>
             ) : (
               <div className="space-y-2">
+                {[...progress.rewardClaims].reverse().map(claim => {
+                  const redeemed = isRewardClaimRedeemed(claim);
+                  const active = !redeemed && claim.status !== 'expired' && claim.expiresAt > screenOpenedAt;
+                  const statusLabel = redeemed ? 'Использован' : active ? 'Активен' : 'Сгорел';
+                  return (
+                    <div key={claim.id} className="bg-white/5 border border-primary/25 rounded-xl p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-10 h-10 shrink-0 rounded-lg bg-primary/15 flex items-center justify-center">
+                            <Ticket size={19} className="text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-white/90 text-sm font-semibold">Бесплатный час</p>
+                            <p className="text-primary font-bold text-base tracking-wider mt-0.5">{claim.code}</p>
+                          </div>
+                        </div>
+                        <span className={cn(
+                          'text-[10px] px-2 py-1 rounded-full font-bold',
+                          redeemed ? 'bg-blue-500/15 text-blue-300' : active ? 'bg-green-500/15 text-green-400' : 'bg-white/5 text-white/35',
+                        )}>
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-white/50 text-xs">
+                        {redeemed && claim.redeemedAt
+                          ? `Использован ${formatRewardDate(claim.redeemedAt)}`
+                          : active ? `Покажите код на кассе до ${formatRewardDate(claim.expiresAt)}` : `Истёк ${formatRewardDate(claim.expiresAt)}`}
+                      </p>
+                    </div>
+                  );
+                })}
                 {progress.orders.map(order => (
                   <div
                     key={order.id}
@@ -237,7 +371,7 @@ export function ProfileScreen() {
                         return (
                           <div key={idx} className="flex justify-between text-xs">
                             <span className="text-white/50">{product?.name ?? item.productId} {item.quantity > 1 ? `×${item.quantity}` : ''}</span>
-                            <span className="text-white/30">{product ? (product.currency === 'rub' ? `${product.price * item.quantity} ₽` : `${product.price * item.quantity} T`) : ''}</span>
+                            <span className="text-white/30">{product ? (product.currency === 'rub' ? `${product.price * item.quantity} ₽` : `${product.price * item.quantity} термокоинов`) : ''}</span>
                           </div>
                         );
                       })}
@@ -256,49 +390,49 @@ export function ProfileScreen() {
           <div>
             <h3 className="font-heading text-xs font-semibold uppercase tracking-wider text-primary mb-3">Игры</h3>
             <div className="space-y-2">
-              {/* Match-3 */}
+              {/* Хоровод */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#D4956A]/15 flex items-center justify-center">
                   <Droplets size={18} className="text-[#D4956A]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-white/90 text-sm font-medium">Match-3</p>
+                    <p className="text-white/90 text-sm font-medium">{GAME_NAMES.match3}</p>
                     <p className="text-white/40 text-xs">{completedLevels} уровней</p>
                   </div>
                   <ProgressBar current={completedLevels} max={100} color="#D4956A" className="mt-1.5" />
                 </div>
               </div>
 
-              {/* 2048 */}
+              {/* Славич */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#6AABDA]/15 flex items-center justify-center">
                   <Grid3x3 size={18} className="text-[#6AABDA]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-white/90 text-sm font-medium">2048</p>
+                    <p className="text-white/90 text-sm font-medium">{GAME_NAMES.game2048}</p>
                     <p className="text-white/40 text-xs">Рекорд: {progress.best2048Score}</p>
                   </div>
                   <ProgressBar current={Math.min(progress.best2048Score, 2048)} max={2048} color="#6AABDA" className="mt-1.5" />
                 </div>
               </div>
 
-              {/* Bubbles */}
+              {/* Бирюльки */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#5DB879]/15 flex items-center justify-center">
                   <Circle size={18} className="text-[#5DB879]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-white/90 text-sm font-medium">Шарики</p>
+                    <p className="text-white/90 text-sm font-medium">{GAME_NAMES.bubbles}</p>
                     <p className="text-white/40 text-xs">{progress.bubbleLevelsCompleted} уровней</p>
                   </div>
                   <ProgressBar current={progress.bubbleLevelsCompleted} max={20} color="#5DB879" className="mt-1.5" />
                 </div>
               </div>
 
-              {/* Pet */}
+              {/* Пестун */}
               <div className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-[#9B7EC8]/15 flex items-center justify-center">
                   {progress.pet ? (
@@ -316,7 +450,7 @@ export function ProfileScreen() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-white/90 text-sm font-medium">Тамагочи</p>
+                    <p className="text-white/90 text-sm font-medium">{GAME_NAMES.pet}</p>
                     <p className="text-white/40 text-xs">
                       {progress.pet ? `${STAGE_LABELS[progress.pet.stage]} - ${MOOD_LABELS[getMood(progress.pet)]}` : 'Нет питомца'}
                     </p>

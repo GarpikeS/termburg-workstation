@@ -9,13 +9,20 @@ export const TokenType = {
 
 export type TokenType = (typeof TokenType)[keyof typeof TokenType];
 
+export const SpecialType = {
+  Helicopter: 'helicopter',
+  Barrel: 'barrel',
+} as const;
+
+export type SpecialType = (typeof SpecialType)[keyof typeof SpecialType];
+
 export const TOKEN_COLORS: Record<TokenType, string> = {
-  water: '#6AABDA',
-  leaf: '#5DB879',
-  stone: '#8E8E9E',
-  steam: '#9B7EC8',
-  fire: '#D4956A',
-  wood: '#A0784C',
+  water: '#32B8FF',
+  leaf: '#42D879',
+  stone: '#B8B7D2',
+  steam: '#B184FF',
+  fire: '#FF8A4C',
+  wood: '#E7A146',
 };
 
 export const ALL_TOKEN_TYPES: TokenType[] = Object.values(TokenType) as TokenType[];
@@ -28,6 +35,7 @@ export interface Position {
 export interface Cell {
   type: TokenType;
   id: number;
+  special?: SpecialType;
 }
 
 export type Grid = (Cell | null)[][];
@@ -35,6 +43,7 @@ export type Grid = (Cell | null)[][];
 export interface MatchGroup {
   positions: Position[];
   type: TokenType;
+  shape?: 'horizontal' | 'vertical' | 'square';
 }
 
 export interface SwapAction {
@@ -46,7 +55,9 @@ export type AnimationPhase =
   | 'idle'
   | 'swap'
   | 'swap_back'
+  | 'match_hold'
   | 'match'
+  | 'powerup'
   | 'score'
   | 'fall'
   | 'spawn'
@@ -125,8 +136,20 @@ export interface Order {
   status: 'pending' | 'confirmed' | 'completed';
 }
 
+export interface RewardClaim {
+  id: string;
+  rewardId: 'ticket-free';
+  code: string;
+  purchasedAt: number;
+  expiresAt: number;
+  nextPurchaseAt: number;
+  status?: 'active' | 'redeemed' | 'expired';
+  redeemedAt?: number;
+}
+
 export interface PetState {
   characterId: string;
+  name: string;
   hunger: number;
   happiness: number;
   energy: number;
@@ -135,18 +158,63 @@ export interface PetState {
   stage: 'baby' | 'teen' | 'adult';
   lastUpdated: number;
   cooldowns: Record<string, number>;
+  activityCooldowns: Record<string, number>;
+  experience: number;
+  bond: number;
+  careStreak: number;
+  lastCareDate: string | null;
+  daily: PetDailyState;
+  diary: PetDiaryEntry[];
+}
+
+export type PetStatKey = 'hunger' | 'happiness' | 'energy' | 'cleanliness';
+
+export interface PetDeparture {
+  characterId: string;
+  name: string;
+  depletedStat: PetStatKey;
+  departedAt: number;
+}
+
+export interface PetDailyState {
+  date: string;
+  giftClaimed: boolean;
+  taskProgress: Record<string, number>;
+  taskClaimed: string[];
+}
+
+export interface PetDiaryEntry {
+  id: string;
+  createdAt: number;
+  title: string;
+  detail: string;
+  kind: 'care' | 'activity' | 'reward' | 'growth';
+}
+
+export type GameRewardSource = 'match3' | 'game2048' | 'bubbles' | 'pet';
+
+export interface DailyGameRewards {
+  date: string;
+  earned: Record<GameRewardSource, number>;
 }
 
 export interface PlayerProgress {
   currentLevel: number;
   levels: Record<number, LevelProgress>;
   currency: number;
+  dailyGameRewards: DailyGameRewards;
+  lives: number;
+  nextLifeAt: number | null;
   selectedCharacter: string;
   tutorialCompleted: boolean;
+  tutorialFlags: string[];
   best2048Score: number;
   bubbleLevelsCompleted: number;
   pet: PetState | null;
+  petDeparture: PetDeparture | null;
   unlockedCharacters: string[];
+  inventory: Record<string, number>;
+  rewardClaims: RewardClaim[];
   cart: CartItem[];
   orders: Order[];
 }

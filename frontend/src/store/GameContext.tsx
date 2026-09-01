@@ -1,17 +1,28 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { PlayerProgress, LevelProgress, PetState, CartItem, Order } from '@/types/game';
-import { loadProgress, saveProgress } from './storage';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import type { PlayerProgress, LevelProgress, PetDeparture, PetState, Order, RewardClaim, GameRewardSource } from '@/types/game';
+import { createDefaultProgress, loadProgress, resetProgress, saveProgress } from './storage';
+import { buyLifeProgress, spendLifeProgress, syncLifeProgress } from './lives';
+import { awardDailyGameReward } from '@/data/economy';
+import { syncTermlinUnlocks } from '@/data/termliny';
+import { useAuth } from '@/features/account/AuthContext';
 
 interface GameContextValue {
   progress: PlayerProgress;
-  completeLevelAction: (levelId: number, stars: number, score: number, reward: number) => void;
-  addCurrency: (amount: number) => void;
-  spendCurrency: (amount: number) => boolean;
+  completeLevelAction: (levelId: number, stars: number, score: number, reward: number) => number;
+  awardGameCurrency: (source: GameRewardSource, amount: number) => number;
+  spendLife: () => void;
+  buyLife: () => void;
+  buyWithCoins: (productId: string, price: number) => void;
+  consumeInventoryItem: (productId: string) => void;
+  completeRewardClaim: (claim: RewardClaim, price: number) => void;
+  restoreRewardClaim: (claim: RewardClaim) => void;
   selectCharacter: (id: string) => void;
   setTutorialCompleted: () => void;
+  markTutorialSeen: (tutorialId: string) => void;
   update2048Score: (score: number) => void;
-  completeBubbleLevel: () => void;
+  completeBubbleLevel: (levelId: number) => void;
   updatePet: (pet: PetState | null) => void;
+  departPet: (departure: PetDeparture) => void;
   unlockCharacter: (id: string) => void;
   addToCart: (productId: string) => void;
   removeFromCart: (productId: string) => void;
@@ -22,49 +33,192 @@ interface GameContextValue {
 const GameContext = createContext<GameContextValue | null>(null);
 
 export function GameProvider({ children }: { children: ReactNode }) {
-  const [progress, setProgress] = useState<PlayerProgress>(loadProgress);
+  const { status: authStatus, session: authSession, syncProgress: syncAccountProgress } = useAuth();
+  const [progress, setProgress] = useState<PlayerProgress>(() => syncTermlinUnlocks(loadProgress()));
+  const progressRef = useRef(progress);
+  const accountIdRef = useRef<string | null>(null);
+  const syncTimerRef = useRef<number | null>(null);
+  const syncSequenceRef = useRef(0);
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const authRef = useRef({ status: authStatus, syncProgress: syncAccountProgress });
 
-  const update = useCallback((updater: (prev: PlayerProgress) => PlayerProgress) => {
-    setProgress(prev => {
-      const next = updater(prev);
-      saveProgress(next);
-      return next;
-    });
+  useEffect(() => {
+    authRef.current = { status: authStatus, syncProgress: syncAccountProgress };
+  }, [authStatus, syncAccountProgress]);
+
+  const scheduleRemoteSync = useCallback((next: PlayerProgress) => {
+    if (authRef.current.status !== 'authenticated') return;
+    syncSequenceRef.current += 1;
+    const sequence = syncSequenceRef.current;
+    if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = window.setTimeout(() => {
+      syncTimerRef.current = null;
+      syncQueueRef.current = syncQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          const saved = await authRef.current.syncProgress(next);
+          if (sequence !== syncSequenceRef.current) return;
+          const normalized = syncTermlinUnlocks(saved);
+          progressRef.current = normalized;
+          saveProgress(normalized);
+          setProgress(normalized);
+        })
+        .catch(() => undefined);
+    }, 700);
   }, []);
 
+  const update = useCallback((updater: (prev: PlayerProgress) => PlayerProgress) => {
+    const previous = progressRef.current;
+    const next = syncTermlinUnlocks(updater(previous));
+    if (next === previous) return previous;
+    progressRef.current = next;
+    saveProgress(next);
+    setProgress(next);
+    scheduleRemoteSync(next);
+    return next;
+  }, [scheduleRemoteSync]);
+
+  useEffect(() => {
+    if (authStatus === 'authenticated' && authSession && accountIdRef.current !== authSession.account.id) {
+      if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+      syncSequenceRef.current += 1;
+      const hydrated = syncTermlinUnlocks(authSession.progress);
+      accountIdRef.current = authSession.account.id;
+      progressRef.current = hydrated;
+      saveProgress(hydrated);
+      setProgress(hydrated);
+      return;
+    }
+
+    if (authStatus === 'guest' && accountIdRef.current) {
+      if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+      syncSequenceRef.current += 1;
+      const fresh = syncTermlinUnlocks(createDefaultProgress());
+      accountIdRef.current = null;
+      progressRef.current = fresh;
+      resetProgress();
+      setProgress(fresh);
+    }
+  }, [authSession, authStatus]);
+
+  useEffect(() => () => {
+    if (syncTimerRef.current !== null) window.clearTimeout(syncTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      update(prev => syncLifeProgress(prev));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [update]);
+
   const completeLevelAction = useCallback((levelId: number, stars: number, score: number, reward: number) => {
+    let earnedReward = 0;
     update(prev => {
       const existing: LevelProgress = prev.levels[levelId] ?? { stars: 0, bestScore: 0, completed: false };
       const newStars = Math.max(existing.stars, stars);
       const newBest = Math.max(existing.bestScore, score);
-      const earnedReward = stars > existing.stars ? reward : (existing.completed ? 0 : reward);
+      const dailyReward = awardDailyGameReward(prev.dailyGameRewards, 'match3', reward);
+      earnedReward = dailyReward.awarded;
 
       return {
         ...prev,
         currentLevel: Math.max(prev.currentLevel, levelId + 1),
         currency: prev.currency + earnedReward,
+        dailyGameRewards: dailyReward.rewards,
         levels: {
           ...prev.levels,
           [levelId]: { stars: newStars, bestScore: newBest, completed: true },
         },
       };
     });
+    return earnedReward;
   }, [update]);
 
-  const addCurrency = useCallback((amount: number) => {
-    update(prev => ({ ...prev, currency: prev.currency + amount }));
-  }, [update]);
-
-  const spendCurrency = useCallback((amount: number): boolean => {
-    let success = false;
+  const awardGameCurrency = useCallback((source: GameRewardSource, amount: number) => {
+    let earnedReward = 0;
     update(prev => {
-      if (prev.currency >= amount) {
-        success = true;
-        return { ...prev, currency: prev.currency - amount };
-      }
-      return prev;
+      const dailyReward = awardDailyGameReward(prev.dailyGameRewards, source, amount);
+      earnedReward = dailyReward.awarded;
+      if (earnedReward === 0 && dailyReward.rewards === prev.dailyGameRewards) return prev;
+      return {
+        ...prev,
+        currency: prev.currency + earnedReward,
+        dailyGameRewards: dailyReward.rewards,
+      };
     });
-    return success;
+    return earnedReward;
+  }, [update]);
+
+  const spendLife = useCallback(() => {
+    update(prev => spendLifeProgress(prev));
+  }, [update]);
+
+  const buyLife = useCallback(() => {
+    update(prev => buyLifeProgress(prev));
+  }, [update]);
+
+  const buyWithCoins = useCallback((productId: string, price: number) => {
+    update(prev => {
+      if (price < 0 || prev.currency < price) return prev;
+      return {
+        ...prev,
+        currency: prev.currency - price,
+        inventory: {
+          ...prev.inventory,
+          [productId]: (prev.inventory[productId] ?? 0) + 1,
+        },
+      };
+    });
+  }, [update]);
+
+  const consumeInventoryItem = useCallback((productId: string) => {
+    update(prev => {
+      const count = prev.inventory[productId] ?? 0;
+      if (count <= 0) return prev;
+      return {
+        ...prev,
+        inventory: {
+          ...prev.inventory,
+          [productId]: count - 1,
+        },
+      };
+    });
+  }, [update]);
+
+  const completeRewardClaim = useCallback((claim: RewardClaim, price: number) => {
+    update(prev => {
+      if (price < 0 || prev.currency < price || prev.rewardClaims.some(item => item.id === claim.id)) {
+        return prev;
+      }
+      return {
+        ...prev,
+        currency: prev.currency - price,
+        inventory: { ...prev.inventory, [claim.rewardId]: 1 },
+        rewardClaims: [...prev.rewardClaims, { ...claim, status: claim.status ?? 'active' }],
+      };
+    });
+  }, [update]);
+
+  const restoreRewardClaim = useCallback((claim: RewardClaim) => {
+    update(prev => {
+      const rewardClaims = prev.rewardClaims.some(item => item.id === claim.id)
+        ? prev.rewardClaims.map(item => item.id === claim.id ? claim : item)
+        : [...prev.rewardClaims, claim];
+      const hasUsableClaim = rewardClaims.some(item => (
+        item.rewardId === 'ticket-free'
+        && item.status !== 'redeemed'
+        && item.expiresAt > Date.now()
+      ));
+      return {
+        ...prev,
+        inventory: { ...prev.inventory, [claim.rewardId]: hasUsableClaim ? 1 : 0 },
+        rewardClaims,
+      };
+    });
   }, [update]);
 
   const selectCharacter = useCallback((id: string) => {
@@ -75,6 +229,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     update(prev => ({ ...prev, tutorialCompleted: true }));
   }, [update]);
 
+  const markTutorialSeen = useCallback((tutorialId: string) => {
+    update(prev => (
+      prev.tutorialFlags.includes(tutorialId)
+        ? prev
+        : { ...prev, tutorialFlags: [...prev.tutorialFlags, tutorialId] }
+    ));
+  }, [update]);
+
   const update2048Score = useCallback((score: number) => {
     update(prev => ({
       ...prev,
@@ -82,15 +244,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     }));
   }, [update]);
 
-  const completeBubbleLevel = useCallback(() => {
-    update(prev => ({
-      ...prev,
-      bubbleLevelsCompleted: prev.bubbleLevelsCompleted + 1,
-    }));
+  const completeBubbleLevel = useCallback((levelId: number) => {
+    update(prev => {
+      const currentUnlockedLevel = Math.max(1, prev.bubbleLevelsCompleted + 1);
+      if (levelId !== currentUnlockedLevel) return prev;
+      return { ...prev, bubbleLevelsCompleted: levelId };
+    });
   }, [update]);
 
   const updatePet = useCallback((pet: PetState | null) => {
-    update(prev => ({ ...prev, pet }));
+    update(prev => ({ ...prev, pet, ...(pet ? { petDeparture: null } : {}) }));
+  }, [update]);
+
+  const departPet = useCallback((departure: PetDeparture) => {
+    update(prev => ({ ...prev, pet: null, petDeparture: departure }));
   }, [update]);
 
   const unlockCharacter = useCallback((id: string) => {
@@ -158,13 +325,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     <GameContext.Provider value={{
       progress,
       completeLevelAction,
-      addCurrency,
-      spendCurrency,
+      awardGameCurrency,
+      spendLife,
+      buyLife,
+      buyWithCoins,
+      consumeInventoryItem,
+      completeRewardClaim,
+      restoreRewardClaim,
       selectCharacter,
       setTutorialCompleted,
+      markTutorialSeen,
       update2048Score,
       completeBubbleLevel,
       updatePet,
+      departPet,
       unlockCharacter,
       addToCart,
       removeFromCart,

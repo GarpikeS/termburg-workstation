@@ -1,4 +1,5 @@
-import { TokenType, type LevelConfig, type Difficulty } from '@/types/game';
+import { TokenType, type LevelConfig, type Difficulty } from '../types/game.ts';
+import { STANDARD_WIN_REWARD } from './economy.ts';
 
 const W = TokenType.Water;
 const L = TokenType.Leaf;
@@ -11,18 +12,18 @@ function lvl(
   id: number, name: string, difficulty: Difficulty, bathhouseId: number,
   rows: number, cols: number, tokenTypes: TokenType[], moves: number,
   objectives: { type: TokenType; target: number }[],
-  starThresholds: [number, number, number], reward: number, characterId: string,
+  starThresholds: [number, number, number], _reward: number, characterId: string,
 ): LevelConfig {
-  return { id, name, difficulty, bathhouseId, rows, cols, tokenTypes, moves, objectives, starThresholds, reward, characterId };
+  return { id, name, difficulty, bathhouseId, rows, cols, tokenTypes, moves, objectives, starThresholds, reward: STANDARD_WIN_REWARD, characterId };
 }
 
 export const levels: LevelConfig[] = [
   // Bathhouse 1: Русская баня (1-10) — вводные уровни
-  lvl(1, 'Первый пар', 'classic', 1, 8, 8, [W, St, L], 15, [{ type: W, target: 25 }, { type: St, target: 20 }], [600, 1200, 2400], 30, 'ai-concierge'),
-  lvl(2, 'Берёзовый веник', 'classic', 1, 8, 8, [L, Wd, W], 14, [{ type: L, target: 28 }, { type: Wd, target: 22 }], [700, 1400, 2800], 35, 'ai-concierge'),
-  lvl(3, 'Горячий камень', 'classic', 1, 8, 8, [S, St, W], 14, [{ type: S, target: 25 }, { type: St, target: 22 }], [800, 1600, 3200], 40, 'ai-concierge'),
-  lvl(4, 'Дубовый дух', 'classic', 1, 8, 8, [Wd, L, St], 13, [{ type: Wd, target: 28 }, { type: L, target: 25 }], [900, 1800, 3600], 45, 'ai-concierge'),
-  lvl(5, 'Парная истома', 'classic', 1, 8, 8, [St, W, S], 13, [{ type: St, target: 30 }, { type: W, target: 25 }], [1000, 2000, 4000], 50, 'ai-concierge'),
+  lvl(1, 'Первый пар', 'classic', 1, 8, 8, [W, St, L, S], 14, [{ type: W, target: 18 }, { type: St, target: 15 }], [600, 1200, 2400], 30, 'ai-concierge'),
+  lvl(2, 'Берёзовый веник', 'classic', 1, 8, 8, [L, Wd, W, St], 13, [{ type: L, target: 20 }, { type: Wd, target: 16 }], [700, 1400, 2800], 35, 'ai-concierge'),
+  lvl(3, 'Горячий камень', 'classic', 1, 8, 8, [S, St, W, L], 13, [{ type: S, target: 19 }, { type: St, target: 17 }], [800, 1600, 3200], 40, 'ai-concierge'),
+  lvl(4, 'Дубовый дух', 'classic', 1, 8, 8, [Wd, L, St, W], 12, [{ type: Wd, target: 20 }, { type: L, target: 18 }], [900, 1800, 3600], 45, 'ai-concierge'),
+  lvl(5, 'Парная истома', 'classic', 1, 8, 8, [St, W, S, L], 12, [{ type: St, target: 21 }, { type: W, target: 18 }], [1000, 2000, 4000], 50, 'ai-concierge'),
   lvl(6, 'Травяной настой', 'premium', 1, 8, 8, [L, W, St, S], 12, [{ type: L, target: 28 }, { type: W, target: 25 }], [1100, 2200, 4400], 55, 'ai-concierge'),
   lvl(7, 'Кедровый аромат', 'premium', 1, 8, 8, [Wd, St, L, W], 12, [{ type: Wd, target: 30 }, { type: St, target: 25 }], [1200, 2400, 4800], 60, 'ai-concierge'),
   lvl(8, 'Ледяная купель', 'premium', 1, 8, 8, [W, S, St, L], 11, [{ type: W, target: 32 }, { type: S, target: 25 }], [1400, 2800, 5200], 65, 'ai-concierge'),

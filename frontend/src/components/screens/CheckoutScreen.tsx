@@ -13,6 +13,9 @@ export function CheckoutScreen() {
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [submittedRemotely, setSubmittedRemotely] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cartItems = progress.cart
     .map(c => ({ ...c, product: getProductById(c.productId) }))
@@ -20,23 +23,45 @@ export function CheckoutScreen() {
 
   const total = cartItems.reduce((s, c) => s + (c.product!.price * c.quantity), 0);
 
-  const canSubmit = name.trim().length >= 2 && phone.trim().length >= 7;
+  const canSubmit = cartItems.length > 0 && name.trim().length >= 2 && phone.trim().length >= 7;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
-    const id = placeOrder({
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) return;
+
+    const orderData = {
       items: progress.cart,
       total,
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim() || undefined,
-    });
-    setOrderId(id);
+    };
+
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    try {
+      const orderApiUrl = import.meta.env.VITE_ORDER_API_URL;
+      if (orderApiUrl) {
+        const response = await fetch(orderApiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderData),
+        });
+        if (!response.ok) throw new Error(`Order API returned ${response.status}`);
+        setSubmittedRemotely(true);
+      }
+
+      setOrderId(placeOrder(orderData));
+    } catch {
+      setSubmitError('Не удалось отправить заказ. Проверьте соединение и попробуйте ещё раз.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (orderId) {
     return (
-      <div className="h-full flex flex-col bg-dark-surface pb-20">
+      <div className="h-full flex flex-col bg-dark-surface">
         <div className="flex-1 flex flex-col items-center justify-center px-5">
           <motion.div
             initial={{ scale: 0 }}
@@ -47,7 +72,11 @@ export function CheckoutScreen() {
           </motion.div>
           <h3 className="font-heading text-xl font-bold text-primary">Заказ оформлен!</h3>
           <p className="text-white/50 text-sm mt-2">Номер заказа: {orderId}</p>
-          <p className="text-white/40 text-xs mt-3 text-center">Менеджер свяжется с вами для подтверждения</p>
+          <p className="text-white/40 text-xs mt-3 text-center">
+            {submittedRemotely
+              ? 'Заявка отправлена менеджеру для подтверждения'
+              : 'Заявка сохранена на этом устройстве. Отправка менеджеру пока не настроена'}
+          </p>
           <Button className="mt-6" onClick={() => navigate('/shop')}>
             В магазин
           </Button>
@@ -57,11 +86,11 @@ export function CheckoutScreen() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface pb-20">
+    <div className="h-full flex flex-col bg-dark-surface">
       {/* Header */}
-      <div className="pt-10 pb-4 px-5">
+      <div className="screen-safe-header pb-4 px-5">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/shop/cart')} className="text-white/50 hover:text-primary transition-colors">
+          <button type="button" aria-label="Назад в корзину" onClick={() => navigate('/shop/cart')} className="min-w-11 min-h-11 flex items-center justify-center text-white/50 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Оформление</h2>
@@ -74,8 +103,10 @@ export function CheckoutScreen() {
         {/* Form */}
         <div className="space-y-3">
           <div>
-            <label className="text-white/50 text-xs block mb-1.5">Имя *</label>
+            <label htmlFor="checkout-name" className="text-white/50 text-xs block mb-1.5">Имя *</label>
             <input
+              id="checkout-name"
+              name="name"
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
@@ -84,8 +115,10 @@ export function CheckoutScreen() {
             />
           </div>
           <div>
-            <label className="text-white/50 text-xs block mb-1.5">Телефон *</label>
+            <label htmlFor="checkout-phone" className="text-white/50 text-xs block mb-1.5">Телефон *</label>
             <input
+              id="checkout-phone"
+              name="phone"
               type="tel"
               value={phone}
               onChange={e => setPhone(e.target.value)}
@@ -94,8 +127,10 @@ export function CheckoutScreen() {
             />
           </div>
           <div>
-            <label className="text-white/50 text-xs block mb-1.5">Email (необязательно)</label>
+            <label htmlFor="checkout-email" className="text-white/50 text-xs block mb-1.5">Email (необязательно)</label>
             <input
+              id="checkout-email"
+              name="email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -124,8 +159,12 @@ export function CheckoutScreen() {
           </div>
         </div>
 
-        <Button className="w-full" onClick={handleSubmit} disabled={!canSubmit}>
-          Подтвердить заказ
+        {submitError && (
+          <p className="text-sm text-red-400" role="alert">{submitError}</p>
+        )}
+
+        <Button className="w-full" onClick={handleSubmit} disabled={!canSubmit || isSubmitting}>
+          {isSubmitting ? 'Отправляем…' : 'Подтвердить заказ'}
         </Button>
       </div>
     </div>

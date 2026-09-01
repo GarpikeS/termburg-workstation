@@ -1,0 +1,222 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { startFeedbackService } from './feedback-service.mjs';
+
+const ALLOWED_ORIGIN = 'https://tbgame.ru';
+const AUTH_SECRET = 'synthetic-test-secret-that-is-long-enough-for-account-authentication';
+const TEST_PASSWORD = 'test-only-passphrase';
+
+function authHeaders(extra = {}) {
+  return { Origin: ALLOWED_ORIGIN, 'Content-Type': 'application/json', ...extra };
+}
+
+function cookieFrom(response) {
+  return String(response.headers.get('set-cookie') || '').split(';')[0];
+}
+
+function baseProgress(date = '2026-08-15') {
+  return {
+    currentLevel: 3,
+    levels: {
+      1: { stars: 3, bestScore: 2200, completed: true },
+      2: { stars: 2, bestScore: 1800, completed: true },
+    },
+    currency: 181,
+    dailyGameRewards: { date, earned: { match3: 0, game2048: 0, bubbles: 0, pet: 0 } },
+    lives: 4,
+    nextLifeAt: null,
+    selectedCharacter: 'yaromir',
+    tutorialCompleted: true,
+    tutorialFlags: ['match3:swap'],
+    best2048Score: 1024,
+    bubbleLevelsCompleted: 2,
+    pet: null,
+    petDeparture: null,
+    unlockedCharacters: ['yaromir'],
+    inventory: {},
+    rewardClaims: [],
+    cart: [],
+    orders: [],
+  };
+}
+
+async function startTestService(tempRoot, now) {
+  return startFeedbackService({
+    dataFile: path.join(tempRoot, 'feedback.jsonl'),
+    claimsDataFile: path.join(tempRoot, 'claims.jsonl'),
+    host: '127.0.0.1',
+    port: 0,
+    allowedOrigin: ALLOWED_ORIGIN,
+    logger: { info() {}, error() {} },
+    now,
+    accountOptions: {
+      databaseFile: path.join(tempRoot, 'accounts.sqlite'),
+      authSecret: AUTH_SECRET,
+      secureCookies: true,
+    },
+  });
+}
+
+test('phone/password registration, session, progress sync, logout and cross-device login work', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-'));
+  let currentTime = Date.UTC(2026, 7, 15, 12, 0, 0);
+  const service = await startTestService(tempRoot, () => currentTime);
+  const origin = `http://127.0.0.1:${service.port}`;
+  const firstDevice = 'device-account-test-0001';
+
+  try {
+    const config = await fetch(`${origin}/api/auth/config`);
+    assert.equal(config.status, 200);
+    assert.deepEqual(await config.json(), { available: true, method: 'password', passwordMinLength: 8 });
+
+    const register = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        phone: '8 999 123-45-67',
+        password: TEST_PASSWORD,
+        name: 'Анна',
+        city: 'Москва',
+        consent: true,
+        consentVersion: 'account-2026-08-15',
+        deviceId: firstDevice,
+        progress: baseProgress(),
+      }),
+    });
+    assert.equal(register.status, 201);
+    const firstSessionCookie = cookieFrom(register);
+    assert.match(firstSessionCookie, /^tb_session=.+/);
+    assert.match(String(register.headers.get('set-cookie')), /HttpOnly/);
+    assert.match(String(register.headers.get('set-cookie')), /Secure/);
+    const registered = await register.json();
+    assert.equal(registered.account.name, 'Анна');
+    assert.equal(registered.account.phoneMasked, '+7 ••• •••-45-67');
+    assert.equal(registered.progress.currency, 181);
+    assert.equal(JSON.stringify(registered).includes(TEST_PASSWORD), false);
+
+    const duplicate = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        phone: '+79991234567', password: TEST_PASSWORD, name: 'Анна', city: 'Москва',
+        consent: true, consentVersion: 'account-2026-08-15', deviceId: firstDevice, progress: baseProgress(),
+      }),
+    });
+    assert.equal(duplicate.status, 409);
+
+    const me = await fetch(`${origin}/api/auth/me`, { headers: { Cookie: firstSessionCookie } });
+    assert.equal(me.status, 200);
+    assert.equal((await me.json()).account.city, 'Москва');
+
+    const tampered = baseProgress();
+    tampered.currency = 999_999;
+    tampered.dailyGameRewards.earned = { match3: 30, game2048: 30, bubbles: 30, pet: 30 };
+    const firstSync = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: firstSessionCookie }),
+      body: JSON.stringify({ progress: tampered }),
+    });
+    assert.equal(firstSync.status, 200);
+    assert.equal((await firstSync.json()).progress.currency, 301);
+
+    const repeatedSync = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: firstSessionCookie }),
+      body: JSON.stringify({ progress: tampered }),
+    });
+    assert.equal((await repeatedSync.json()).progress.currency, 301);
+
+    const logout = await fetch(`${origin}/api/auth/logout`, {
+      method: 'POST', headers: { Origin: ALLOWED_ORIGIN, Cookie: firstSessionCookie },
+    });
+    assert.equal(logout.status, 200);
+    assert.match(String(logout.headers.get('set-cookie')), /Max-Age=0/);
+    assert.equal((await fetch(`${origin}/api/auth/me`, { headers: { Cookie: firstSessionCookie } })).status, 401);
+
+    currentTime += 1000;
+    const login = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '+7 999 123-45-67', password: TEST_PASSWORD, deviceId: 'device-account-test-0002' }),
+    });
+    assert.equal(login.status, 200);
+    const loggedIn = await login.json();
+    assert.equal(loggedIn.account.name, 'Анна');
+    assert.equal(loggedIn.progress.currency, 301);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('password auth validates origin and rate-limits repeated failures without revealing account existence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-security-'));
+  let currentTime = Date.UTC(2026, 7, 15, 12, 0, 0);
+  const service = await startTestService(tempRoot, () => currentTime);
+  const origin = `http://127.0.0.1:${service.port}`;
+  const deviceId = 'device-account-lock-0001';
+
+  try {
+    const foreign = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders({ Origin: 'https://example.com' }),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, name: 'Иван', city: 'Москва', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+    });
+    assert.equal(foreign.status, 403);
+
+    const shortPassword = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '89990000001', password: 'short', name: 'Иван', city: 'Москва', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+    });
+    assert.equal(shortPassword.status, 400);
+    assert.equal((await shortPassword.json()).field, 'password');
+
+    const register = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, name: 'Иван', city: 'Москва', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+    });
+    assert.equal(register.status, 201);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const invalid = await fetch(`${origin}/api/auth/login`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ phone: '89990000001', password: 'definitely-wrong', deviceId }),
+      });
+      assert.equal(invalid.status, 401);
+      assert.equal((await invalid.json()).error, 'Неверный телефон или пароль.');
+    }
+
+    const locked = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, deviceId }),
+    });
+    assert.equal(locked.status, 429);
+    assert.equal((await locked.json()).code, 'LOGIN_RATE_LIMIT');
+
+    currentTime += 15 * 60 * 1000 + 1;
+    const recovered = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, deviceId }),
+    });
+    assert.equal(recovered.status, 200);
+
+    const unknown = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: authHeaders({ 'X-Real-IP': '203.0.113.55' }),
+      body: JSON.stringify({ phone: '89990000002', password: 'definitely-wrong', deviceId }),
+    });
+    assert.equal(unknown.status, 401);
+    assert.equal((await unknown.json()).error, 'Неверный телефон или пароль.');
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

@@ -1,22 +1,47 @@
 import type { MatchGroup } from '@/types/game';
 
-const BASE_SCORES: Record<number, number> = {
-  3: 50,
-  4: 150,
-  5: 500,
-};
+const BASE_MATCH_SCORE = 50;
+
+export interface MatchScoreBreakdown {
+  baseScore: number;
+  sizeBonus: number;
+  comboMultiplier: number;
+  total: number;
+  largestMatch: number;
+}
+
+export function getMatchSizeBonus(length: number): number {
+  if (length === 4) return 100;
+  if (length >= 5) return 450 + (length - 5) * 250;
+  return 0;
+}
+
+export function calculateMatchScoreBreakdown(
+  matches: MatchGroup[],
+  combo: number,
+): MatchScoreBreakdown {
+  const baseScore = matches.length * BASE_MATCH_SCORE;
+  const sizeBonus = matches.reduce(
+    (total, group) => total + getMatchSizeBonus(group.positions.length),
+    0,
+  );
+  const comboMultiplier = 1 + 0.25 * combo;
+  const largestMatch = matches.reduce(
+    (largest, group) => Math.max(largest, group.positions.length),
+    0,
+  );
+
+  return {
+    baseScore,
+    sizeBonus,
+    comboMultiplier,
+    total: Math.round((baseScore + sizeBonus) * comboMultiplier),
+    largestMatch,
+  };
+}
 
 export function calculateMatchScore(matches: MatchGroup[], combo: number): number {
-  let total = 0;
-  const comboMultiplier = 1 + 0.25 * combo;
-
-  for (const group of matches) {
-    const len = group.positions.length;
-    const base = BASE_SCORES[Math.min(len, 5)] ?? BASE_SCORES[5];
-    total += base;
-  }
-
-  return Math.round(total * comboMultiplier);
+  return calculateMatchScoreBreakdown(matches, combo).total;
 }
 
 export function getStars(score: number, thresholds: [number, number, number]): number {
@@ -27,8 +52,5 @@ export function getStars(score: number, thresholds: [number, number, number]): n
 }
 
 export function getReward(stars: number, baseReward: number): number {
-  if (stars === 3) return baseReward;
-  if (stars === 2) return Math.round(baseReward * 0.75);
-  if (stars === 1) return Math.round(baseReward * 0.5);
-  return 0;
+  return stars >= 0 ? baseReward : 0;
 }

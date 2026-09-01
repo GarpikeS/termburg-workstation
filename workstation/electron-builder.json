@@ -1,0 +1,50 @@
+{
+  "appId": "ru.termburg.workstation",
+  "productName": "Термбург Рабочее место",
+  "asar": true,
+  "compression": "normal",
+  "directories": {
+    "output": "release/workstation",
+    "buildResources": "desktop/assets"
+  },
+  "files": [
+    "desktop/**/*",
+    "workstation/**/*",
+    "dolphin-agent/core/**/*",
+    "dolphin-agent/adapters/excel-reader.ps1",
+    "server/schedule-auth.mjs",
+    "server/schedule-service.mjs",
+    "server/schedule-server.mjs",
+    "server/wordpress-schedule.mjs",
+    "frontend/build/**/*",
+    "frontend/public/data/default-schedule.json",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "dolphin-agent/adapters/excel-reader.ps1",
+      "to": "workstation/excel-reader.ps1"
+    }
+  ],
+  "extraMetadata": {
+    "main": "desktop/main.mjs",
+    "version": "1.0.0",
+    "description": "Редактор расписания Термбурга и автоматическое погашение билетов Dolphin"
+  },
+  "win": {
+    "target": [
+      { "target": "nsis", "arch": ["x64"] }
+    ],
+    "icon": "desktop/assets/icon.png",
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowElevation": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Термбург Рабочее место",
+    "artifactName": "Termburg-Workstation-Setup-${version}.${ext}"
+  }
+}

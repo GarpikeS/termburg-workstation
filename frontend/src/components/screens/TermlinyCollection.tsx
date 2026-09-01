@@ -1,28 +1,35 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Lock, Crown, ArrowLeft } from 'lucide-react';
+import { Lock, Crown, ArrowLeft, ChevronRight } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { useGameContext } from '@/store/GameContext';
-import { termliny, ELEMENT_COLORS } from '@/data/termliny';
+import {
+  termliny,
+  ELEMENT_COLORS,
+  getTermlinUnlockValue,
+  isTermlinRequirementMet,
+  isTermlinUnlocked,
+} from '@/data/termliny';
 import { cn } from '@/utils/cn';
 
 export function TermlinyCollection() {
   const navigate = useNavigate();
   const { progress } = useGameContext();
+  const unlockedCount = termliny.filter(termlin => isTermlinUnlocked(termlin, progress)).length;
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface pb-20">
+    <div className="h-full flex flex-col bg-dark-surface">
       {/* Header */}
-      <div className="pt-10 pb-4 px-5">
+      <div className="screen-safe-header pb-4 px-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors p-1">
+            <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/50 hover:text-primary transition-colors">
               <ArrowLeft size={20} />
             </button>
             <div>
               <h2 className="font-heading text-base font-bold text-primary tracking-wider uppercase">Термлины</h2>
               <p className="text-white/40 text-[10px] mt-0.5">
-                {progress.unlockedCharacters.length} / {termliny.length} открыто
+                {unlockedCount} / {termliny.length} открыто
               </p>
             </div>
           </div>
@@ -35,12 +42,13 @@ export function TermlinyCollection() {
       <div className="flex-1 overflow-y-auto phone-scroll px-5 py-4">
         <div className="grid grid-cols-2 gap-3">
           {termliny.map((t, i) => {
-            const unlocked = progress.unlockedCharacters.includes(t.id);
+            const unlocked = isTermlinUnlocked(t, progress);
             const selected = progress.selectedCharacter === t.id;
             const color = ELEMENT_COLORS[t.element] ?? '#BA9B4F';
 
             return (
               <motion.button
+                type="button"
                 key={t.id}
                 className={cn(
                   'bg-white/5 border rounded-2xl p-3 text-center transition-all overflow-hidden relative',
@@ -52,8 +60,8 @@ export function TermlinyCollection() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
                 whileTap={unlocked ? { scale: 0.96 } : undefined}
-                onClick={() => unlocked && navigate(`/collection/${t.id}`)}
-                disabled={!unlocked}
+                onClick={() => navigate(`/collection/${t.id}`)}
+                aria-label={`${t.name}: ${unlocked ? t.title : 'посмотреть условия открытия'}`}
               >
                 {/* Legendary crown */}
                 {t.isLegendary && unlocked && (
@@ -85,9 +93,33 @@ export function TermlinyCollection() {
                 <p className={cn('font-bold text-xs', unlocked ? 'text-white/90' : 'text-white/30')}>
                   {t.name}
                 </p>
-                <p className={cn('text-[10px] mt-0.5', unlocked ? 'text-white/40' : 'text-white/20')}>
-                  {unlocked ? t.title : `Уровень ${t.unlockLevel}`}
-                </p>
+                {unlocked ? (
+                  <p className="text-[10px] mt-0.5 text-white/40">{t.title}</p>
+                ) : (
+                  <div className="mt-2 space-y-1.5 text-left">
+                    {t.unlockRequirements.map(requirement => {
+                      const current = Math.min(getTermlinUnlockValue(requirement, progress), requirement.target);
+                      const complete = isTermlinRequirementMet(requirement, progress);
+                      return (
+                        <div key={`${t.id}-${requirement.source}-${requirement.target}`}>
+                          <div className="flex items-start justify-between gap-1 text-[9px] leading-tight">
+                            <span className={complete ? 'text-emerald-300' : 'text-white/55'}>{requirement.label}</span>
+                            <strong className="shrink-0 text-primary">{current}/{requirement.target}</strong>
+                          </div>
+                          <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                              className={cn('h-full rounded-full', complete ? 'bg-emerald-400' : 'bg-primary')}
+                              style={{ width: `${Math.min(100, (current / requirement.target) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <span className="flex items-center justify-end gap-0.5 text-[9px] font-semibold text-primary">
+                      Подробнее <ChevronRight size={11} aria-hidden="true" />
+                    </span>
+                  </div>
+                )}
               </motion.button>
             );
           })}

@@ -1,5 +1,5 @@
-import type { Bubble } from './bubbleTypes';
-import { getNeighbors, GRID_COLS, GRID_ROWS } from './hexGrid';
+import type { Bubble } from './bubbleTypes.ts';
+import { getNeighbors } from './hexGrid.ts';
 
 function getBubbleAt(bubbles: Bubble[], row: number, col: number): Bubble | undefined {
   return bubbles.find(b => b.row === row && b.col === col);
@@ -69,7 +69,7 @@ export function findFloating(bubbles: Bubble[]): Bubble[] {
 }
 
 // Check if bubble overlaps with any existing bubble
-export function checkCollision(bubbles: Bubble[], x: number, y: number, radius: number): Bubble | null {
+export function checkCollision(bubbles: readonly Bubble[], x: number, y: number, radius: number): Bubble | null {
   for (const b of bubbles) {
     const dx = b.x - x;
     const dy = b.y - y;

@@ -1,3 +1,6 @@
+import type { PlayerProgress } from '../types/game.ts';
+import { getPetLevel } from '../engine/engine-pet/petEngine.ts';
+
 export interface TermlinAbility {
   name: string;
   description: string;
@@ -5,6 +8,14 @@ export interface TermlinAbility {
   game2048?: string;
   bubbles?: string;
   pet?: string;
+}
+
+export type TermlinUnlockSource = 'match3' | 'game2048' | 'bubbles' | 'pet';
+
+export interface TermlinUnlockRequirement {
+  source: TermlinUnlockSource;
+  target: number;
+  label: string;
 }
 
 export interface Termlin {
@@ -19,7 +30,7 @@ export interface Termlin {
   habits: string;
   expressions: string[];
   omens: string;
-  unlockLevel: number;
+  unlockRequirements: TermlinUnlockRequirement[];
   isLegendary?: boolean;
   ability: TermlinAbility;
 }
@@ -37,7 +48,7 @@ export const termliny: Termlin[] = [
     habits: 'Любит травяные чаи, мёд и молоко. Еженедельно посещает ГлинВил.',
     expressions: ['Ажно', 'Дородный', 'Рожено дитятко'],
     omens: 'Мужчины входят в баню с правой ноги, женщины — с левой.',
-    unlockLevel: 0,
+    unlockRequirements: [],
     isLegendary: true,
     ability: {
       name: 'Жар пара',
@@ -60,7 +71,9 @@ export const termliny: Termlin[] = [
     habits: 'Часто чихает из-за работы с травами. Готовит целебные настойки.',
     expressions: ['Хухря', 'Запуклить', 'Жандобиться'],
     omens: 'Попросите у неё помощь в избавлении от недугов.',
-    unlockLevel: 10,
+    unlockRequirements: [
+      { source: 'match3', target: 3, label: 'Пройди 3 уровня Хоровода' },
+    ],
     ability: {
       name: 'Исцеление',
       description: 'Восстанавливает силы',
@@ -82,7 +95,9 @@ export const termliny: Termlin[] = [
     habits: 'Любит анекдоты и смех. Может организовать сюрпризы гостям.',
     expressions: ['Засельщина', 'Доселева', 'Чадо'],
     omens: 'Не любит ругань и мусор.',
-    unlockLevel: 20,
+    unlockRequirements: [
+      { source: 'game2048', target: 1000, label: 'Набери 1 000 очков в Славиче' },
+    ],
     ability: {
       name: 'Хитрость',
       description: 'Множитель очков',
@@ -104,11 +119,13 @@ export const termliny: Termlin[] = [
     habits: 'Слабость к конфетам «Белочка» и пиву. В плохую погоду ворчит.',
     expressions: ['Бельмес', 'Годы годуй', 'Фыркалка'],
     omens: 'Не берите его шар с предсказаниями!',
-    unlockLevel: 30,
+    unlockRequirements: [
+      { source: 'bubbles', target: 3, label: 'Пройди 3 уровня Бирюлек' },
+    ],
     ability: {
       name: 'Предвидение',
       description: 'Видит наперёд',
-      match3: 'Показать следующие фишки',
+      match3: 'Подсветить лучший следующий ход',
       game2048: 'Подсветка лучшего хода',
       bubbles: 'Показать траекторию отскока',
       pet: 'Предупреждение о падении статов',
@@ -126,7 +143,9 @@ export const termliny: Termlin[] = [
     habits: 'Медитирует, много читает, рассказывает сказки детям.',
     expressions: ['Мурмики'],
     omens: 'Прошепчите желание ему на ухо и обойдите трижды по часовой стрелке.',
-    unlockLevel: 50,
+    unlockRequirements: [
+      { source: 'pet', target: 3, label: 'Достигни 3-го уровня привязанности в Пестуне' },
+    ],
     ability: {
       name: 'Мудрость',
       description: 'Автоматические подсказки',
@@ -148,7 +167,10 @@ export const termliny: Termlin[] = [
     habits: 'Чтит традиции, учится у Ведагора. Тайно влюблён в Лелю.',
     expressions: ['Глаголить', 'Без пены', 'Глупендяй'],
     omens: 'Попросите восстановить отношения.',
-    unlockLevel: 70,
+    unlockRequirements: [
+      { source: 'match3', target: 10, label: 'Пройди 10 уровней Хоровода' },
+      { source: 'bubbles', target: 5, label: 'Пройди 5 уровней Бирюлек' },
+    ],
     ability: {
       name: 'Удар',
       description: 'Разрушительная сила',
@@ -170,7 +192,12 @@ export const termliny: Termlin[] = [
     habits: 'Готовит пироги, рукодельница, ухаживает за растениями.',
     expressions: ['Батюшка', 'Матушка'],
     omens: 'Просите помощь в обучении плаванию. День Берегини — 15 июля.',
-    unlockLevel: 100,
+    unlockRequirements: [
+      { source: 'match3', target: 20, label: 'Пройди 20 уровней Хоровода' },
+      { source: 'game2048', target: 3000, label: 'Набери 3 000 очков в Славиче' },
+      { source: 'bubbles', target: 10, label: 'Пройди 10 уровней Бирюлек' },
+      { source: 'pet', target: 5, label: 'Достигни 5-го уровня привязанности в Пестуне' },
+    ],
     ability: {
       name: 'Прощение',
       description: 'Второй шанс',
@@ -184,6 +211,49 @@ export const termliny: Termlin[] = [
 
 export function getTermlinById(id: string): Termlin | undefined {
   return termliny.find(t => t.id === id);
+}
+
+function completedMatch3Levels(progress: PlayerProgress): number {
+  return Object.values(progress.levels).filter(level => level.completed).length;
+}
+
+export function getTermlinUnlockValue(
+  requirement: TermlinUnlockRequirement,
+  progress: PlayerProgress,
+): number {
+  switch (requirement.source) {
+    case 'match3':
+      return completedMatch3Levels(progress);
+    case 'game2048':
+      return progress.best2048Score;
+    case 'bubbles':
+      return progress.bubbleLevelsCompleted;
+    case 'pet':
+      return progress.pet ? getPetLevel(progress.pet) : 0;
+  }
+}
+
+export function isTermlinRequirementMet(
+  requirement: TermlinUnlockRequirement,
+  progress: PlayerProgress,
+): boolean {
+  return getTermlinUnlockValue(requirement, progress) >= requirement.target;
+}
+
+export function isTermlinUnlocked(termlin: Termlin, progress: PlayerProgress): boolean {
+  return progress.unlockedCharacters.includes(termlin.id)
+    || termlin.unlockRequirements.every(requirement => isTermlinRequirementMet(requirement, progress));
+}
+
+export function syncTermlinUnlocks(progress: PlayerProgress): PlayerProgress {
+  const unlocked = termliny
+    .filter(termlin => isTermlinUnlocked(termlin, progress))
+    .map(termlin => termlin.id);
+  const current = new Set(progress.unlockedCharacters);
+  const hasChanges = unlocked.some(id => !current.has(id));
+  return hasChanges
+    ? { ...progress, unlockedCharacters: [...new Set([...progress.unlockedCharacters, ...unlocked])] }
+    : progress;
 }
 
 export const ELEMENT_COLORS: Record<string, string> = {

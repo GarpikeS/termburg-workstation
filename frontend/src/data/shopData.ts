@@ -1,3 +1,5 @@
+import { GAME_NAMES } from './gameNames.ts';
+
 export interface Product {
   id: string;
   category: 'tickets' | 'merch' | 'boosters';
@@ -7,6 +9,8 @@ export interface Product {
   currency: 'rub' | 'coins';
   badge?: string;
   image: string;
+  action?: 'weekly-reward';
+  gameLabel?: string;
 }
 
 export const products: Product[] = [
@@ -16,85 +20,62 @@ export const products: Product[] = [
     category: 'tickets',
     name: 'Бесплатный час',
     description: 'Один час свободного посещения Термбурга',
-    price: 0,
+    price: 50,
     currency: 'coins',
-    badge: 'Бесплатно',
+    badge: '7 дней',
     image: '/images/shop/ticket-free.svg',
+    action: 'weekly-reward',
   },
   {
     id: 'ticket-vip',
     category: 'tickets',
-    name: 'VIP-час',
-    description: 'Час в VIP-зоне с премиальными услугами',
-    price: 500,
-    currency: 'rub',
+    name: 'VIP — бесплатное посещение',
+    description: 'Бесплатное посещение термального комплекса в любой день, включая выходные',
+    price: 5000,
+    currency: 'coins',
     badge: 'VIP',
     image: '/images/shop/ticket-vip.svg',
   },
   // Мерч
   {
-    id: 'merch-tshirt',
+    id: 'merch-hat',
     category: 'merch',
-    name: 'Футболка Термлины',
-    description: 'Хлопковая футболка с принтом персонажей',
-    price: 1490,
-    currency: 'rub',
-    image: '/images/shop/merch-tshirt.svg',
-  },
-  {
-    id: 'merch-mug',
-    category: 'merch',
-    name: 'Кружка Термбург',
-    description: 'Керамическая кружка с логотипом',
-    price: 590,
-    currency: 'rub',
-    image: '/images/shop/merch-mug.svg',
-  },
-  {
-    id: 'merch-towel',
-    category: 'merch',
-    name: 'Полотенце',
-    description: 'Банное полотенце с вышивкой Термбург',
-    price: 890,
-    currency: 'rub',
-    image: '/images/shop/merch-towel.svg',
-  },
-  {
-    id: 'merch-bag',
-    category: 'merch',
-    name: 'Сумка',
-    description: 'Тканевая сумка-шоппер с принтом',
-    price: 490,
-    currency: 'rub',
-    image: '/images/shop/merch-bag.svg',
+    name: 'Банная шапка',
+    description: 'Фирменная банная шапка Термбурга',
+    price: 6000,
+    currency: 'coins',
+    image: '/images/shop/merch-bath-hat.webp',
   },
   // Бустеры
   {
     id: 'booster-hint',
     category: 'boosters',
     name: 'Подсказка',
-    description: 'Показать лучший ход на поле',
+    description: `Подсветить лучший ход в «${GAME_NAMES.match3}е»`,
     price: 20,
     currency: 'coins',
     image: '/images/shop/booster-hint.svg',
+    gameLabel: `${GAME_NAMES.match3} · 3 в ряд`,
   },
   {
     id: 'booster-shuffle',
     category: 'boosters',
     name: 'Перемешать',
-    description: 'Перемешать все фишки на поле',
+    description: `Перемешать все фишки в «${GAME_NAMES.match3}е»`,
     price: 30,
     currency: 'coins',
     image: '/images/shop/booster-shuffle.svg',
+    gameLabel: `${GAME_NAMES.match3} · 3 в ряд`,
   },
   {
     id: 'booster-bomb',
     category: 'boosters',
     name: 'Взрыв',
-    description: 'Уничтожить область 3×3',
+    description: `Уничтожить выбранную область 3×3 в «${GAME_NAMES.match3}е»`,
     price: 50,
     currency: 'coins',
     image: '/images/shop/booster-bomb.svg',
+    gameLabel: `${GAME_NAMES.match3} · 3 в ряд`,
   },
 ];
 

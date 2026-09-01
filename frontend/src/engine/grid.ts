@@ -1,10 +1,14 @@
-import type { Grid, Cell, Position, TokenType } from '@/types/game';
+import type { Grid, Cell, Position, SpecialType, TokenType } from '@/types/game';
 import { randomElement } from '@/utils/random';
 
 let nextId = 1;
 
 export function createCell(type: TokenType): Cell {
   return { type, id: nextId++ };
+}
+
+export function createSpecialCell(type: TokenType, special: SpecialType): Cell {
+  return { type, special, id: nextId++ };
 }
 
 export function createGrid(rows: number, cols: number, tokenTypes: TokenType[]): Grid {
@@ -40,6 +44,17 @@ function wouldCreateMatch(grid: Grid, row: number, col: number, type: TokenType)
     row >= 2 &&
     grid[row - 1]?.[col]?.type === type &&
     grid[row - 2]?.[col]?.type === type
+  ) {
+    return true;
+  }
+
+  // A 2x2 square creates a helicopter, so the starting board must not contain one.
+  if (
+    row >= 1 &&
+    col >= 1 &&
+    grid[row][col - 1]?.type === type &&
+    grid[row - 1]?.[col]?.type === type &&
+    grid[row - 1]?.[col - 1]?.type === type
   ) {
     return true;
   }

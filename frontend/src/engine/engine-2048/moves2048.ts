@@ -1,5 +1,5 @@
-import type { Tile, Grid2048 } from './grid2048';
-import { cloneGrid, nextTileId } from './grid2048';
+import type { Tile, Grid2048 } from './grid2048.ts';
+import { cloneGrid, nextTileId } from './grid2048.ts';
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 

@@ -1,37 +1,123 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, RotateCcw, Sparkles } from 'lucide-react';
+import { ArrowLeft, BookOpenText, MoveHorizontal, Plus, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
 import { useGame2048 } from '@/hooks/useGame2048';
 import { useGameContext } from '@/store/GameContext';
 import { getTermlinById, ELEMENT_COLORS } from '@/data/termliny';
 import { Tile2048 } from '@/components/game/Tile2048';
 import { Win2048Popup } from '@/popups/Win2048Popup';
 import { CharacterAbilityBar } from '@/components/game/CharacterAbilityBar';
+import { CoachGesture, GameCoach, type GameCoachStep } from '@/components/game/GameCoach';
 import type { Direction } from '@/engine/engine-2048/moves2048';
+import { triggerHaptic } from '@/utils/haptics';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
+import { LivesDisplay } from '@/components/ui/LivesDisplay';
+import { DAILY_GAME_REWARD_LIMIT, normalizeDailyGameRewards } from '@/data/economy';
+import { useVisualViewportSize } from '@/hooks/useVisualViewportSize';
 
 const GRID_SIZE = 4;
 const GAP = 6;
+const MOVE_TUTORIAL_ID = 'game2048-move';
+const MERGE_TUTORIAL_ID = 'game2048-merge';
+type Game2048CoachStep = 'move' | 'merge' | null;
 
 export function Game2048Screen() {
   const navigate = useNavigate();
-  const { progress } = useGameContext();
-  const { state, move, continueGame, restart } = useGame2048();
+  const { progress, markTutorialSeen, spendLife } = useGameContext();
+  const { state, earnedReward, move, continueGame, undo, restart } = useGame2048();
   const touchRef = useRef<{ x: number; y: number } | null>(null);
+  const previousMoveCount = useRef(state.moveCount);
+  const lifeSpentForLoss = useRef(false);
   const [abilityUsed, setAbilityUsed] = useState(false);
-  const [showHint, setShowHint] = useState(false);
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const viewport = useVisualViewportSize();
+  const [coachStep, setCoachStep] = useState<Game2048CoachStep>(() => {
+    if (!progress.tutorialFlags.includes(MOVE_TUTORIAL_ID)) return 'move';
+    if (!progress.tutorialFlags.includes(MERGE_TUTORIAL_ID)) return 'merge';
+    return null;
+  });
 
   const character = getTermlinById(progress.selectedCharacter);
   const charColor = character ? (ELEMENT_COLORS[character.element] ?? '#BA9B4F') : '#BA9B4F';
+  const slavichCoinsToday = normalizeDailyGameRewards(progress.dailyGameRewards).earned.game2048;
 
-  // Responsive grid: fit within phone width minus padding
-  const containerSize = Math.min(300, window.innerWidth - 40);
+  // Keep the ability bar above mobile browser chrome. The board grows back after onboarding.
+  const verticalUiSpace = coachStep ? 405 : 330;
+  const heightLimit = Math.max(196, viewport.height - verticalUiSpace);
+  const containerSize = Math.min(300, viewport.width - 40, heightLimit);
   const cellSize = (containerSize - GAP * (GRID_SIZE + 1)) / GRID_SIZE;
 
   // Score multiplier
   const scoreMultiplier = progress.selectedCharacter === 'pereslav' ? 1.15
     : progress.selectedCharacter === 'yaromir' ? 1.10 : 1.0;
   const displayScore = Math.round(state.score * scoreMultiplier);
+
+  const duplicateValue = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const tile of state.grid.flat()) {
+      if (!tile) continue;
+      counts.set(tile.value, (counts.get(tile.value) ?? 0) + 1);
+    }
+    return [...counts.entries()].find(([, count]) => count >= 2)?.[0];
+  }, [state.grid]);
+
+  const coachContent: GameCoachStep | null = coachStep === 'move'
+    ? {
+        id: MOVE_TUTORIAL_ID,
+        title: 'Сдвинь всё поле',
+        message: 'Проведи пальцем в любую сторону. На компьютере используй стрелки.',
+        icon: <MoveHorizontal size={21} />,
+      }
+    : coachStep === 'merge'
+      ? {
+          id: MERGE_TUTORIAL_ID,
+          title: 'Сложи одинаковые',
+          message: 'Сведи две плитки с одним числом: 2 + 2 станет 4, 4 + 4 станет 8.',
+          icon: <Plus size={21} />,
+        }
+      : null;
+
+  useEffect(() => {
+    const previous = previousMoveCount.current;
+    previousMoveCount.current = state.moveCount;
+    if (state.moveCount <= previous) return;
+
+    triggerHaptic(state.lastScoreGained > 0 ? 'match' : 'move');
+
+    if (coachStep === 'move') {
+      const timer = window.setTimeout(() => {
+        markTutorialSeen(MOVE_TUTORIAL_ID);
+        if (state.lastScoreGained > 0) {
+          markTutorialSeen(MERGE_TUTORIAL_ID);
+          setCoachStep(null);
+        } else {
+          setCoachStep('merge');
+        }
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (coachStep === 'merge' && state.lastScoreGained > 0) {
+      const timer = window.setTimeout(() => {
+        markTutorialSeen(MERGE_TUTORIAL_ID);
+        setCoachStep(null);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [coachStep, markTutorialSeen, state.lastScoreGained, state.moveCount]);
+
+  useEffect(() => {
+    if (state.isWon) triggerHaptic('success');
+    else if (state.isLost) {
+      triggerHaptic('warning');
+      if (!lifeSpentForLoss.current) {
+        lifeSpentForLoss.current = true;
+        spendLife();
+      }
+    }
+  }, [spendLife, state.isLost, state.isWon]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -57,16 +143,27 @@ export function Game2048Screen() {
 
   const handleAbility = useCallback(() => {
     if (abilityUsed) return;
-    const charId = progress.selectedCharacter;
-    if (charId === 'kazimir' || charId === 'vedagor') {
-      setShowHint(true);
-      setAbilityUsed(true);
-      setTimeout(() => setShowHint(false), 3000);
-    }
-    if (charId === 'milovan') {
+    if (
+      progress.selectedCharacter === 'kazimir'
+      || progress.selectedCharacter === 'vedagor'
+      || progress.selectedCharacter === 'milovan'
+    ) {
       setAbilityUsed(true);
     }
   }, [abilityUsed, progress.selectedCharacter]);
+
+  const handleRestart = useCallback(() => {
+    setAbilityUsed(false);
+    setShowRestartConfirm(false);
+    lifeSpentForLoss.current = false;
+    restart();
+  }, [restart]);
+
+  const handleUndo = useCallback(() => {
+    if (!state.canUndo) return;
+    undo();
+    triggerHaptic('selection');
+  }, [state.canUndo, undo]);
 
   const hasActiveAbility = !abilityUsed && (
     progress.selectedCharacter === 'kazimir' ||
@@ -77,18 +174,56 @@ export function Game2048Screen() {
   const tiles = state.grid.flatMap(row => row.filter((t): t is NonNullable<typeof t> => t !== null));
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface" style={{ backgroundImage: 'url(/images/ui/game-2048-bg.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
+    <div
+      className="immersive-background game-polished h-full min-h-0 flex flex-col bg-dark-surface"
+      style={{ '--game-background': 'url(/images/ui/game-2048-bg.webp)' } as CSSProperties}
+    >
       {/* Header */}
-      <div className="pt-8 pb-2 px-4 bg-black/50 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/80 hover:text-primary transition-colors p-1">
+      <div className="screen-safe-header pb-2 px-4 bg-black/50 backdrop-blur-sm">
+        <div className="grid grid-cols-[88px_1fr_88px] items-center">
+          <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/80 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
-          <h2 className="font-heading text-base font-bold text-primary tracking-wider">Славич</h2>
-          <button onClick={restart} className="text-white/80 hover:text-primary transition-colors p-1">
-            <RotateCcw size={18} />
-          </button>
+          <h2 className="text-center font-heading text-base font-bold text-primary tracking-wider">Славич</h2>
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              aria-label="Отменить последний ход"
+              onClick={handleUndo}
+              disabled={!state.canUndo}
+              className="min-w-11 min-h-11 flex items-center justify-center text-primary disabled:text-white/20 disabled:cursor-not-allowed transition-colors"
+            >
+              <Undo2 size={19} />
+            </button>
+            <button
+              type="button"
+              aria-label="Перезапустить игру"
+              onClick={() => setShowRestartConfirm(true)}
+              className="min-w-11 min-h-11 flex items-center justify-center text-red-300 hover:text-red-200 transition-colors"
+            >
+              <RotateCcw size={18} />
+            </button>
+          </div>
         </div>
+      </div>
+
+      <div className="px-4 py-1 bg-black/40 flex items-center justify-between gap-2">
+        <LivesDisplay lives={progress.lives} nextLifeAt={progress.nextLifeAt} className="min-h-9 px-2.5" />
+        <span
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-white/10 bg-black/45 px-2.5 text-white/60"
+          aria-label="Награды Славича: 5 термокоинов за 512, 10 за 1024 и 15 за 2048"
+        >
+          <span className="termcoin-mark termcoin-mark--compact" aria-hidden="true">
+            <img src="/images/brand/termburg-fish-96-v2.webp" alt="" width="48" height="48" />
+          </span>
+          <span className="flex flex-col leading-none">
+            <strong className="text-[11px] text-primary">+5 / +10 / +15</strong>
+            <small className="mt-1 text-[8px]">за 512 / 1024 / 2048</small>
+            <small data-slavich-daily-limit className="mt-1 text-[8px] font-bold text-white/80">
+              Лимит за день: {slavichCoinsToday}/{DAILY_GAME_REWARD_LIMIT}
+            </small>
+          </span>
+        </span>
       </div>
 
       {/* Scores */}
@@ -98,14 +233,25 @@ export function Game2048Screen() {
             <p className="text-white/50 text-[10px] uppercase">Очки</p>
             <p className="text-primary font-bold text-lg">{displayScore}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setCoachStep('move')}
+            aria-label="Показать обучение"
+            aria-pressed={coachStep !== null}
+            className="game-icon-button min-w-12 rounded-xl"
+          >
+            <BookOpenText size={18} className="text-primary" />
+          </button>
           <div className="flex-1 bg-black/40 border border-white/15 rounded-xl p-2.5 text-center backdrop-blur-sm">
             <p className="text-white/50 text-[10px] uppercase">Рекорд</p>
             <p className="text-primary font-bold text-lg">{state.bestScore}</p>
           </div>
           {hasActiveAbility && (
             <button
+              type="button"
               onClick={handleAbility}
-              className="w-12 bg-white/5 border rounded-xl flex items-center justify-center animate-pulse"
+              aria-label="Использовать способность персонажа"
+              className="min-w-12 min-h-11 bg-white/5 border rounded-xl flex items-center justify-center animate-pulse"
               style={{ borderColor: `${charColor}40` }}
             >
               <Sparkles size={18} style={{ color: charColor }} />
@@ -116,23 +262,16 @@ export function Game2048Screen() {
 
       <div className="gold-separator" />
 
-      {/* Hint overlay */}
-      {showHint && (
-        <div className="px-4 py-1">
-          <div className="bg-primary/10 border border-primary/20 rounded-lg py-1.5 px-3 text-center">
-            <span className="text-primary text-xs">Попробуйте сдвинуть вниз или вправо</span>
-          </div>
-        </div>
-      )}
+      <GameCoach step={coachContent} className="game-coach--screen" />
 
       {/* Game board */}
       <div
-        className="flex-1 flex items-center justify-center px-4"
+        className="min-h-0 flex-1 flex items-center justify-center px-4 py-2"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
         <div
-          className="relative bg-black/50 rounded-xl backdrop-blur-sm border border-white/10"
+          className={`game-2048-board game-panel relative rounded-xl backdrop-blur-sm${coachStep ? ' game-tutorial-target' : ''}`}
           style={{
             width: containerSize,
             height: containerSize,
@@ -158,8 +297,16 @@ export function Game2048Screen() {
 
           {/* Tiles — same coordinate space as background cells */}
           {tiles.map(tile => (
-            <Tile2048 key={tile.id} tile={tile} cellSize={cellSize} gap={GAP} />
+            <Tile2048
+              key={tile.id}
+              tile={tile}
+              cellSize={cellSize}
+              gap={GAP}
+              tutorialFocus={coachStep === 'merge' && duplicateValue !== undefined && tile.value === duplicateValue}
+            />
           ))}
+
+          {coachStep === 'move' && <CoachGesture kind="swipe" />}
 
           {state.isLost && (
             <motion.div
@@ -170,7 +317,8 @@ export function Game2048Screen() {
               <p className="text-white font-bold text-xl mb-2">Игра окончена</p>
               <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
               <button
-                onClick={restart}
+                type="button"
+                onClick={handleRestart}
                 className="bg-primary/20 border border-primary/30 text-primary px-6 py-2 rounded-xl font-medium text-sm"
               >
                 Заново
@@ -186,9 +334,26 @@ export function Game2048Screen() {
       <Win2048Popup
         open={state.isWon}
         score={displayScore}
+        earnedReward={earnedReward}
         onContinue={continueGame}
-        onRestart={restart}
+        onRestart={handleRestart}
       />
+
+      <Modal open={showRestartConfirm}>
+        <div className="text-center space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-red-300/25 bg-red-400/10 text-red-300">
+            <RotateCcw size={26} />
+          </div>
+          <div>
+            <h2 className="font-heading text-xl font-bold text-red-200">Начать игру заново?</h2>
+            <p className="mt-2 text-sm text-white/55">Поле и текущие очки будут сброшены. Для одного шага используйте кнопку отмены ↶.</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowRestartConfirm(false)} className="flex-1">Оставить</Button>
+            <Button onClick={handleRestart} className="flex-1 bg-red-400 text-[#251111] hover:bg-red-300">Сбросить</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

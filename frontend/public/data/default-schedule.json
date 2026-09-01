@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "revision": 1,
+  "updatedAt": "2026-08-06T12:00:00.000Z",
+  "locations": [
+    {
+      "id": "1",
+      "city": "Москва",
+      "name": "Термбург Москва",
+      "shortName": "Москва",
+      "address": "ул. Гурьянова, 30",
+      "timezone": "Europe/Moscow"
+    },
+    {
+      "id": "2",
+      "city": "Зеленогорск",
+      "name": "Термбург Зеленогорск",
+      "shortName": "Зеленогорск",
+      "address": "ул. Парковая, 23",
+      "timezone": "Asia/Yekaterinburg"
+    }
+  ],
+  "weeklyEvents": [
+    {"id":"weekly-zumba","locationId":"1","daysOfWeek":[3,5],"time":"10:30","endTime":"11:00","title":"ЗУМБА","venue":"Летняя терраса","details":"Зарядка на свежем воздухе","priceKind":"free","published":true},
+    {"id":"weekly-citrus","locationId":"1","daysOfWeek":[3,5],"time":"11:00","endTime":"11:30","title":"Цитрусовый пар","venue":"Русская баня","priceKind":"free","published":true},
+    {"id":"weekly-aqua","locationId":"1","daysOfWeek":[3,5],"time":"11:30","endTime":"12:00","title":"Аквааэробика","venue":"Аквазона","priceKind":"free","published":true},
+    {"id":"weekly-crimea","locationId":"1","daysOfWeek":[3,5],"time":"12:00","endTime":"12:30","title":"Крымское утро: чабрец и лаванда","venue":"Травяная сауна","priceKind":"paid","price":290,"published":true},
+    {"id":"weekly-taiga","locationId":"1","daysOfWeek":[3,5],"time":"13:00","endTime":"13:30","title":"Таёжная мовня","venue":"Русская баня","priceKind":"paid","price":390,"published":true},
+    {"id":"weekly-bamboo","locationId":"1","daysOfWeek":[3,5],"time":"13:30","endTime":"14:00","title":"«Энергия бамбука»: самомассаж","venue":"Травяная сауна","priceKind":"free","published":true},
+    {"id":"weekly-east","locationId":"1","daysOfWeek":[3,5],"time":"14:00","endTime":"14:30","title":"Восточный аромат","venue":"Хаммам","priceKind":"free","published":true},
+    {"id":"weekly-renewal","locationId":"1","daysOfWeek":[3,5],"time":"14:30","endTime":"15:00","title":"«Обновление»","venue":"Глинвилл","priceKind":"free","published":true},
+    {"id":"weekly-mint","locationId":"1","daysOfWeek":[3,5],"time":"15:00","endTime":"15:30","title":"Разнотравье: мята и полынь","venue":"Травяная сауна","priceKind":"paid","price":290,"published":true},
+    {"id":"weekly-yoga","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"15:00","endTime":"15:30","title":"Йога для начинающих","venue":"Термальный зал","details":"16+ · над кафе «Пропорция»","priceKind":"free","published":true},
+    {"id":"weekly-mint-steam","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"15:30","endTime":"16:00","title":"«Дыхание свежести: мята и цитрус»","venue":"Луговая баня","details":"16+ · от 5 участников","priceKind":"paid","price":400,"published":true},
+    {"id":"weekly-foam-disco","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"16:00","endTime":"16:30","title":"Пенная дискотека «Сказочные облака»","venue":"Детский бассейн","details":"6+","priceKind":"free","published":true},
+    {"id":"weekly-forest","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"16:30","endTime":"17:00","title":"Коллективное парение «Лесной аромат»","venue":"Русская баня","priceKind":"free","published":true},
+    {"id":"weekly-foam-tale","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"17:00","endTime":"17:30","title":"Мастер-класс для детей «Пенная сказка»","venue":"Аэрохаммам","details":"6+","priceKind":"free","published":true},
+    {"id":"weekly-russian-hot","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"17:30","endTime":"18:00","title":"Коллективное парение «По-русски жарко»","venue":"Русская баня","priceKind":"free","published":true},
+    {"id":"weekly-dj","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"18:00","endTime":"21:00","title":"Летний сет с диджеем","venue":"Уличный термальный бассейн","details":"6+","priceKind":"free","published":true},
+    {"id":"weekly-dance-aqua","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"18:00","endTime":"18:30","title":"Танцевальная аквааэробика","venue":"Термальный бассейн","details":"16+","priceKind":"free","published":true},
+    {"id":"weekly-berry","locationId":"1","daysOfWeek":[1,2,4,6,7],"time":"18:30","endTime":"19:00","title":"Коллективное парение «Витаминный ягодный жар»","venue":"Деревенская уличная зона","details":"16+ · от 5 участников","priceKind":"paid","price":500,"published":true},
+    {"id":"weekly-touch","locationId":"1","daysOfWeek":[3,5],"time":"16:30","endTime":"17:00","title":"«Искусство прикосновения»: самомассаж","venue":"Травяная сауна","priceKind":"free","published":true},
+    {"id":"weekly-bamboo-evening","locationId":"1","daysOfWeek":[3,5],"time":"17:00","endTime":"17:30","title":"«Энергия бамбука»: самомассаж","venue":"Травяная сауна","priceKind":"free","published":true},
+    {"id":"weekly-taiga-evening","locationId":"1","daysOfWeek":[3,5],"time":"17:00","endTime":"17:30","title":"Таёжная мовня","venue":"Русская баня","priceKind":"paid","price":390,"published":true},
+    {"id":"weekly-honey","locationId":"1","daysOfWeek":[3,5],"time":"18:00","endTime":"18:30","title":"Медовое СПА-парение с медовым скрабом","venue":"Спа-зона","priceKind":"paid","price":290,"published":true},
+    {"id":"weekly-secret","locationId":"1","daysOfWeek":[3,5],"time":"19:00","endTime":"19:30","title":"Пар с секретным ингредиентом","venue":"Русская баня","priceKind":"free","published":true},
+    {"id":"weekly-boyar","locationId":"1","daysOfWeek":[3,5],"time":"20:00","endTime":"20:30","title":"Боярское парение дубовыми вениками","venue":"Русская баня","details":"Чеснок и пихта","priceKind":"paid","price":390,"published":true},
+    {"id":"zelenogorsk-aqua","locationId":"2","daysOfWeek":[1,3,5,7],"time":"12:00","endTime":"12:30","title":"Аквааэробика","venue":"Открытый бассейн","priceKind":"free","published":true},
+    {"id":"zelenogorsk-steam","locationId":"2","daysOfWeek":[1,2,3,4,5,6,7],"time":"16:00","endTime":"16:30","title":"Фирменное парение «Термбург»","venue":"Русская баня","priceKind":"free","published":true},
+    {"id":"zelenogorsk-kids","locationId":"2","daysOfWeek":[6,7],"time":"17:00","endTime":"17:45","title":"Водная игротека","venue":"Детская зона","priceKind":"free","published":true}
+  ],
+  "exceptions": [
+    {"id":"aug-family-day","locationId":"1","date":"2026-08-15","time":"12:00","endTime":"18:00","title":"День семьи в Термбурге","venue":"Весь комплекс","details":"Игры, мастер-классы и сюрпризы для детей","priceKind":"free","published":true},
+    {"id":"aug-night-spa","locationId":"1","date":"2026-08-28","time":"21:00","endTime":"23:00","title":"Ночной SPA-ритуал","venue":"SPA-зона","details":"18+ · по предварительной записи","priceKind":"paid","price":990,"published":true},
+    {"id":"zelenogorsk-summer","locationId":"2","date":"2026-08-22","time":"14:00","endTime":"19:00","title":"Летний фестиваль воды","venue":"Открытая зона","details":"Музыка, игры и семейные эстафеты","priceKind":"free","published":true}
+  ],
+  "monthlyPosters": []
+}

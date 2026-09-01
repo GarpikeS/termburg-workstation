@@ -1,0 +1,891 @@
+import { createHash, createHmac, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { mkdirSync, promises as fs } from 'node:fs';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { promisify } from 'node:util';
+
+export const ACCOUNT_CONSENT_VERSION = 'account-2026-08-15';
+
+const COOKIE_NAME = 'tb_session';
+const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_PHONE_FAILURE_LIMIT = 5;
+const LOGIN_IP_FAILURE_LIMIT = 20;
+const DEVICE_REGISTRATION_LIMIT = 2;
+const DEVICE_REGISTRATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_BODY_BYTES = 192 * 1024;
+const MAX_PROGRESS_BYTES = 128 * 1024;
+const DEFAULT_LEGACY_COIN_CAP = 600;
+const GAME_REWARD_SOURCES = ['match3', 'game2048', 'bubbles', 'pet'];
+const DAILY_GAME_REWARD_LIMIT = 30;
+const DAILY_TOTAL_REWARD_LIMIT = 120;
+const CITIES = new Set(['Москва', 'Зеленогорск']);
+const CITY_TIMEZONES = {
+  Москва: 'Europe/Moscow',
+  Зеленогорск: 'Asia/Krasnoyarsk',
+};
+const CHARACTER_IDS = new Set(['yaromir', 'valkiriya', 'pereslav', 'kazimir', 'vedagor', 'milovan', 'lelya']);
+const PRODUCT_PRICES = {
+  'ticket-vip': 5000,
+  'merch-hat': 6000,
+  'booster-hint': 20,
+  'booster-shuffle': 30,
+  'booster-bomb': 50,
+};
+
+const scryptAsync = promisify(scrypt);
+
+const DEFAULT_PROGRESS = Object.freeze({
+  currentLevel: 1,
+  levels: {},
+  currency: 0,
+  dailyGameRewards: null,
+  lives: 5,
+  nextLifeAt: null,
+  selectedCharacter: 'yaromir',
+  tutorialCompleted: false,
+  tutorialFlags: [],
+  best2048Score: 0,
+  bubbleLevelsCompleted: 0,
+  pet: null,
+  petDeparture: null,
+  unlockedCharacters: ['yaromir'],
+  inventory: {},
+  rewardClaims: [],
+  cart: [],
+  orders: [],
+});
+
+class AccountHttpError extends Error {
+  constructor(status, message, details = {}, headers = {}) {
+    super(message);
+    this.name = 'AccountHttpError';
+    this.status = status;
+    this.details = details;
+    this.headers = headers;
+  }
+}
+
+function sendJson(response, statusCode, value, extraHeaders = {}) {
+  const body = JSON.stringify(value);
+  response.writeHead(statusCode, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Length': Buffer.byteLength(body),
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    ...extraHeaders,
+  });
+  response.end(body);
+}
+
+async function readJsonBody(request) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw new AccountHttpError(413, 'Запрос слишком большой.');
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch {
+    throw new AccountHttpError(400, 'Не удалось прочитать запрос.');
+  }
+}
+
+function cleanText(value, maxLength) {
+  return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
+}
+
+function normalizePhone(value) {
+  const digits = cleanText(value, 40).replace(/\D/g, '');
+  if (digits.length === 10) return `+7${digits}`;
+  if (digits.length === 11 && digits.startsWith('8')) return `+7${digits.slice(1)}`;
+  if (digits.length === 11 && digits.startsWith('7')) return `+${digits}`;
+  return '';
+}
+
+function maskedPhone(last4) {
+  return `+7 ••• •••-${String(last4).slice(0, 2)}-${String(last4).slice(2)}`;
+}
+
+function requestIp(request) {
+  const realIp = request.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp) return realIp.trim();
+  const forwarded = request.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded) return forwarded.split(',')[0].trim();
+  return request.socket.remoteAddress || 'unknown';
+}
+
+function hmac(secret, value) {
+  return createHmac('sha256', secret).update(String(value)).digest('hex');
+}
+
+function tokenHash(value) {
+  return createHash('sha256').update(String(value)).digest('hex');
+}
+
+async function derivePassword(password, salt) {
+  const derived = await scryptAsync(password, salt, 64, {
+    N: 16_384,
+    r: 8,
+    p: 1,
+    maxmem: 64 * 1024 * 1024,
+  });
+  return Buffer.from(derived);
+}
+
+async function passwordRecord(password) {
+  const salt = randomBytes(16).toString('base64url');
+  const hash = await derivePassword(password, salt);
+  return { salt, hash: hash.toString('base64url') };
+}
+
+async function passwordMatches(password, salt, encodedHash) {
+  try {
+    const expected = Buffer.from(encodedHash, 'base64url');
+    const actual = await derivePassword(password, salt);
+    return expected.length === actual.length && timingSafeEqual(expected, actual);
+  } catch {
+    return false;
+  }
+}
+
+function parseCookies(header) {
+  const result = new Map();
+  for (const part of String(header || '').split(';')) {
+    const separator = part.indexOf('=');
+    if (separator <= 0) continue;
+    result.set(part.slice(0, separator).trim(), part.slice(separator + 1).trim());
+  }
+  return result;
+}
+
+function sessionCookie(token, secure, maxAgeSeconds = Math.floor(SESSION_TTL_MS / 1000)) {
+  return [
+    `${COOKIE_NAME}=${token}`,
+    'Path=/',
+    `Max-Age=${maxAgeSeconds}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    secure ? 'Secure' : '',
+  ].filter(Boolean).join('; ');
+}
+
+function localDateKey(timestamp, city) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CITY_TIMEZONES[city] || CITY_TIMEZONES.Москва,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(timestamp));
+  const value = type => parts.find(item => item.type === type)?.value || '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function plainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function safeInteger(value, min, max, fallback = min) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.floor(number))) : fallback;
+}
+
+function safeTimestamp(value, fallback = null) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function uniqueStrings(value, maxItems, maxLength) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(item => cleanText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
+}
+
+function normalizeDailyRewards(value, now, city) {
+  const currentDate = localDateKey(now, city);
+  const source = plainObject(value);
+  const earned = plainObject(source.earned);
+  const normalized = {};
+  for (const game of GAME_REWARD_SOURCES) {
+    normalized[game] = source.date === currentDate
+      ? safeInteger(earned[game], 0, DAILY_GAME_REWARD_LIMIT, 0)
+      : 0;
+  }
+  const total = GAME_REWARD_SOURCES.reduce((sum, game) => sum + normalized[game], 0);
+  if (total > DAILY_TOTAL_REWARD_LIMIT) {
+    let remaining = DAILY_TOTAL_REWARD_LIMIT;
+    for (const game of GAME_REWARD_SOURCES) {
+      normalized[game] = Math.min(normalized[game], remaining);
+      remaining -= normalized[game];
+    }
+  }
+  return { date: currentDate, earned: normalized };
+}
+
+function mergeLevels(incomingValue, previousValue) {
+  const incoming = plainObject(incomingValue);
+  const previous = plainObject(previousValue);
+  const merged = {};
+  const levelIds = new Set([...Object.keys(previous), ...Object.keys(incoming)]);
+  for (const key of [...levelIds].slice(0, 100)) {
+    if (!/^\d{1,3}$/.test(key)) continue;
+    const id = Number(key);
+    if (id < 1 || id > 100) continue;
+    const before = plainObject(previous[key]);
+    const next = plainObject(incoming[key]);
+    merged[id] = {
+      stars: Math.max(safeInteger(before.stars, 0, 3, 0), safeInteger(next.stars, 0, 3, 0)),
+      bestScore: Math.max(safeInteger(before.bestScore, 0, 100_000_000, 0), safeInteger(next.bestScore, 0, 100_000_000, 0)),
+      completed: before.completed === true || next.completed === true,
+    };
+  }
+  return merged;
+}
+
+function normalizeInventory(value, previousValue, availableSpend, initial) {
+  const incoming = plainObject(value);
+  const previous = plainObject(previousValue);
+  const normalized = {};
+  let requiredSpend = 0;
+
+  for (const [productId, price] of Object.entries(PRODUCT_PRICES)) {
+    const before = safeInteger(previous[productId], 0, 100, 0);
+    const requested = safeInteger(incoming[productId], 0, 100, before);
+    if (requested > before) requiredSpend += (requested - before) * price;
+    normalized[productId] = requested;
+  }
+
+  if (!initial && requiredSpend > availableSpend) {
+    for (const productId of Object.keys(PRODUCT_PRICES)) {
+      const before = safeInteger(previous[productId], 0, 100, 0);
+      normalized[productId] = Math.min(normalized[productId], before);
+    }
+  }
+
+  return normalized;
+}
+
+function sanitizeCart(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 30).flatMap(item => {
+    const source = plainObject(item);
+    const productId = cleanText(source.productId, 64);
+    if (!productId) return [];
+    return [{ productId, quantity: safeInteger(source.quantity, 1, 20, 1) }];
+  });
+}
+
+function sanitizeOrders(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-50).flatMap(item => {
+    const source = plainObject(item);
+    const id = cleanText(source.id, 80);
+    if (!id) return [];
+    return [{
+      id,
+      items: sanitizeCart(source.items),
+      total: safeInteger(source.total, 0, 10_000_000, 0),
+      name: cleanText(source.name, 80),
+      phone: cleanText(source.phone, 40),
+      ...(cleanText(source.email, 120) ? { email: cleanText(source.email, 120) } : {}),
+      createdAt: safeTimestamp(source.createdAt, Date.now()),
+      status: ['pending', 'confirmed', 'completed'].includes(source.status) ? source.status : 'pending',
+    }];
+  });
+}
+
+function publicClaim(claim, currentTime) {
+  const status = claim.redeemedAt ? 'redeemed' : claim.expiresAt > currentTime ? 'active' : 'expired';
+  return {
+    id: claim.id,
+    rewardId: 'ticket-free',
+    code: claim.code,
+    purchasedAt: claim.purchasedAt,
+    expiresAt: claim.expiresAt,
+    nextPurchaseAt: claim.nextPurchaseAt,
+    status,
+    ...(claim.redeemedAt ? { redeemedAt: claim.redeemedAt } : {}),
+  };
+}
+
+function sanitizeProgress(inputValue, options) {
+  const {
+    now,
+    city,
+    previous = DEFAULT_PROGRESS,
+    initial = false,
+    legacyCoinCap = DEFAULT_LEGACY_COIN_CAP,
+    validClaims = [],
+  } = options;
+  const input = plainObject(inputValue);
+  const before = plainObject(previous);
+  const previousDaily = normalizeDailyRewards(before.dailyGameRewards, now, city);
+  const incomingDaily = normalizeDailyRewards(input.dailyGameRewards, now, city);
+  const mergedEarned = {};
+  let dailyGain = 0;
+  for (const source of GAME_REWARD_SOURCES) {
+    const merged = initial
+      ? incomingDaily.earned[source]
+      : Math.max(previousDaily.earned[source], incomingDaily.earned[source]);
+    mergedEarned[source] = merged;
+    dailyGain += Math.max(0, merged - previousDaily.earned[source]);
+  }
+  const dailyGameRewards = { date: incomingDaily.date, earned: mergedEarned };
+
+  const previousCurrency = safeInteger(before.currency, 0, 1_000_000, 0);
+  const requestedCurrency = safeInteger(input.currency, 0, 1_000_000, 0);
+  const currencyCeiling = initial ? legacyCoinCap : previousCurrency + dailyGain;
+  const currency = Math.min(requestedCurrency, currencyCeiling);
+  const availableSpend = Math.max(0, previousCurrency + dailyGain - currency);
+  const inventory = normalizeInventory(input.inventory, before.inventory, availableSpend, initial);
+  inventory['ticket-free'] = validClaims.some(claim => !claim.redeemedAt && claim.expiresAt > now) ? 1 : 0;
+
+  const previousUnlocks = uniqueStrings(before.unlockedCharacters, 20, 40).filter(id => CHARACTER_IDS.has(id));
+  const incomingUnlocks = uniqueStrings(input.unlockedCharacters, 20, 40).filter(id => CHARACTER_IDS.has(id));
+  const unlockedCharacters = [...new Set(['yaromir', ...previousUnlocks, ...incomingUnlocks])];
+  const selectedCharacter = unlockedCharacters.includes(input.selectedCharacter)
+    ? input.selectedCharacter
+    : (unlockedCharacters.includes(before.selectedCharacter) ? before.selectedCharacter : 'yaromir');
+  const tutorialFlags = [...new Set([
+    ...uniqueStrings(before.tutorialFlags, 80, 80),
+    ...uniqueStrings(input.tutorialFlags, 80, 80),
+  ])].slice(0, 80);
+
+  const incomingPet = plainObject(input.pet);
+  const previousPet = plainObject(before.pet);
+  const pet = Object.keys(incomingPet).length > 0
+    && safeTimestamp(incomingPet.lastUpdated, 0) >= safeTimestamp(previousPet.lastUpdated, 0)
+    ? incomingPet
+    : (Object.keys(previousPet).length > 0 ? previousPet : null);
+
+  const progress = {
+    currentLevel: Math.max(safeInteger(before.currentLevel, 1, 101, 1), safeInteger(input.currentLevel, 1, 101, 1)),
+    levels: mergeLevels(input.levels, before.levels),
+    currency,
+    dailyGameRewards,
+    lives: safeInteger(input.lives, 0, 5, safeInteger(before.lives, 0, 5, 5)),
+    nextLifeAt: input.nextLifeAt === null ? null : safeTimestamp(input.nextLifeAt, before.nextLifeAt ?? null),
+    selectedCharacter,
+    tutorialCompleted: before.tutorialCompleted === true || input.tutorialCompleted === true,
+    tutorialFlags,
+    best2048Score: Math.max(safeInteger(before.best2048Score, 0, 1_000_000_000, 0), safeInteger(input.best2048Score, 0, 1_000_000_000, 0)),
+    bubbleLevelsCompleted: Math.max(safeInteger(before.bubbleLevelsCompleted, 0, 50, 0), safeInteger(input.bubbleLevelsCompleted, 0, 50, 0)),
+    pet,
+    petDeparture: input.petDeparture && typeof input.petDeparture === 'object' ? input.petDeparture : (before.petDeparture ?? null),
+    unlockedCharacters,
+    inventory,
+    rewardClaims: validClaims.map(claim => publicClaim(claim, now)),
+    cart: sanitizeCart(input.cart),
+    orders: sanitizeOrders(input.orders),
+  };
+
+  const serialized = JSON.stringify(progress);
+  if (Buffer.byteLength(serialized) > MAX_PROGRESS_BYTES) {
+    throw new AccountHttpError(413, 'Прогресс слишком большой для синхронизации.');
+  }
+  return progress;
+}
+
+function parseProgress(value) {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : { ...DEFAULT_PROGRESS };
+  } catch {
+    return { ...DEFAULT_PROGRESS };
+  }
+}
+
+function publicAccount(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    city: row.city,
+    phoneMasked: maskedPhone(row.phone_last4),
+    createdAt: Number(row.created_at),
+    lastLoginAt: Number(row.last_login_at),
+  };
+}
+
+function initializeDatabase(database) {
+  database.exec(`
+    PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
+    PRAGMA synchronous = NORMAL;
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      phone_hash TEXT NOT NULL UNIQUE,
+      phone_last4 TEXT NOT NULL,
+      name TEXT NOT NULL,
+      city TEXT NOT NULL,
+      consent_version TEXT NOT NULL,
+      consent_at INTEGER NOT NULL,
+      registration_device_hash TEXT NOT NULL,
+      progress_json TEXT NOT NULL,
+      progress_revision INTEGER NOT NULL DEFAULT 1,
+      password_salt TEXT,
+      password_hash TEXT,
+      password_changed_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_login_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS auth_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone_hash TEXT NOT NULL,
+      ip_hash TEXT NOT NULL,
+      success INTEGER NOT NULL CHECK(success IN (0, 1)),
+      created_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE INDEX IF NOT EXISTS auth_attempts_phone_idx ON auth_attempts(phone_hash, created_at);
+    CREATE INDEX IF NOT EXISTS auth_attempts_ip_idx ON auth_attempts(ip_hash, created_at);
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      device_hash TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL
+    ) STRICT;
+
+    CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id, expires_at);
+  `);
+
+  const userColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map(column => column.name));
+  for (const [name, definition] of [
+    ['password_salt', 'TEXT'],
+    ['password_hash', 'TEXT'],
+    ['password_changed_at', 'INTEGER'],
+  ]) {
+    if (!userColumns.has(name)) database.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+  }
+
+  // Password auth fully replaces the former one-time-code flow.
+  database.exec('DROP TABLE IF EXISTS otp_challenges');
+}
+
+function withTransaction(database, task) {
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const result = task();
+    database.exec('COMMIT');
+    return result;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+export function createAccountService(options) {
+  const {
+    databaseFile,
+    claimsDataFile = '',
+    redemptionsDataFile = '',
+    allowedOrigin = '',
+    authSecret = '',
+    secureCookies = true,
+    legacyCoinCap = DEFAULT_LEGACY_COIN_CAP,
+    now = () => Date.now(),
+    logger = console,
+  } = options;
+
+  if (!databaseFile) throw new Error('databaseFile is required');
+  const resolvedDatabaseFile = path.resolve(databaseFile);
+  const resolvedRedemptionsDataFile = redemptionsDataFile ? path.resolve(redemptionsDataFile) : '';
+  const authConfigured = cleanText(authSecret, 500).length >= 32;
+  const secret = authConfigured ? authSecret : randomBytes(32).toString('hex');
+  mkdirSync(path.dirname(resolvedDatabaseFile), { recursive: true, mode: 0o750 });
+  const database = new DatabaseSync(resolvedDatabaseFile, { timeout: 5000 });
+  initializeDatabase(database);
+
+  const statements = {
+    userByPhone: database.prepare('SELECT * FROM users WHERE phone_hash = ?'),
+    userById: database.prepare('SELECT * FROM users WHERE id = ?'),
+    sessionWithUser: database.prepare(`
+      SELECT s.token_hash, s.user_id, s.device_hash, s.expires_at, s.last_seen_at,
+             u.id, u.phone_hash, u.phone_last4, u.name, u.city, u.progress_json,
+             u.progress_revision, u.created_at, u.updated_at, u.last_login_at
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.token_hash = ?
+    `),
+  };
+
+  async function validClaims(phoneHash) {
+    if (!claimsDataFile) return [];
+    try {
+      const redeemedByCode = new Map();
+      if (resolvedRedemptionsDataFile) {
+        try {
+          const redemptionRaw = await fs.readFile(resolvedRedemptionsDataFile, 'utf8');
+          for (const line of redemptionRaw.split('\n').filter(Boolean)) {
+            try {
+              const redemption = JSON.parse(line);
+              if (redemption?.code && !redeemedByCode.has(redemption.code)) {
+                redeemedByCode.set(redemption.code, redemption);
+              }
+            } catch {
+              // A malformed audit line is ignored without affecting valid claims.
+            }
+          }
+        } catch (error) {
+          if (error?.code !== 'ENOENT') logger.error?.('[account-redemptions]', error);
+        }
+      }
+      const raw = await fs.readFile(path.resolve(claimsDataFile), 'utf8');
+      const seen = new Set();
+      return raw.split('\n').filter(Boolean).flatMap(line => {
+        try {
+          const claim = JSON.parse(line);
+          const phone = normalizePhone(claim.phone);
+          if (!phone || hmac(secret, `phone:${phone}`) !== phoneHash) return [];
+          if (!claim.id || !claim.code || seen.has(claim.id)) return [];
+          seen.add(claim.id);
+          const redemption = redeemedByCode.get(claim.code);
+          return [{
+            ...claim,
+            ...(redemption ? { redeemedAt: redemption.redeemedAt } : {}),
+          }];
+        } catch {
+          return [];
+        }
+      });
+    } catch (error) {
+      if (error?.code !== 'ENOENT') logger.error?.('[account-claims]', error);
+      return [];
+    }
+  }
+
+  function validateOrigin(request) {
+    const origin = cleanText(request.headers.origin, 300);
+    if (allowedOrigin && origin !== allowedOrigin) {
+      throw new AccountHttpError(403, 'Этот сайт не может изменять профиль.');
+    }
+  }
+
+  function requireJson(request) {
+    if (!String(request.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+      throw new AccountHttpError(415, 'Нужен формат JSON.');
+    }
+  }
+
+  function cleanup(currentTime) {
+    database.prepare('DELETE FROM auth_attempts WHERE created_at < ?').run(currentTime - 24 * 60 * 60 * 1000);
+    database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(currentTime);
+  }
+
+  function requireAuthConfigured() {
+    if (!authConfigured) {
+      throw new AccountHttpError(503, 'Вход в профиль временно недоступен. Играть пока можно без регистрации.', {
+        code: 'AUTH_NOT_CONFIGURED',
+      });
+    }
+  }
+
+  function sessionFromRequest(request, currentTime) {
+    const token = parseCookies(request.headers.cookie).get(COOKIE_NAME);
+    if (!token || token.length < 32 || token.length > 200) return null;
+    const hash = tokenHash(token);
+    const row = statements.sessionWithUser.get(hash);
+    if (!row || Number(row.expires_at) <= currentTime) {
+      if (row) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(hash);
+      return null;
+    }
+    if (currentTime - Number(row.last_seen_at) > 60 * 60 * 1000) {
+      database.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?').run(currentTime, hash);
+      row.last_seen_at = currentTime;
+    }
+    return { token, hash, row };
+  }
+
+  function requireSession(request, currentTime) {
+    const session = sessionFromRequest(request, currentTime);
+    if (!session) throw new AccountHttpError(401, 'Войдите в профиль.', { code: 'AUTH_REQUIRED' });
+    return session;
+  }
+
+  async function accountPayload(row) {
+    const claims = await validClaims(row.phone_hash);
+    const stored = parseProgress(row.progress_json);
+    const progress = sanitizeProgress(stored, {
+      now: now(),
+      city: row.city,
+      previous: stored,
+      validClaims: claims,
+      legacyCoinCap,
+    });
+    return {
+      account: publicAccount(row),
+      progress,
+      revision: Number(row.progress_revision),
+    };
+  }
+
+  function validatePassword(password, registration = false) {
+    if (typeof password !== 'string' || password.length === 0) {
+      throw new AccountHttpError(400, 'Введите пароль.', { field: 'password' });
+    }
+    if (password.length > PASSWORD_MAX_LENGTH) {
+      throw new AccountHttpError(400, 'Пароль слишком длинный.', { field: 'password' });
+    }
+    if (registration && password.length < PASSWORD_MIN_LENGTH) {
+      throw new AccountHttpError(400, `Пароль должен содержать не менее ${PASSWORD_MIN_LENGTH} символов.`, { field: 'password' });
+    }
+  }
+
+  function validateDevice(deviceId) {
+    if (!/^[a-zA-Z0-9-]{16,100}$/.test(deviceId)) {
+      throw new AccountHttpError(400, 'Не удалось определить устройство.', { field: 'deviceId' });
+    }
+  }
+
+  function checkLoginLimits(phoneHash, ipHash, currentTime) {
+    const since = currentTime - LOGIN_WINDOW_MS;
+    const phoneStats = database.prepare(`
+      SELECT COUNT(*) AS count, MIN(created_at) AS oldest
+      FROM auth_attempts WHERE phone_hash = ? AND success = 0 AND created_at >= ?
+    `).get(phoneHash, since);
+    const ipStats = database.prepare(`
+      SELECT COUNT(*) AS count, MIN(created_at) AS oldest
+      FROM auth_attempts WHERE ip_hash = ? AND success = 0 AND created_at >= ?
+    `).get(ipHash, since);
+    const blocked = Number(phoneStats?.count || 0) >= LOGIN_PHONE_FAILURE_LIMIT ? phoneStats
+      : Number(ipStats?.count || 0) >= LOGIN_IP_FAILURE_LIMIT ? ipStats
+        : null;
+    if (!blocked) return;
+    const retry = Math.max(1, Math.ceil((LOGIN_WINDOW_MS - (currentTime - Number(blocked.oldest))) / 1000));
+    throw new AccountHttpError(429, `Слишком много попыток. Попробуйте через ${Math.ceil(retry / 60)} мин.`, {
+      code: 'LOGIN_RATE_LIMIT',
+      retryAfter: retry,
+    }, { 'Retry-After': String(retry) });
+  }
+
+  function issueSession(userId, deviceHash, currentTime) {
+    const token = randomBytes(32).toString('base64url');
+    withTransaction(database, () => {
+      database.prepare('DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?').run(userId, currentTime);
+      const activeSessions = database.prepare('SELECT token_hash FROM sessions WHERE user_id = ? ORDER BY created_at ASC').all(userId);
+      for (const stale of activeSessions.slice(0, Math.max(0, activeSessions.length - 4))) {
+        database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(stale.token_hash);
+      }
+      database.prepare(`
+        INSERT INTO sessions (token_hash, user_id, device_hash, created_at, expires_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(tokenHash(token), userId, deviceHash, currentTime, currentTime + SESSION_TTL_MS, currentTime);
+    });
+    return token;
+  }
+
+  async function handleRegister(request, response) {
+    validateOrigin(request);
+    requireJson(request);
+    requireAuthConfigured();
+    const payload = await readJsonBody(request);
+    const phone = normalizePhone(payload.phone);
+    const password = payload.password;
+    const name = cleanText(payload.name, 80);
+    const city = cleanText(payload.city, 40);
+    const deviceId = cleanText(payload.deviceId, 100);
+    if (!phone) throw new AccountHttpError(400, 'Укажите российский номер телефона.', { field: 'phone' });
+    validatePassword(password, true);
+    validateDevice(deviceId);
+    if (name.length < 2) throw new AccountHttpError(400, 'Укажите имя.', { field: 'name' });
+    if (!CITIES.has(city)) throw new AccountHttpError(400, 'Выберите город.', { field: 'city' });
+    if (payload.consent !== true || payload.consentVersion !== ACCOUNT_CONSENT_VERSION) {
+      throw new AccountHttpError(400, 'Для регистрации нужно согласие на обработку данных.', { field: 'consent' });
+    }
+
+    const currentTime = now();
+    cleanup(currentTime);
+    const phoneHash = hmac(secret, `phone:${phone}`);
+    if (statements.userByPhone.get(phoneHash)) {
+      throw new AccountHttpError(409, 'Профиль с этим номером уже существует. Войдите по паролю.', { code: 'ACCOUNT_EXISTS' });
+    }
+    const deviceHash = hmac(secret, `device:${deviceId}`);
+    const registrations = database.prepare(`
+      SELECT COUNT(*) AS count FROM users
+      WHERE registration_device_hash = ? AND created_at >= ?
+    `).get(deviceHash, currentTime - DEVICE_REGISTRATION_WINDOW_MS);
+    if (Number(registrations?.count || 0) >= DEVICE_REGISTRATION_LIMIT) {
+      throw new AccountHttpError(429, 'На этом устройстве уже зарегистрировано несколько профилей.', { code: 'DEVICE_REGISTRATION_LIMIT' });
+    }
+
+    const claims = await validClaims(phoneHash);
+    const progress = sanitizeProgress(payload.progress, {
+      now: currentTime,
+      city,
+      initial: true,
+      legacyCoinCap,
+      validClaims: claims,
+    });
+    const passwordData = await passwordRecord(password);
+    const userId = randomUUID();
+    database.prepare(`
+      INSERT INTO users (
+        id, phone_hash, phone_last4, name, city, consent_version, consent_at,
+        registration_device_hash, progress_json, progress_revision,
+        password_salt, password_hash, password_changed_at,
+        created_at, updated_at, last_login_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+    `).run(
+      userId, phoneHash, phone.slice(-4), name, city, ACCOUNT_CONSENT_VERSION, currentTime,
+      deviceHash, JSON.stringify(progress), passwordData.salt, passwordData.hash, currentTime,
+      currentTime, currentTime, currentTime,
+    );
+    const user = statements.userById.get(userId);
+    const token = issueSession(userId, deviceHash, currentTime);
+    sendJson(response, 201, { ok: true, ...(await accountPayload(user)) }, {
+      'Set-Cookie': sessionCookie(token, secureCookies),
+    });
+  }
+
+  async function handleLogin(request, response) {
+    validateOrigin(request);
+    requireJson(request);
+    requireAuthConfigured();
+    const payload = await readJsonBody(request);
+    const phone = normalizePhone(payload.phone);
+    const password = payload.password;
+    const deviceId = cleanText(payload.deviceId, 100);
+    if (!phone) throw new AccountHttpError(400, 'Укажите российский номер телефона.', { field: 'phone' });
+    validatePassword(password);
+    validateDevice(deviceId);
+
+    const currentTime = now();
+    cleanup(currentTime);
+    const phoneHash = hmac(secret, `phone:${phone}`);
+    const ipHash = hmac(secret, `ip:${requestIp(request)}`);
+    const deviceHash = hmac(secret, `device:${deviceId}`);
+    checkLoginLimits(phoneHash, ipHash, currentTime);
+    const user = statements.userByPhone.get(phoneHash);
+    let valid = false;
+    if (user?.password_salt && user?.password_hash) {
+      valid = await passwordMatches(password, user.password_salt, user.password_hash);
+    } else {
+      const dummy = await derivePassword(password, hmac(secret, 'password-dummy').slice(0, 22));
+      timingSafeEqual(dummy, Buffer.alloc(dummy.length));
+    }
+    if (!valid) {
+      database.prepare('INSERT INTO auth_attempts (phone_hash, ip_hash, success, created_at) VALUES (?, ?, 0, ?)')
+        .run(phoneHash, ipHash, currentTime);
+      throw new AccountHttpError(401, 'Неверный телефон или пароль.', { code: 'INVALID_CREDENTIALS' });
+    }
+
+    database.prepare('DELETE FROM auth_attempts WHERE (phone_hash = ? OR ip_hash = ?) AND success = 0').run(phoneHash, ipHash);
+    database.prepare('UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?').run(currentTime, currentTime, user.id);
+    const refreshedUser = statements.userById.get(user.id);
+    const token = issueSession(user.id, deviceHash, currentTime);
+    sendJson(response, 200, { ok: true, ...(await accountPayload(refreshedUser)) }, {
+      'Set-Cookie': sessionCookie(token, secureCookies),
+    });
+  }
+
+  async function handleMe(request, response) {
+    const currentTime = now();
+    cleanup(currentTime);
+    const session = requireSession(request, currentTime);
+    sendJson(response, 200, { ok: true, ...(await accountPayload(session.row)) });
+  }
+
+  async function handleLogout(request, response) {
+    validateOrigin(request);
+    const currentTime = now();
+    const session = sessionFromRequest(request, currentTime);
+    if (session) database.prepare('DELETE FROM sessions WHERE token_hash = ?').run(session.hash);
+    sendJson(response, 200, { ok: true }, {
+      'Set-Cookie': sessionCookie('', secureCookies, 0),
+    });
+  }
+
+  async function handleProgress(request, response) {
+    validateOrigin(request);
+    requireJson(request);
+    const currentTime = now();
+    const session = requireSession(request, currentTime);
+    const payload = await readJsonBody(request);
+    if (!payload.progress || typeof payload.progress !== 'object') {
+      throw new AccountHttpError(400, 'Не найден прогресс для сохранения.', { field: 'progress' });
+    }
+    const currentUser = statements.userById.get(session.row.id);
+    const previous = parseProgress(currentUser.progress_json);
+    const claims = await validClaims(currentUser.phone_hash);
+    const progress = sanitizeProgress(payload.progress, {
+      now: currentTime,
+      city: currentUser.city,
+      previous,
+      validClaims: claims,
+      legacyCoinCap,
+    });
+    const revision = Number(currentUser.progress_revision) + 1;
+    database.prepare(`
+      UPDATE users SET progress_json = ?, progress_revision = ?, updated_at = ? WHERE id = ?
+    `).run(JSON.stringify(progress), revision, currentTime, currentUser.id);
+    sendJson(response, 200, { ok: true, progress, revision, savedAt: currentTime });
+  }
+
+  async function handle(request, response, url) {
+    const startedAt = Date.now();
+    try {
+      if (url.pathname === '/api/auth/config' && request.method === 'GET') {
+        sendJson(response, 200, {
+          available: authConfigured,
+          method: 'password',
+          passwordMinLength: PASSWORD_MIN_LENGTH,
+        });
+        return;
+      }
+      if (url.pathname === '/api/auth/register' && request.method === 'POST') {
+        await handleRegister(request, response);
+        return;
+      }
+      if (url.pathname === '/api/auth/login' && request.method === 'POST') {
+        await handleLogin(request, response);
+        return;
+      }
+      if (url.pathname === '/api/auth/me' && request.method === 'GET') {
+        await handleMe(request, response);
+        return;
+      }
+      if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
+        await handleLogout(request, response);
+        return;
+      }
+      if (url.pathname === '/api/account/progress' && request.method === 'PUT') {
+        await handleProgress(request, response);
+        return;
+      }
+      throw new AccountHttpError(405, 'Метод не поддерживается.');
+    } catch (error) {
+      if (error instanceof AccountHttpError) {
+        sendJson(response, error.status, { error: error.message, ...error.details }, error.headers);
+      } else {
+        logger.error?.('[account-service]', error);
+        sendJson(response, 500, { error: 'Не удалось обработать профиль. Попробуйте ещё раз.' });
+      }
+    } finally {
+      logger.info?.(`${request.method} ${url.pathname} ${response.statusCode} ${Date.now() - startedAt}ms`);
+    }
+  }
+
+  return {
+    handle,
+    matches(pathname) {
+      return pathname.startsWith('/api/auth/') || pathname === '/api/account/progress';
+    },
+    close() {
+      database.close();
+    },
+    databaseFile: resolvedDatabaseFile,
+    get configured() {
+      return authConfigured;
+    },
+  };
+}

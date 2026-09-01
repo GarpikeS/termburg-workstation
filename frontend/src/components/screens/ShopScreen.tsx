@@ -1,147 +1,172 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowLeft, ShoppingCart, Ticket, ShoppingBag, Sparkles } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ShoppingBag, ShoppingCart, Sparkles, Ticket } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
 import { Button } from '@/components/ui/Button';
 import { useGameContext } from '@/store/GameContext';
 import { getProductsByCategory, type Product } from '@/data/shopData';
+import { activeFreeHourClaim, formatRewardDate, isRewardClaimRedeemed } from '@/features/rewards/rewardRules';
 import { cn } from '@/utils/cn';
+import { GAME_NAMES } from '@/data/gameNames';
 
 const tabs = [
   { key: 'tickets' as const, label: 'Билеты', icon: Ticket },
   { key: 'merch' as const, label: 'Мерч', icon: ShoppingBag },
-  { key: 'boosters' as const, label: 'Бустеры', icon: Sparkles },
+  { key: 'boosters' as const, label: GAME_NAMES.match3, icon: Sparkles },
 ];
+
+function coinPrice(price: number) {
+  return `${price.toLocaleString('ru-RU')} термокоинов`;
+}
 
 export function ShopScreen() {
   const navigate = useNavigate();
-  const { progress, addToCart, spendCurrency } = useGameContext();
+  const { progress, addToCart, buyWithCoins } = useGameContext();
   const [activeTab, setActiveTab] = useState<Product['category']>('tickets');
+  const [notice, setNotice] = useState('');
 
   const items = getProductsByCategory(activeTab);
-  const cartCount = progress.cart.reduce((s, c) => s + c.quantity, 0);
-  const isMerch = activeTab === 'merch';
+  const cartCount = progress.cart.reduce((sum, item) => sum + item.quantity, 0);
+  const activeReward = activeFreeHourClaim(progress.rewardClaims);
 
   const handleBuy = (product: Product) => {
-    if (product.currency === 'coins') {
-      spendCurrency(product.price);
-    } else {
-      addToCart(product.id);
+    setNotice('');
+    if (product.action === 'weekly-reward') {
+      navigate('/shop/free-hour');
+      return;
     }
+    if (product.currency === 'coins') {
+      if (progress.currency < product.price) {
+        setNotice(`Не хватает ${product.price - progress.currency} термокоинов`);
+        return;
+      }
+      buyWithCoins(product.id, product.price);
+      setNotice(`Товар «${product.name}» добавлен в инвентарь`);
+      return;
+    }
+    addToCart(product.id);
+    setNotice(`${product.name} добавлена в корзину`);
   };
 
   return (
-    <div className="h-full flex flex-col bg-dark-surface pb-20">
-      {/* Header */}
-      <div className="pt-10 pb-4 px-5">
-        <div className="flex items-center justify-between">
-          <button onClick={() => navigate('/games')} className="text-white/50 hover:text-primary transition-colors">
-            <ArrowLeft size={20} />
+    <div className="h-full flex flex-col bg-dark-surface">
+      <header className="screen-safe-header pb-4 px-5">
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/60 hover:text-primary transition-colors">
+            <ArrowLeft size={21} />
           </button>
-          <h2 className="font-heading text-sm font-bold text-primary tracking-wider uppercase">Магазин</h2>
-          <div className="flex items-center gap-3">
+          <h1 className="font-heading text-base font-bold text-primary tracking-wider uppercase">Магазин</h1>
+          <div className="flex items-center gap-1">
             <CurrencyDisplay amount={progress.currency} />
-            <button onClick={() => navigate('/shop/cart')} className="relative text-white/50 hover:text-primary transition-colors">
-              <ShoppingCart size={20} />
-              {cartCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                  {cartCount}
-                </span>
-              )}
+            <button type="button" aria-label={`Корзина, товаров: ${cartCount}`} onClick={() => navigate('/shop/cart')} className="relative min-w-11 min-h-11 flex items-center justify-center text-white/60 hover:text-primary transition-colors">
+              <ShoppingCart size={21} />
+              {cartCount > 0 && <span className="absolute top-0 right-0 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-4 h-4 px-1 flex items-center justify-center">{cartCount}</span>}
             </button>
           </div>
         </div>
-      </div>
+      </header>
       <div className="gold-separator" />
 
-      {/* Tabs */}
-      <div className="px-5 py-3">
-        <div className="flex gap-2">
+      <div className="min-h-8 px-5 pt-2" role="status" aria-live="polite">
+        {notice && <p className="text-center text-sm text-primary leading-snug">{notice}</p>}
+      </div>
+
+      <nav className="px-5 py-3" aria-label="Разделы магазина">
+        <div className="grid grid-cols-3 gap-2">
           {tabs.map(tab => (
             <button
+              type="button"
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
+              aria-current={activeTab === tab.key ? 'page' : undefined}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-medium transition-all',
+                'min-h-12 flex items-center justify-center gap-1.5 rounded-xl text-sm font-semibold transition-colors',
                 activeTab === tab.key
-                  ? 'bg-primary/20 text-primary border border-primary/30'
-                  : 'bg-white/5 text-white/50 border border-white/10',
+                  ? 'bg-primary/20 text-primary border border-primary/35'
+                  : 'bg-white/5 text-white/60 border border-white/10',
               )}
             >
-              <tab.icon size={14} />
+              <tab.icon size={16} />
               {tab.label}
             </button>
           ))}
         </div>
-      </div>
+      </nav>
 
-      {/* Items */}
-      <div className="flex-1 overflow-y-auto phone-scroll px-5 py-2">
-        {isMerch ? (
-          /* Grid layout for merch */
-          <div className="grid grid-cols-2 gap-3">
-            {items.map((item, i) => (
-              <motion.div
-                key={item.id}
-                className="bg-white/5 border border-white/10 rounded-xl overflow-hidden"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <div className="aspect-square flex items-center justify-center p-4 bg-white/3">
-                  <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+      <main className="flex-1 overflow-y-auto phone-scroll px-5 py-2">
+        {activeTab === 'boosters' && (
+          <div className="mb-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+            <p className="font-heading text-sm font-bold text-primary">Бустеры для игры «{GAME_NAMES.match3}»</p>
+            <p className="mt-1 text-xs leading-relaxed text-white/60">Это бустеры для игры «3 в ряд». После покупки они появятся под игровым полем.</p>
+          </div>
+        )}
+        {activeTab === 'merch' ? (
+          <div className="space-y-3">
+            {items.map((item, index) => (
+              <motion.article key={item.id} className="shop-merch-card" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+                <div className="shop-merch-card__image"><img src={item.image} alt={item.name} /></div>
+                <div>
+                  <h2>{item.name}</h2>
+                  <p>{item.description}</p>
+                  <strong>{coinPrice(item.price)}</strong>
+                  <Button size="sm" className="w-full mt-3" onClick={() => handleBuy(item)}>Купить</Button>
+                  {(progress.inventory[item.id] ?? 0) > 0 && (
+                    <p className="mt-2 text-xs text-success">В инвентаре: {progress.inventory[item.id]}</p>
+                  )}
                 </div>
-                <div className="p-3">
-                  <h4 className="font-bold text-xs text-white/90 truncate">{item.name}</h4>
-                  <p className="text-primary font-bold text-sm mt-1">{item.price} ₽</p>
-                  <Button size="sm" className="w-full mt-2" onClick={() => handleBuy(item)}>
-                    В корзину
-                  </Button>
-                </div>
-              </motion.div>
+              </motion.article>
             ))}
           </div>
         ) : (
-          /* List layout for tickets & boosters */
           <div className="space-y-3">
-            {items.map((item, i) => (
-              <motion.div
-                key={item.id}
-                className="bg-white/5 border border-white/10 rounded-xl p-4"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 flex-shrink-0 rounded-xl bg-white/3 flex items-center justify-center p-2">
-                    <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-sm text-white/90">{item.name}</h4>
-                      {item.badge && (
-                        <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">
-                          {item.badge}
-                        </span>
-                      )}
+            {items.map((item, index) => {
+              const isWeeklyReward = item.action === 'weekly-reward';
+              return (
+                <motion.article key={item.id} className={cn('shop-product-card', isWeeklyReward && 'shop-product-card--featured')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+                  <div className="shop-product-card__top">
+                    <div className="shop-product-card__image"><img src={item.image} alt="" aria-hidden="true" /></div>
+                    <div className="shop-product-card__copy">
+                      <div className="shop-product-card__title-row">
+                        <h2>{item.name}</h2>
+                        {(item.gameLabel || item.badge) && <span>{item.gameLabel || item.badge}</span>}
+                      </div>
+                      <p>{item.description}</p>
                     </div>
-                    <p className="text-white/40 text-xs mt-1">{item.description}</p>
-                    <div className="flex items-center justify-between mt-2">
-                      <p className="text-primary font-bold text-sm">
-                        {item.price === 0 ? 'Бесплатно' : item.currency === 'rub' ? `${item.price} ₽` : `${item.price} T`}
-                      </p>
+                  </div>
+
+                  {isWeeklyReward && (
+                    <div className="shop-product-card__warning">
+                      <CalendarClock size={20} aria-hidden="true" />
+                      <p><strong>Сгорит через 7 дней.</strong> Следующий час можно получить только после этой недели.</p>
+                    </div>
+                  )}
+
+                  {isWeeklyReward && activeReward ? (
+                    <button type="button" className="shop-reward-active" onClick={() => navigate('/shop/free-hour')}>
+                      <span>Код {activeReward.code}</span>
+                      <strong>{isRewardClaimRedeemed(activeReward)
+                        ? `Использован · новый час после ${formatRewardDate(activeReward.nextPurchaseAt)}`
+                        : `Действует до ${formatRewardDate(activeReward.expiresAt)}`}</strong>
+                    </button>
+                  ) : (
+                    <div className="shop-product-card__action">
+                      <strong>{item.currency === 'rub' ? `${item.price} ₽` : coinPrice(item.price)}</strong>
                       <Button size="sm" onClick={() => handleBuy(item)}>
-                        {item.currency === 'coins' ? 'Купить' : 'В корзину'}
+                        {isWeeklyReward ? 'Получить' : 'Купить'}
                       </Button>
                     </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                  )}
+
+                  {!isWeeklyReward && (progress.inventory[item.id] ?? 0) > 0 && (
+                    <p className="mt-2 text-xs text-success">В инвентаре: {progress.inventory[item.id]}</p>
+                  )}
+                </motion.article>
+              );
+            })}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

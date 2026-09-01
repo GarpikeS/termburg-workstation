@@ -1,12 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <radialGradient id="stg" cx="50%" cy="40%" r="50%">
-      <stop offset="0%" stop-color="#C4A8E8"/>
-      <stop offset="100%" stop-color="#7B5EA8"/>
-    </radialGradient>
+    <linearGradient id="hat-felt" x1="15" y1="12" x2="48" y2="53" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B89BE3"/><stop offset="1" stop-color="#7655A3"/>
+    </linearGradient>
   </defs>
-  <circle cx="32" cy="36" r="16" fill="url(#stg)" opacity="0.9"/>
-  <circle cx="22" cy="28" r="10" fill="url(#stg)" opacity="0.7"/>
-  <circle cx="42" cy="26" r="8" fill="url(#stg)" opacity="0.6"/>
-  <circle cx="28" cy="18" r="6" fill="url(#stg)" opacity="0.4"/>
+  <path d="M27 12C28 8 36 8 37 12L39 20C47 24 51 34 51 47C51 52 13 52 13 47C13 34 17 24 25 20L27 12Z" fill="url(#hat-felt)" stroke="#D9C7F2" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M13 43C22 47 42 47 51 43V50C42 54 22 54 13 50V43Z" fill="#65468F" stroke="#CDB8EA" stroke-width="1.2"/>
+  <path d="M32 19V41M23 23C26 27 27 34 26 42M41 23C38 27 37 34 38 42" stroke="#DCCCF3" stroke-width="1.5" stroke-linecap="round" opacity=".48"/>
+  <path d="M29 13H35" stroke="#F0E8FA" stroke-width="2" stroke-linecap="round"/>
 </svg>

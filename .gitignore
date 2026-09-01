@@ -1,7 +1,23 @@
 node_modules/
-build/
-dist/
-.env
+frontend/node_modules/
+frontend/build/
+frontend/.codex-run/
+.deploy/
+artifacts/
+release/
 *.log
-.DS_Store
+*.tmp
+*.bak
 *.local
+
+# Generated one-time enrollment credentials must never enter Git.
+dolphin-agent/generated/
+workstation/generated/
+
+# Local environment and editor files.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.DS_Store
+Thumbs.db

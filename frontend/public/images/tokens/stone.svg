@@ -1,10 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <radialGradient id="sg" cx="35%" cy="30%" r="65%">
-      <stop offset="0%" stop-color="#B0B0BC"/>
-      <stop offset="100%" stop-color="#6E6E80"/>
-    </radialGradient>
+    <linearGradient id="slipper-felt" x1="14" y1="15" x2="51" y2="51" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7C9D2"/><stop offset="1" stop-color="#777B8D"/>
+    </linearGradient>
   </defs>
-  <path d="M20 14L44 10L56 28L50 52L28 56L10 42L14 22Z" fill="url(#sg)"/>
-  <path d="M20 14L32 32L56 28M32 32L28 56M32 32L10 42" stroke="white" stroke-width="1.5" opacity="0.2"/>
+  <path d="M10 44C10 39 15 35 17 30L20 16C21 10 31 10 33 16L35 31C36 36 40 40 39 45C38 52 29 54 20 52C14 51 10 49 10 44Z" fill="url(#slipper-felt)" stroke="#ECECF1" stroke-width="1.5"/>
+  <path d="M29 44C29 39 34 35 36 30L39 16C40 10 50 10 52 16L55 31C56 36 60 40 59 45C58 52 49 54 40 52C34 51 29 49 29 44Z" fill="url(#slipper-felt)" stroke="#ECECF1" stroke-width="1.5"/>
+  <path d="M19 31C20 26 22 21 22 17C23 14 29 14 30 18L32 31C28 29 23 29 19 31ZM38 31C39 26 41 21 41 17C42 14 48 14 49 18L52 31C47 29 43 29 38 31Z" fill="#545868" opacity=".88"/>
+  <path d="M13 44C20 47 30 47 37 44M32 44C39 47 49 47 56 44" stroke="#F2F2F5" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>
 </svg>

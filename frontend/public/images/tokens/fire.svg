@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <radialGradient id="fg" cx="50%" cy="60%" r="50%">
-      <stop offset="0%" stop-color="#F0C06A"/>
-      <stop offset="60%" stop-color="#D4956A"/>
-      <stop offset="100%" stop-color="#B05030"/>
-    </radialGradient>
+    <linearGradient id="ladle-copper" x1="13" y1="14" x2="51" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0B36D"/><stop offset="1" stop-color="#A95335"/>
+    </linearGradient>
   </defs>
-  <path d="M32 6C32 6 20 18 18 32C16 42 22 54 32 58C42 54 48 42 46 32C44 22 38 14 38 14C38 14 36 24 32 28C28 24 32 6 32 6Z" fill="url(#fg)"/>
-  <ellipse cx="32" cy="44" rx="6" ry="8" fill="#F0C06A" opacity="0.6"/>
+  <path d="M18 15L46 43" stroke="url(#ladle-copper)" stroke-width="7" stroke-linecap="round"/>
+  <path d="M15 12L20 17" stroke="#FFD096" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+  <path d="M37 39C42 34 51 34 55 39C60 45 55 55 45 56C35 57 28 50 32 44C33 42 35 40 37 39Z" fill="url(#ladle-copper)" stroke="#FFD096" stroke-width="1.5"/>
+  <path d="M34 45C40 48 50 47 55 42" stroke="#7C3D2B" stroke-width="1.7" stroke-linecap="round" opacity=".65"/>
+  <path d="M18 15L39 36" stroke="#FFD29C" stroke-width="1.4" stroke-linecap="round" opacity=".55"/>
 </svg>

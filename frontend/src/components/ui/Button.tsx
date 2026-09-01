@@ -10,7 +10,7 @@ export function Button({ variant = 'primary', size = 'md', className, children, 
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center font-medium transition-all duration-200 cursor-pointer select-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed',
+        'inline-flex min-h-11 items-center justify-center font-medium transition-all duration-200 cursor-pointer select-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
         variant === 'primary' && 'bg-primary text-dark-surface shadow-sm hover:bg-primary-light hover:shadow-md',
         variant === 'secondary' && 'bg-white/10 text-white/80 border border-white/10 hover:bg-white/15',
         variant === 'accent' && 'bg-accent text-white shadow-sm hover:bg-accent-light hover:shadow-md',

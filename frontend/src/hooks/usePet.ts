@@ -1,80 +1,184 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameContext } from '@/store/GameContext';
 import {
-  createPet, applyDecay, applyAction, updateAge, getMood,
-  isOnCooldown, getCooldownRemaining, getStatWarning,
-  type PetAction, type PetMood,
+  PET_ACTIVITIES,
+  applyAction,
+  applyActivity,
+  claimDailyGift,
+  claimDailyTask,
+  createPet,
+  getDepletedPetStat,
+  getActivityCooldownRemaining,
+  getCooldownRemaining,
+  getMood,
+  getPetLevel,
+  getPetLevelProgress,
+  getStatWarning,
+  renamePet,
+  syncPetState,
+  type PetAction,
+  type PetActivity,
+  type PetDailyTaskId,
+  type PetInteractionResult,
+  type PetMood,
 } from '@/engine/engine-pet/petEngine';
 
 export function usePet() {
-  const { progress, updatePet, addCurrency } = useGameContext();
+  const { progress, updatePet, departPet, awardGameCurrency } = useGameContext();
   const pet = progress.pet;
-  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
-  const [warning, setWarning] = useState<string | null>(null);
+  const petRef = useRef(pet);
   const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  const [activityCooldowns, setActivityCooldowns] = useState<Record<string, number>>({});
 
-  // On mount: apply decay from lastUpdated
   useEffect(() => {
-    if (!pet) return;
-    const elapsed = (Date.now() - pet.lastUpdated) / 60000;
-    if (elapsed > 1) {
-      const decayed = applyDecay(pet, elapsed);
-      const aged = updateAge(decayed);
-      updatePet(aged);
+    petRef.current = pet;
+  }, [pet]);
+
+  const saveOrDepart = useCallback((next: NonNullable<typeof pet>): boolean => {
+    const depletedStat = getDepletedPetStat(next);
+    if (depletedStat) {
+      petRef.current = null;
+      departPet({
+        characterId: next.characterId,
+        name: next.name,
+        depletedStat,
+        departedAt: Date.now(),
+      });
+      return false;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    petRef.current = next;
+    updatePet(next);
+    return true;
+  }, [departPet, updatePet]);
 
-  // Tick every 60 seconds
-  useEffect(() => {
-    if (!pet) return;
-    intervalRef.current = setInterval(() => {
-      if (pet) {
-        const decayed = applyDecay(pet, 1);
-        const aged = updateAge(decayed);
-        updatePet(aged);
-      }
-    }, 60000);
-    return () => clearInterval(intervalRef.current);
-  }, [pet, updatePet]);
+  const getActivePet = useCallback(() => {
+    const current = petRef.current;
+    if (!current) return null;
+    const synced = syncPetState(current);
+    return saveOrDepart(synced) ? synced : null;
+  }, [saveOrDepart]);
 
-  // Update cooldown display every second
   useEffect(() => {
-    if (!pet) return;
-    const actions: PetAction[] = ['feed', 'play', 'rest', 'wash'];
-    const updateCds = () => {
-      const cds: Record<string, number> = {};
-      for (const a of actions) {
-        cds[a] = getCooldownRemaining(pet, a);
+    getActivePet();
+  }, [pet?.characterId, getActivePet]);
+
+  useEffect(() => {
+    if (!pet?.characterId) return;
+    const timer = window.setInterval(() => {
+      getActivePet();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [pet?.characterId, getActivePet]);
+
+  useEffect(() => {
+    if (!pet?.characterId) return;
+    const updateTimers = () => {
+      const current = petRef.current;
+      if (!current) return;
+      const nextCare: Record<string, number> = {};
+      for (const action of ['feed', 'play', 'rest', 'wash'] as PetAction[]) {
+        nextCare[action] = getCooldownRemaining(current, action);
       }
-      setCooldowns(cds);
+      const nextActivities: Record<string, number> = {};
+      for (const activity of PET_ACTIVITIES) {
+        nextActivities[activity.id] = getActivityCooldownRemaining(current, activity.id);
+      }
+      setCooldowns(nextCare);
+      setActivityCooldowns(nextActivities);
     };
-    updateCds();
-    const id = setInterval(updateCds, 1000);
-    return () => clearInterval(id);
-  }, [pet]);
-
-  // Check warnings
-  useEffect(() => {
-    if (!pet) return;
-    setWarning(getStatWarning(pet));
-  }, [pet]);
+    updateTimers();
+    const timer = window.setInterval(updateTimers, 1000);
+    return () => window.clearInterval(timer);
+  }, [pet?.characterId]);
 
   const adopt = useCallback((characterId: string) => {
-    updatePet(createPet(characterId));
+    const next = createPet(characterId);
+    petRef.current = next;
+    updatePet(next);
   }, [updatePet]);
 
-  const doAction = useCallback((action: PetAction): boolean => {
-    if (!pet) return false;
-    if (isOnCooldown(pet, action)) return false;
-    const result = applyAction(pet, action);
-    if (!result) return false;
-    const aged = updateAge(result.pet);
-    updatePet(aged);
-    if (result.coins > 0) addCurrency(result.coins);
-    return true;
-  }, [pet, updatePet, addCurrency]);
+  const commit = useCallback((result: PetInteractionResult): PetInteractionResult => {
+    if (!result.ok || result.coins <= 0) {
+      saveOrDepart(result.pet);
+      return result;
+    }
+    if (getDepletedPetStat(result.pet)) {
+      saveOrDepart(result.pet);
+      return result;
+    }
+
+    const awarded = awardGameCurrency('pet', result.coins);
+    const rewardText = awarded > 0
+      ? `+${awarded} термокоинов`
+      : 'лимит Пестуна на сегодня достигнут';
+    const diaryRewardText = awarded > 0
+      ? `${awarded} термокоинов`
+      : 'термокоины не начислены: дневной лимит достигнут';
+    const petWithActualReward = {
+      ...result.pet,
+      diary: result.pet.diary.map((entry, index) => (
+        index === 0
+          ? { ...entry, detail: entry.detail.replace(/\d+ термокоинов/, diaryRewardText) }
+          : entry
+      )),
+    };
+    saveOrDepart(petWithActualReward);
+    return {
+      ...result,
+      pet: petWithActualReward,
+      coins: awarded,
+      message: result.message.replace(/\+\d+ термокоинов/, rewardText),
+    };
+  }, [awardGameCurrency, saveOrDepart]);
+
+  const doAction = useCallback((action: PetAction): PetInteractionResult | null => {
+    const current = getActivePet();
+    if (!current) return null;
+    return commit(applyAction(current, action));
+  }, [commit, getActivePet]);
+
+  const doActivity = useCallback((activity: PetActivity): PetInteractionResult | null => {
+    const current = getActivePet();
+    if (!current) return null;
+    return commit(applyActivity(current, activity));
+  }, [commit, getActivePet]);
+
+  const takeDailyGift = useCallback((): PetInteractionResult | null => {
+    const current = getActivePet();
+    if (!current) return null;
+    return commit(claimDailyGift(current));
+  }, [commit, getActivePet]);
+
+  const collectTask = useCallback((taskId: PetDailyTaskId): PetInteractionResult | null => {
+    const current = getActivePet();
+    if (!current) return null;
+    return commit(claimDailyTask(current, taskId));
+  }, [commit, getActivePet]);
+
+  const changeName = useCallback((name: string): PetInteractionResult | null => {
+    const current = getActivePet();
+    if (!current) return null;
+    return commit(renamePet(current, name));
+  }, [commit, getActivePet]);
 
   const mood: PetMood = pet ? getMood(pet) : 'happy';
+  const warning = pet ? getStatWarning(pet) : null;
+  const level = pet ? getPetLevel(pet) : 1;
+  const levelProgress = pet ? getPetLevelProgress(pet) : { current: 0, max: 100 };
 
-  return { pet, mood, adopt, doAction, warning, cooldowns };
+  return {
+    pet,
+    mood,
+    level,
+    levelProgress,
+    adopt,
+    doAction,
+    doActivity,
+    takeDailyGift,
+    collectTask,
+    changeName,
+    warning,
+    cooldowns,
+    activityCooldowns,
+  };
 }

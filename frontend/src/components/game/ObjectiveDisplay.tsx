@@ -1,12 +1,6 @@
 import type { Objective } from '@/types/game';
 import { TOKEN_COLORS } from '@/types/game';
-import { Droplets, Leaf, Mountain, Wind, Flame, TreeDeciduous } from 'lucide-react';
-import type { ComponentType } from 'react';
-
-const GEM_ICONS: Record<string, ComponentType<{ size?: number }>> = {
-  water: Droplets, leaf: Leaf, stone: Mountain,
-  steam: Wind, fire: Flame, wood: TreeDeciduous,
-};
+import { TokenIcon } from '@/components/ui/TokenIcon';
 
 interface ObjectiveDisplayProps {
   objectives: Objective[];
@@ -17,7 +11,6 @@ export function ObjectiveDisplay({ objectives }: ObjectiveDisplayProps) {
     <div className="flex gap-3 justify-center">
       {objectives.map((obj, i) => {
         const done = obj.current >= obj.target;
-        const Icon = GEM_ICONS[obj.type];
         const color = TOKEN_COLORS[obj.type];
         return (
           <div key={i} className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5">
@@ -25,7 +18,7 @@ export function ObjectiveDisplay({ objectives }: ObjectiveDisplayProps) {
               className="w-6 h-6 rounded flex items-center justify-center"
               style={{ backgroundColor: `${color}30` }}
             >
-              {Icon && <Icon size={12} />}
+              <TokenIcon type={obj.type} className="h-5 w-5" />
             </div>
             <span
               className="text-sm font-bold tabular-nums"

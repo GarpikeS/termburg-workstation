@@ -12,11 +12,12 @@ interface WinPopupProps {
   levelConfig: LevelConfig;
   onNext: () => void;
   onMap: () => void;
+  earnedReward?: number | null;
 }
 
-export function WinPopup({ open, score, levelConfig, onNext, onMap }: WinPopupProps) {
+export function WinPopup({ open, score, levelConfig, onNext, onMap, earnedReward }: WinPopupProps) {
   const stars = getStars(score, levelConfig.starThresholds);
-  const reward = getReward(stars, levelConfig.reward);
+  const reward = earnedReward === undefined ? getReward(stars, levelConfig.reward) : earnedReward;
 
   return (
     <Modal open={open}>
@@ -36,10 +37,14 @@ export function WinPopup({ open, score, levelConfig, onNext, onMap }: WinPopupPr
 
         <div className="space-y-2">
           <p className="text-white text-lg font-bold tabular-nums">{score.toLocaleString()} очков</p>
-          {reward > 0 && (
+          {reward !== null && reward > 0 && (
             <div className="bg-primary/10 border border-primary/20 rounded-xl px-4 py-2 inline-block">
-              <p className="text-primary font-bold">+{reward} Термлинов</p>
+              <p className="text-primary font-bold">+{reward} термокоинов</p>
             </div>
+          )}
+          {reward === null && <p className="text-white/45 text-xs">Считаем награду…</p>}
+          {reward === 0 && (
+            <p className="text-white/45 text-xs">Лимит Хоровода на сегодня достигнут</p>
           )}
         </div>
 

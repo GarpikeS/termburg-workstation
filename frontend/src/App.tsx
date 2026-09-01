@@ -1,58 +1,100 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, type CSSProperties } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GameProvider } from '@/store/GameContext';
-import { BottomNav } from '@/components/ui/BottomNav';
-import { SplashScreen } from '@/components/screens/SplashScreen';
+import { AuthProvider } from '@/features/account/AuthContext';
+import { BottomNav, isBottomNavHidden } from '@/components/ui/BottomNav';
 import { GameHub } from '@/components/screens/GameHub';
-import { BathhouseMap } from '@/components/screens/BathhouseMap';
-import { BathhousesScreen } from '@/components/screens/BathhousesScreen';
-import { LevelMap } from '@/components/screens/LevelMap';
-import { GameScreen } from '@/components/screens/GameScreen';
-import { Game2048Screen } from '@/components/screens/Game2048Screen';
-import { BubbleShooterScreen } from '@/components/screens/BubbleShooterScreen';
-import { TamagotchiScreen } from '@/components/screens/TamagotchiScreen';
-import { ShopScreen } from '@/components/screens/ShopScreen';
-import { CartScreen } from '@/components/screens/CartScreen';
-import { CheckoutScreen } from '@/components/screens/CheckoutScreen';
-import { TermlinyCollection } from '@/components/screens/TermlinyCollection';
-import { TermlinDetail } from '@/components/screens/TermlinDetail';
-import { ProfileScreen } from '@/components/screens/ProfileScreen';
+import { rememberEntrySource } from '@/features/rewards/acquisition';
+import { useVisualViewportSize } from '@/hooks/useVisualViewportSize';
+
+const SplashScreen = lazy(() => import('@/components/screens/SplashScreen').then(module => ({ default: module.SplashScreen })));
+const BathhouseMap = lazy(() => import('@/components/screens/BathhouseMap').then(module => ({ default: module.BathhouseMap })));
+const BathhousesScreen = lazy(() => import('@/components/screens/BathhousesScreen').then(module => ({ default: module.BathhousesScreen })));
+const LevelMap = lazy(() => import('@/components/screens/LevelMap').then(module => ({ default: module.LevelMap })));
+const GameScreen = lazy(() => import('@/components/screens/GameScreen').then(module => ({ default: module.GameScreen })));
+const Game2048Screen = lazy(() => import('@/components/screens/Game2048Screen').then(module => ({ default: module.Game2048Screen })));
+const BubbleShooterScreen = lazy(() => import('@/components/screens/BubbleShooterScreen').then(module => ({ default: module.BubbleShooterScreen })));
+const TamagotchiScreen = lazy(() => import('@/components/screens/TamagotchiScreen').then(module => ({ default: module.TamagotchiScreen })));
+const ShopScreen = lazy(() => import('@/components/screens/ShopScreen').then(module => ({ default: module.ShopScreen })));
+const FreeHourClaimScreen = lazy(() => import('@/components/screens/FreeHourClaimScreen').then(module => ({ default: module.FreeHourClaimScreen })));
+const CartScreen = lazy(() => import('@/components/screens/CartScreen').then(module => ({ default: module.CartScreen })));
+const CheckoutScreen = lazy(() => import('@/components/screens/CheckoutScreen').then(module => ({ default: module.CheckoutScreen })));
+const TermlinyCollection = lazy(() => import('@/components/screens/TermlinyCollection').then(module => ({ default: module.TermlinyCollection })));
+const TermlinDetail = lazy(() => import('@/components/screens/TermlinDetail').then(module => ({ default: module.TermlinDetail })));
+const ProfileScreen = lazy(() => import('@/components/screens/ProfileScreen').then(module => ({ default: module.ProfileScreen })));
+const AuthScreen = lazy(() => import('@/components/screens/AuthScreen').then(module => ({ default: module.AuthScreen })));
+const LegalScreen = lazy(() => import('@/components/screens/LegalScreen').then(module => ({ default: module.LegalScreen })));
+const FeedbackScreen = lazy(() => import('@/components/screens/FeedbackScreen').then(module => ({ default: module.FeedbackScreen })));
+const ScheduleMobileScreen = lazy(() => import('@/components/screens/ScheduleMobileScreen').then(module => ({ default: module.ScheduleMobileScreen })));
+const ScheduleDisplayScreen = lazy(() => import('@/components/screens/ScheduleDisplayScreen').then(module => ({ default: module.ScheduleDisplayScreen })));
+const SchedulePrintScreen = lazy(() => import('@/components/screens/SchedulePrintScreen').then(module => ({ default: module.SchedulePrintScreen })));
+const ScheduleAdminAccessScreen = lazy(() => import('@/components/screens/ScheduleAdminAccessScreen').then(module => ({ default: module.ScheduleAdminAccessScreen })));
+const SchedulePosterScreen = lazy(() => import('@/components/screens/SchedulePosterScreen').then(module => ({ default: module.SchedulePosterScreen })));
+
+function AppLayout() {
+  const location = useLocation();
+  const viewport = useVisualViewportSize();
+  const withBottomNav = !isBottomNavHidden(location.pathname);
+  const standaloneSchedule = location.pathname === '/schedule' || location.pathname.startsWith('/schedule/');
+
+  useEffect(() => {
+    rememberEntrySource(location.search);
+  }, [location.search]);
+
+  return (
+    <div
+      className={`app-shell ${standaloneSchedule ? 'schedule-standalone-shell' : ''}`}
+      style={{ '--app-viewport-height': `${viewport.height}px` } as CSSProperties}
+    >
+      <div className={`phone-frame bg-dark-surface relative flex flex-col ${standaloneSchedule ? 'phone-frame--standalone' : ''}`}>
+        <main className={`phone-screen ${withBottomNav ? 'phone-screen--with-nav' : ''} ${standaloneSchedule ? 'phone-screen--standalone' : ''}`}>
+          <Suspense fallback={<div className="route-loading" role="status" aria-label="Загрузка страницы" />}>
+            <Routes>
+              <Route path="/" element={<SplashScreen />} />
+              <Route path="/games" element={<GameHub />} />
+              <Route path="/bathhouses" element={<BathhousesScreen />} />
+              <Route path="/games/match3" element={<BathhouseMap />} />
+              <Route path="/games/match3/levels/:bathhouseId" element={<LevelMap />} />
+              <Route path="/games/match3/play/:id" element={<GameScreen />} />
+              <Route path="/games/2048" element={<Game2048Screen />} />
+              <Route path="/games/bubbles" element={<BubbleShooterScreen />} />
+              <Route path="/games/pet" element={<TamagotchiScreen />} />
+              <Route path="/shop" element={<ShopScreen />} />
+              <Route path="/shop/free-hour" element={<FreeHourClaimScreen />} />
+              <Route path="/shop/cart" element={<CartScreen />} />
+              <Route path="/shop/checkout" element={<CheckoutScreen />} />
+              <Route path="/collection" element={<TermlinyCollection />} />
+              <Route path="/collection/:id" element={<TermlinDetail />} />
+              <Route path="/profile" element={<ProfileScreen />} />
+              <Route path="/account" element={<AuthScreen />} />
+              <Route path="/legal/privacy" element={<LegalScreen kind="privacy" />} />
+              <Route path="/legal/consent" element={<LegalScreen kind="consent" />} />
+              <Route path="/profile/feedback" element={<FeedbackScreen />} />
+              <Route path="/bathhouses/:locationId/schedule" element={<ScheduleMobileScreen />} />
+              <Route path="/schedule/admin" element={<ScheduleAdminAccessScreen />} />
+              <Route path="/schedule/screen/:locationId/:layout" element={<ScheduleDisplayScreen />} />
+              <Route path="/schedule/screen/:locationId" element={<ScheduleDisplayScreen />} />
+              <Route path="/schedule/print/:locationId" element={<SchedulePrintScreen />} />
+              <Route path="/schedule/poster/:locationId" element={<SchedulePosterScreen />} />
+              <Route path="/schedule" element={<Navigate to="/schedule/admin" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+          <BottomNav />
+        </main>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <GameProvider>
-      <BrowserRouter>
-        {/* Desktop: centered phone frame. Mobile: fullscreen */}
-        <div className="h-screen w-screen flex items-center justify-center bg-dark-surface">
-          {/* Phone container */}
-          <div className="phone-frame bg-dark-surface relative flex flex-col">
-            {/* Notch */}
-            <div className="phone-notch" />
-
-            {/* Screen content */}
-            <div className="flex-1 overflow-hidden relative">
-              <Routes>
-                <Route path="/" element={<SplashScreen />} />
-                <Route path="/games" element={<GameHub />} />
-                <Route path="/bathhouses" element={<BathhousesScreen />} />
-                <Route path="/games/match3" element={<BathhouseMap />} />
-                <Route path="/games/match3/levels/:bathhouseId" element={<LevelMap />} />
-                <Route path="/games/match3/play/:id" element={<GameScreen />} />
-                <Route path="/games/2048" element={<Game2048Screen />} />
-                <Route path="/games/bubbles" element={<BubbleShooterScreen />} />
-                <Route path="/games/pet" element={<TamagotchiScreen />} />
-                <Route path="/shop" element={<ShopScreen />} />
-                <Route path="/shop/cart" element={<CartScreen />} />
-                <Route path="/shop/checkout" element={<CheckoutScreen />} />
-                <Route path="/collection" element={<TermlinyCollection />} />
-                <Route path="/collection/:id" element={<TermlinDetail />} />
-                <Route path="/profile" element={<ProfileScreen />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-              <BottomNav />
-            </div>
-          </div>
-        </div>
-      </BrowserRouter>
-    </GameProvider>
+    <AuthProvider>
+      <GameProvider>
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </GameProvider>
+    </AuthProvider>
   );
 }

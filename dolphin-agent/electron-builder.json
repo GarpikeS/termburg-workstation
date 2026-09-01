@@ -1,0 +1,46 @@
+{
+  "appId": "ru.termburg.dolphin-agent",
+  "productName": "Термбург Dolphin",
+  "asar": true,
+  "compression": "normal",
+  "directories": {
+    "output": "release/dolphin-agent",
+    "buildResources": "desktop/assets"
+  },
+  "files": [
+    "dolphin-agent/**/*",
+    "desktop/assets/icon.png",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "dolphin-agent/adapters/excel-reader.ps1",
+      "to": "dolphin-agent/excel-reader.ps1"
+    }
+  ],
+  "extraMetadata": {
+    "main": "dolphin-agent/main.mjs",
+    "version": "1.1.0",
+    "description": "Автоматическое погашение билетов Термбурга через локальный API Dolphin"
+  },
+  "win": {
+    "target": [
+      { "target": "nsis", "arch": ["x64"] },
+      { "target": "portable", "arch": ["x64"] }
+    ],
+    "icon": "desktop/assets/icon.png",
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "allowElevation": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Термбург Dolphin",
+    "artifactName": "Termburg-Dolphin-Setup-${version}.${ext}"
+  },
+  "portable": {
+    "artifactName": "Termburg-Dolphin-${version}-portable.${ext}"
+  }
+}

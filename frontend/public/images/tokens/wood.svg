@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <radialGradient id="wdg" cx="40%" cy="35%" r="60%">
-      <stop offset="0%" stop-color="#C49A6C"/>
-      <stop offset="100%" stop-color="#7A5830"/>
-    </radialGradient>
+    <linearGradient id="towel-cloth" x1="15" y1="11" x2="50" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6B77A"/><stop offset="1" stop-color="#A66C43"/>
+    </linearGradient>
   </defs>
-  <rect x="22" y="10" width="20" height="44" rx="4" fill="url(#wdg)"/>
-  <path d="M22 22H42M22 34H42M22 46H42" stroke="#6A4820" stroke-width="1" opacity="0.3"/>
-  <circle cx="32" cy="28" r="4" stroke="#6A4820" stroke-width="1" fill="none" opacity="0.3"/>
-  <path d="M14 18C14 14 18 10 22 10M42 10C46 10 50 14 50 18L48 20L44 14M20 14L16 20" stroke="url(#wdg)" stroke-width="3" stroke-linecap="round"/>
+  <path d="M19 11H45C49 11 52 14 52 18V47C52 51 49 54 45 54H19C15 54 12 51 12 47V18C12 14 15 11 19 11Z" fill="url(#towel-cloth)" stroke="#F2D09B" stroke-width="1.5"/>
+  <path d="M12 34H52V47C52 51 49 54 45 54H19C15 54 12 51 12 47V34Z" fill="#B57648" opacity=".72"/>
+  <path d="M17 17H47M17 39H47" stroke="#F3D5A8" stroke-width="2" stroke-linecap="round" opacity=".75"/>
+  <path d="M20 22V48M27 22V48M34 22V48M41 22V48" stroke="#825337" stroke-width="1.2" opacity=".35"/>
+  <path d="M18 54V58M23 54V58M28 54V58M33 54V58M38 54V58M43 54V58M48 53V57" stroke="#E2AF72" stroke-width="1.7" stroke-linecap="round"/>
 </svg>

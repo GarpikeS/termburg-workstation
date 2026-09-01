@@ -1,4 +1,4 @@
-import type { Grid, TokenType } from '@/types/game';
+import type { Grid } from '@/types/game';
 import { gridRows, gridCols } from './grid';
 import { findMatches } from './matcher';
 import { findPossibleMoves } from './hints';
@@ -9,9 +9,16 @@ import { shuffleArray } from '@/utils/random';
  * Reshuffles until at least one move exists and no initial matches.
  * Returns true if a shuffle was needed.
  */
-export function shuffleIfNeeded(grid: Grid, tokenTypes: TokenType[]): boolean {
+export function shuffleIfNeeded(grid: Grid): boolean {
+  if (grid.some(row => row.some(cell => cell?.special))) return false;
   const moves = findPossibleMoves(grid);
   if (moves.length > 0) return false;
+
+  return shuffleGrid(grid);
+}
+
+/** Force a playable reshuffle while preserving the current set of cells. */
+export function shuffleGrid(grid: Grid): boolean {
 
   const rows = gridRows(grid);
   const cols = gridCols(grid);

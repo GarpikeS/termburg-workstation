@@ -23,15 +23,26 @@ export function findPossibleMoves(grid: Grid): SwapAction[] {
 
         if (nr >= rows || nc >= cols || !grid[nr][nc]) continue;
 
-        const testGrid = cloneGrid(grid);
-        swapCells(testGrid, { row: r, col: c }, { row: nr, col: nc });
-
-        const matches = findMatches(testGrid);
-        if (matches.length > 0) {
+        if (grid[r][c]?.special || grid[nr][nc]?.special) {
           moves.push({
             from: { row: r, col: c },
             to: { row: nr, col: nc },
           });
+          continue;
+        }
+
+        const testGrid = cloneGrid(grid);
+        swapCells(testGrid, { row: r, col: c }, { row: nr, col: nc });
+
+        const from = { row: r, col: c };
+        const to = { row: nr, col: nc };
+        const matches = findMatches(testGrid, {
+          includeSquares: true,
+          squareAnchors: [from, to],
+          previousGrid: grid,
+        });
+        if (matches.length > 0) {
+          moves.push({ from, to });
         }
       }
     }

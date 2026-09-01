@@ -5,11 +5,12 @@ import { Button } from '@/components/ui/Button';
 interface Win2048PopupProps {
   open: boolean;
   score: number;
+  earnedReward: number | null;
   onContinue: () => void;
   onRestart: () => void;
 }
 
-export function Win2048Popup({ open, score, onContinue, onRestart }: Win2048PopupProps) {
+export function Win2048Popup({ open, score, earnedReward, onContinue, onRestart }: Win2048PopupProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -30,7 +31,13 @@ export function Win2048Popup({ open, score, onContinue, onRestart }: Win2048Popu
             </div>
             <h3 className="font-heading text-2xl font-bold text-primary">Славич!</h3>
             <p className="text-white/50 text-sm mt-2">Очки: {score}</p>
-            <p className="text-white/40 text-xs mt-1">+50 веников! 🌿</p>
+            <p className="text-white/55 text-sm mt-2 font-semibold">
+              {earnedReward === null
+                ? 'Считаем награду…'
+                : earnedReward > 0
+                  ? `+${earnedReward} термокоинов`
+                  : 'Лимит Славича на сегодня достигнут'}
+            </p>
             <div className="space-y-2 mt-5">
               <Button className="w-full" onClick={onContinue}>Продолжить</Button>
               <button
