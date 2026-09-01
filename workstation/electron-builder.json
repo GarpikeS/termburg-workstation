@@ -28,7 +28,7 @@
   ],
   "extraMetadata": {
     "main": "desktop/main.mjs",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Редактор расписания Термбурга и автоматическое погашение билетов Dolphin"
   },
   "win": {

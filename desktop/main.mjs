@@ -3,6 +3,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, Menu, session, shell, Tray } from 'electron';
 import { checkForPortableUpdate } from './github-updater.mjs';
 import { startScheduleService } from '../server/schedule-service.mjs';
+import { applyWorkstationAutoStart, WORKSTATION_BACKGROUND_FLAG } from '../workstation/autostart.mjs';
 import { checkForWorkstationUpdate, launchWorkstationInstaller } from '../workstation/github-updater.mjs';
 import { dolphinStatusLabel } from '../workstation/status.mjs';
 
@@ -13,7 +14,7 @@ const WORKSTATION_MODE = app.isPackaged
   : process.argv.includes('--workstation');
 const DISPLAY_NAME = WORKSTATION_MODE ? 'Термбург Рабочее место' : APP_NAME;
 const APP_ID = WORKSTATION_MODE ? 'ru.termburg.workstation' : 'ru.termburg.schedule';
-const BACKGROUND_FLAG = '--background';
+const BACKGROUND_FLAG = WORKSTATION_BACKGROUND_FLAG;
 const HOST = '0.0.0.0';
 const requestedPort = Number(cliValue('--schedule-port'));
 const PORT = Number.isInteger(requestedPort) && requestedPort >= 1024 && requestedPort <= 65535
@@ -387,6 +388,20 @@ async function startDesktop() {
   const userData = app.getPath('userData');
   mkdirSync(userData, { recursive: true });
   logFile = path.join(userData, 'schedule.log');
+  if (WORKSTATION_MODE) {
+    try {
+      const autoStartEnabled = applyWorkstationAutoStart({
+        electronApp: app,
+        executablePath: process.execPath,
+        disabled: Boolean(cliValue('--smoke-test-output')) || process.argv.includes('--no-auto-start'),
+      });
+      logger.info(autoStartEnabled
+        ? 'Workstation background autostart is enabled'
+        : 'Workstation autostart registration is skipped in this run');
+    } catch (error) {
+      logger.error('Workstation autostart registration failed', error);
+    }
+  }
   await migrateScheduleData(userData);
 
   if (!WORKSTATION_MODE && app.isPackaged && !process.argv.includes('--no-update')) {

@@ -11,7 +11,6 @@ import { createAgentStateStore } from '../dolphin-agent/core/state-store.mjs';
 import { DolphinSyncAgent } from '../dolphin-agent/core/sync-agent.mjs';
 import { migrateMissingFiles } from './migration.mjs';
 
-const BACKGROUND_FLAG = '--background';
 const STANDALONE_DATA_DIRECTORY = 'Термбург · Dolphin';
 const MIGRATED_FILE_NAMES = [
   'settings.json',
@@ -135,15 +134,6 @@ export class EmbeddedDolphinRuntime {
       : path.join(app.getAppPath(), 'dolphin-agent', 'adapters', 'excel-reader.ps1');
   }
 
-  applyAutoStart() {
-    if (process.platform !== 'win32') return;
-    app.setLoginItemSettings({
-      openAtLogin: this.settings?.autoStart !== false,
-      path: process.env.PORTABLE_EXECUTABLE_FILE || process.execPath,
-      args: [BACKGROUND_FLAG],
-    });
-  }
-
   async migrateStandaloneData() {
     const sourceDirectory = path.join(app.getPath('appData'), STANDALONE_DATA_DIRECTORY);
     if (!existsSync(sourceDirectory)) return [];
@@ -179,7 +169,6 @@ export class EmbeddedDolphinRuntime {
       });
       await this.syncAgent.initialize();
       if (this.settings.autoSync) this.syncAgent.start();
-      this.applyAutoStart();
       this.started = true;
       this.emitStatus();
       void this.syncAgent.runOnce();
