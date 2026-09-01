@@ -208,14 +208,20 @@ export async function createEmbeddedDolphinRuntime(options = {}) {
   return runtime;
 }
 
-export async function validateEmbeddedDolphinPackage() {
+export async function validateEmbeddedDolphinPackage({ enrollmentRequired = true } = {}) {
   const enrollmentFile = path.join(app.getAppPath(), 'workstation', 'generated', 'enrollment-token.json');
   const excelReader = app.isPackaged
     ? path.join(process.resourcesPath, 'workstation', 'excel-reader.ps1')
     : path.join(app.getAppPath(), 'dolphin-agent', 'adapters', 'excel-reader.ps1');
-  const value = JSON.parse(await fs.readFile(enrollmentFile, 'utf8'));
-  const enrollmentToken = String(value?.enrollmentToken || '').trim();
-  if (!/^[a-f0-9]{64}$/.test(enrollmentToken)) throw new Error('Invalid embedded Dolphin enrollment token.');
+  let enrollmentReady = false;
+  try {
+    const value = JSON.parse(await fs.readFile(enrollmentFile, 'utf8'));
+    const enrollmentToken = String(value?.enrollmentToken || '').trim();
+    enrollmentReady = /^[a-f0-9]{64}$/.test(enrollmentToken);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (enrollmentRequired && !enrollmentReady) throw new Error('Invalid embedded Dolphin enrollment token.');
   await fs.access(excelReader);
-  return { ok: true, enrollmentReady: true, excelReaderReady: true };
+  return { ok: true, enrollmentReady, excelReaderReady: true };
 }

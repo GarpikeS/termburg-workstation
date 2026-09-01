@@ -18,7 +18,8 @@
     "dolphin:test": "node --test dolphin-agent/core/redemption-extractor.test.mjs dolphin-agent/core/source-api-client.test.mjs dolphin-agent/core/sync-agent.test.mjs dolphin-agent/core/server-client.test.mjs",
     "workstation:desktop": "npm --prefix frontend run build && electron desktop/main.mjs --workstation",
     "workstation:exe": "node scripts/build-workstation-zero-config.mjs",
-    "workstation:test": "node --test workstation/migration.test.mjs workstation/status.test.mjs"
+    "workstation:update-exe": "node scripts/build-workstation-update.mjs",
+    "workstation:test": "node --test workstation/github-updater.test.mjs workstation/migration.test.mjs workstation/status.test.mjs"
   },
   "devDependencies": {
     "electron": "43.3.0",

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const testFiles = [
+  'workstation/github-updater.test.mjs',
   'workstation/migration.test.mjs',
   'workstation/status.test.mjs',
   'dolphin-agent/core/redemption-extractor.test.mjs',

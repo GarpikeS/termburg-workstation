@@ -3,6 +3,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, Menu, session, shell, Tray } from 'electron';
 import { checkForPortableUpdate } from './github-updater.mjs';
 import { startScheduleService } from '../server/schedule-service.mjs';
+import { checkForWorkstationUpdate, launchWorkstationInstaller } from '../workstation/github-updater.mjs';
 import { dolphinStatusLabel } from '../workstation/status.mjs';
 
 const APP_NAME = 'Термбург Расписание';
@@ -40,6 +41,9 @@ let quitting = false;
 let backgroundNoticeShown = false;
 let dolphinRuntime = null;
 let dolphinStatus = {};
+let pendingWorkstationUpdate = null;
+let workstationUpdateCheckRunning = false;
+let workstationUpdateInstalling = false;
 
 app.setName(DISPLAY_NAME);
 app.setAppUserModelId(APP_ID);
@@ -113,6 +117,92 @@ async function runDolphinNow() {
   }
 }
 
+async function confirmWorkstationUpdate() {
+  if (!pendingWorkstationUpdate || workstationUpdateInstalling) return;
+  const options = {
+    type: 'info',
+    title: 'Обновление Термбург Рабочее место',
+    message: `Доступна версия ${pendingWorkstationUpdate.version}`,
+    detail: 'Программа закроется, установит проверенное обновление и сохранит расписание и настройки Dolphin.',
+    buttons: ['Обновить сейчас', 'Позже'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  };
+  const result = mainWindow
+    ? await dialog.showMessageBox(mainWindow, options)
+    : await dialog.showMessageBox(options);
+  if (result.response !== 0) return;
+  try {
+    workstationUpdateInstalling = true;
+    logger.info('Launching Workstation update', {
+      fromVersion: app.getVersion(),
+      toVersion: pendingWorkstationUpdate.version,
+      targetFile: pendingWorkstationUpdate.targetFile,
+    });
+    launchWorkstationInstaller({ installerPath: pendingWorkstationUpdate.targetFile });
+    app.quit();
+  } catch (error) {
+    workstationUpdateInstalling = false;
+    logger.error('Workstation update launch failed', error);
+    dialog.showErrorBox('Не удалось установить обновление', serializeLogValue(error));
+  }
+}
+
+async function checkWorkstationUpdates({ prompt = false, announceCurrent = false } = {}) {
+  if (!WORKSTATION_MODE || !app.isPackaged || process.argv.includes('--no-update')) return;
+  if (workstationUpdateCheckRunning) return;
+  if (pendingWorkstationUpdate) {
+    if (prompt) await confirmWorkstationUpdate();
+    return;
+  }
+  workstationUpdateCheckRunning = true;
+  try {
+    const update = await checkForWorkstationUpdate({
+      currentVersion: app.getVersion(),
+      updateDirectory: path.join(app.getPath('userData'), 'updates'),
+      logger,
+    });
+    if (update.updateReady) {
+      pendingWorkstationUpdate = update;
+      logger.info('Workstation update is ready', { version: update.version, targetFile: update.targetFile });
+      Menu.setApplicationMenu(buildApplicationMenu());
+      refreshTrayMenu();
+      if (prompt) await confirmWorkstationUpdate();
+    } else if (announceCurrent && update.reason === 'current-version') {
+      const options = {
+        type: 'info',
+        title: 'Обновления',
+        message: 'Установлена актуальная версия',
+        detail: `Термбург Рабочее место ${app.getVersion()}`,
+        buttons: ['Хорошо'],
+      };
+      if (mainWindow) await dialog.showMessageBox(mainWindow, options);
+      else await dialog.showMessageBox(options);
+    } else if (announceCurrent) {
+      dialog.showErrorBox('Не удалось проверить обновления', 'GitHub не вернул проверенный установщик. Повторите позже.');
+    }
+  } catch (error) {
+    logger.error('Workstation update check failed', error);
+    if (announceCurrent) dialog.showErrorBox('Не удалось проверить обновления', 'Проверьте интернет-соединение и повторите позже.');
+  } finally {
+    workstationUpdateCheckRunning = false;
+  }
+}
+
+function workstationUpdateMenuTemplate() {
+  if (!WORKSTATION_MODE) return [];
+  return [{
+    label: 'Программа',
+    submenu: [
+      { label: `Версия ${app.getVersion()}`, enabled: false },
+      pendingWorkstationUpdate
+        ? { label: `Установить обновление ${pendingWorkstationUpdate.version}`, click: () => void confirmWorkstationUpdate() }
+        : { label: 'Проверить обновления', click: () => void checkWorkstationUpdates({ prompt: true, announceCurrent: true }) },
+    ],
+  }];
+}
+
 function dolphinMenuTemplate() {
   if (!WORKSTATION_MODE) return [];
   return [{
@@ -147,6 +237,7 @@ function buildApplicationMenu() {
       ],
     },
     ...dolphinMenuTemplate(),
+    ...workstationUpdateMenuTemplate(),
     {
       label: 'Вид',
       submenu: [
@@ -252,6 +343,9 @@ function refreshTrayMenu() {
       { label: 'Открыть журнал Dolphin', click: () => {
         if (dolphinRuntime) void shell.openPath(dolphinRuntime.dataDirectory());
       } },
+      pendingWorkstationUpdate
+        ? { label: `Установить обновление ${pendingWorkstationUpdate.version}`, click: () => void confirmWorkstationUpdate() }
+        : { label: 'Проверить обновления', click: () => void checkWorkstationUpdates({ prompt: true, announceCurrent: true }) },
     ] : []),
     { type: 'separator' },
     { label: WORKSTATION_MODE ? 'Выход' : 'Выход и остановить ТВ-сервер', click: () => app.quit() },
@@ -346,7 +440,9 @@ async function startDesktop() {
     let dolphinPackage = null;
     if (WORKSTATION_MODE && process.argv.includes('--validate-dolphin-package')) {
       const { validateEmbeddedDolphinPackage } = await import('../workstation/dolphin-runtime.mjs');
-      dolphinPackage = await validateEmbeddedDolphinPackage();
+      dolphinPackage = await validateEmbeddedDolphinPackage({
+        enrollmentRequired: !process.argv.includes('--expect-no-enrollment'),
+      });
     }
     writeFileSync(smokeTestOutput, `${JSON.stringify({
       ok: true,
@@ -361,10 +457,14 @@ async function startDesktop() {
   }
   createMainWindow();
   createTray();
+  if (WORKSTATION_MODE && app.isPackaged && !process.argv.includes('--no-update')) {
+    void checkWorkstationUpdates({ prompt: !process.argv.includes(BACKGROUND_FLAG) });
+  }
 }
 
 app.on('second-instance', () => {
   showMainWindow();
+  if (WORKSTATION_MODE) void checkWorkstationUpdates({ prompt: true });
 });
 
 app.on('activate', () => {

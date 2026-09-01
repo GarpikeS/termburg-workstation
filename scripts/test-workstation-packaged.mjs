@@ -6,7 +6,11 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const unpackedDirectory = path.join(repoRoot, 'release', 'workstation', 'win-unpacked');
+const unpackedArgument = process.argv.find(argument => argument.startsWith('--unpacked-directory='));
+const unpackedDirectory = unpackedArgument
+  ? path.resolve(unpackedArgument.slice('--unpacked-directory='.length))
+  : path.join(repoRoot, 'release', 'workstation', 'win-unpacked');
+const enrollmentExpected = !process.argv.includes('--without-enrollment');
 
 async function freePort() {
   const server = net.createServer();
@@ -48,6 +52,7 @@ try {
     '--no-update',
     '--skip-dolphin',
     '--validate-dolphin-package',
+    ...(enrollmentExpected ? [] : ['--expect-no-enrollment']),
     `--schedule-port=${port}`,
     `--user-data-dir=${userDataPath}`,
     `--smoke-test-output=${outputPath}`,
@@ -57,7 +62,7 @@ try {
   if (result.ok !== true
     || result.mode !== 'workstation'
     || result.dolphinSkipped !== true
-    || result.dolphinPackage?.enrollmentReady !== true
+    || result.dolphinPackage?.enrollmentReady !== enrollmentExpected
     || result.dolphinPackage?.excelReaderReady !== true
     || result.port !== port) {
     throw new Error(`Unexpected packaged Workstation result: ${JSON.stringify(result)}`);
