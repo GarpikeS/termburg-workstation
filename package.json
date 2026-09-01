@@ -19,7 +19,7 @@
     "workstation:desktop": "npm --prefix frontend run build && electron desktop/main.mjs --workstation",
     "workstation:exe": "node scripts/build-workstation-zero-config.mjs",
     "workstation:update-exe": "node scripts/build-workstation-update.mjs",
-    "workstation:test": "node --test workstation/autostart.test.mjs workstation/github-updater.test.mjs workstation/migration.test.mjs workstation/status.test.mjs"
+    "workstation:test": "node scripts/run-workstation-tests.mjs"
   },
   "devDependencies": {
     "electron": "43.3.0",

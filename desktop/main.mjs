@@ -6,6 +6,7 @@ import { startScheduleService } from '../server/schedule-service.mjs';
 import { applyWorkstationAutoStart, WORKSTATION_BACKGROUND_FLAG } from '../workstation/autostart.mjs';
 import { checkForWorkstationUpdate, launchWorkstationInstaller } from '../workstation/github-updater.mjs';
 import { dolphinStatusLabel } from '../workstation/status.mjs';
+import { applyEmbeddedSiteSyncDefaults } from '../workstation/site-sync-bootstrap.mjs';
 
 const APP_NAME = 'Термбург Расписание';
 const WORKSTATION_MARKER = path.join(app.getAppPath(), 'workstation', 'mode.json');
@@ -429,10 +430,15 @@ async function startDesktop() {
   const dataFile = path.join(userData, 'schedule.json');
   const siteSyncFile = path.join(userData, 'site-sync.json');
   const authFile = path.join(userData, 'schedule-auth.json');
+  const embeddedSiteSyncFile = path.join(appRoot, 'workstation', 'generated', 'site-sync-defaults.json');
 
   if (!existsSync(path.join(staticRoot, 'index.html')) || !existsSync(seedFile)) {
     throw new Error('В сборке отсутствуют файлы интерфейса или начального расписания.');
   }
+
+  const siteSyncBootstrap = WORKSTATION_MODE
+    ? await applyEmbeddedSiteSyncDefaults({ embeddedFile: embeddedSiteSyncFile, targetFile: siteSyncFile, logger })
+    : { embedded: false, applied: false, locationIds: [] };
 
   scheduleService = await startScheduleService({
     staticRoot,
@@ -465,6 +471,7 @@ async function startDesktop() {
       port: scheduleService.port,
       dolphinSkipped: process.argv.includes('--skip-dolphin'),
       dolphinPackage,
+      siteSyncBootstrap,
       version: app.getVersion(),
     }, null, 2)}\n`, 'utf8');
     app.quit();

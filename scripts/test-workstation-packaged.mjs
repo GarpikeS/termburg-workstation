@@ -64,8 +64,15 @@ try {
     || result.dolphinSkipped !== true
     || result.dolphinPackage?.enrollmentReady !== enrollmentExpected
     || result.dolphinPackage?.excelReaderReady !== true
+    || result.siteSyncBootstrap?.embedded !== true
+    || result.siteSyncBootstrap?.applied !== true
+    || result.siteSyncBootstrap?.locationIds?.length !== 2
     || result.port !== port) {
     throw new Error(`Unexpected packaged Workstation result: ${JSON.stringify(result)}`);
+  }
+  const storedSiteSync = JSON.parse(await fs.readFile(path.join(userDataPath, 'site-sync.json'), 'utf8'));
+  if (!storedSiteSync.locations?.['1']?.token || !storedSiteSync.locations?.['2']?.token) {
+    throw new Error('Packaged Workstation did not provision both schedule site tokens.');
   }
   console.log(`Packaged Workstation smoke test passed on port ${port}.`);
 } finally {

@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { stageWorkstationSiteSyncSecrets } from './workstation-site-sync-secrets.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
@@ -30,6 +31,8 @@ try {
     encoding: 'utf8',
     mode: 0o600,
   });
+  const siteSync = await stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory });
+  console.log(`Embedded schedule connections prepared for locations: ${siteSync.locationIds.join(', ')}.`);
 
   run(process.env.ComSpec || 'cmd.exe', [
     '/d',

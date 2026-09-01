@@ -7,6 +7,7 @@ const testFiles = [
   'workstation/autostart.test.mjs',
   'workstation/github-updater.test.mjs',
   'workstation/migration.test.mjs',
+  'workstation/site-sync-bootstrap.test.mjs',
   'workstation/status.test.mjs',
   'dolphin-agent/core/redemption-extractor.test.mjs',
   'dolphin-agent/core/source-api-client.test.mjs',
