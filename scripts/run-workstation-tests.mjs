@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const testFiles = [
   'workstation/autostart.test.mjs',
+  'workstation/device-profile.test.mjs',
   'workstation/github-updater.test.mjs',
   'workstation/migration.test.mjs',
   'workstation/site-sync-bootstrap.test.mjs',

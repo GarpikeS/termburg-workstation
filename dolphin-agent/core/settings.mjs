@@ -3,7 +3,14 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { DEFAULT_ENDPOINT } from './constants.mjs';
 
-export function defaultSettings(downloadsFolder) {
+function deviceIdPrefix(value) {
+  const prefix = String(value || 'dolphin').trim().toLowerCase();
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(prefix) && prefix.length <= 40
+    ? prefix
+    : 'dolphin';
+}
+
+export function defaultSettings(downloadsFolder, options = {}) {
   return {
     version: 1,
     endpoint: DEFAULT_ENDPOINT,
@@ -11,7 +18,7 @@ export function defaultSettings(downloadsFolder) {
     timezoneOffset: '+03:00',
     autoSync: true,
     autoStart: true,
-    deviceId: `dolphin-${randomUUID()}`,
+    deviceId: `${deviceIdPrefix(options.deviceIdPrefix)}-${randomUUID()}`,
   };
 }
 

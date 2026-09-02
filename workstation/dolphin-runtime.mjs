@@ -9,6 +9,7 @@ import { DolphinSourceApiClient } from '../dolphin-agent/core/source-api-client.
 import { defaultSettings, loadSettings, saveSettings } from '../dolphin-agent/core/settings.mjs';
 import { createAgentStateStore } from '../dolphin-agent/core/state-store.mjs';
 import { DolphinSyncAgent } from '../dolphin-agent/core/sync-agent.mjs';
+import { readEmbeddedDeviceProfile } from './device-profile.mjs';
 import { migrateMissingFiles } from './migration.mjs';
 
 const STANDALONE_DATA_DIRECTORY = 'Термбург · Dolphin';
@@ -96,6 +97,11 @@ export class EmbeddedDolphinRuntime {
     }
   }
 
+  async readDeviceProfile() {
+    const filePath = path.join(app.getAppPath(), 'workstation', 'generated', 'device-profile.json');
+    return readEmbeddedDeviceProfile(filePath);
+  }
+
   async ensureEnrollment() {
     const existing = await this.readProtectedSecret(this.paths.credentials);
     if (existing) {
@@ -151,7 +157,10 @@ export class EmbeddedDolphinRuntime {
       mkdirSync(this.dataRoot, { recursive: true });
       await this.migrateStandaloneData();
       this.fileLogger = createFileLogger(this.paths.log, { console: !app.isPackaged });
-      this.defaults = defaultSettings(app.getPath('downloads'));
+      const deviceProfile = await this.readDeviceProfile();
+      this.defaults = defaultSettings(app.getPath('downloads'), {
+        deviceIdPrefix: deviceProfile?.deviceIdPrefix,
+      });
       this.settings = await loadSettings(this.paths.settings, this.defaults);
       this.settings = await saveSettings(this.paths.settings, this.settings, this.defaults);
       await this.ensureEnrollment().catch(error => this.fileLogger.warn('Automatic enrollment pending', String(error?.message || error)));
@@ -199,6 +208,7 @@ export async function createEmbeddedDolphinRuntime(options = {}) {
 
 export async function validateEmbeddedDolphinPackage({ enrollmentRequired = true } = {}) {
   const enrollmentFile = path.join(app.getAppPath(), 'workstation', 'generated', 'enrollment-token.json');
+  const profileFile = path.join(app.getAppPath(), 'workstation', 'generated', 'device-profile.json');
   const excelReader = app.isPackaged
     ? path.join(process.resourcesPath, 'workstation', 'excel-reader.ps1')
     : path.join(app.getAppPath(), 'dolphin-agent', 'adapters', 'excel-reader.ps1');
@@ -211,6 +221,7 @@ export async function validateEmbeddedDolphinPackage({ enrollmentRequired = true
     if (error?.code !== 'ENOENT') throw error;
   }
   if (enrollmentRequired && !enrollmentReady) throw new Error('Invalid embedded Dolphin enrollment token.');
+  const deviceProfile = await readEmbeddedDeviceProfile(profileFile);
   await fs.access(excelReader);
-  return { ok: true, enrollmentReady, excelReaderReady: true };
+  return { ok: true, enrollmentReady, excelReaderReady: true, deviceProfile };
 }

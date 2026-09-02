@@ -98,10 +98,11 @@ source_config_response=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 \
   https://tbgame.ru/api/integrations/dolphin/source-config)
 node -e '
   const value = JSON.parse(process.argv[1]);
+  const expectedApply = process.argv[2] === "1";
   if (!value.enabled || !Array.isArray(value.baseUrls) || value.baseUrls.length === 0) process.exit(1);
   if (typeof value.apiKey !== "string" || value.apiKey.length < 16) process.exit(1);
-  if (value.applyRedemptions !== false) process.exit(1);
-' "$source_config_response"
+  if (value.applyRedemptions !== expectedApply) process.exit(1);
+' "$source_config_response" "${DOLPHIN_SOURCE_APPLY:-0}"
 
 bad_enrollment_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
   -H 'Content-Type: application/json' \
@@ -151,7 +152,7 @@ done
 
 echo "Dolphin connector deployed. Backup: $backup_dir"
 echo "Health: authorized OK, unauthenticated 401, dry-run idempotency OK"
-echo "Local API config: authorized OK, diagnostic mode confirmed"
+echo "Local API config: authorized OK, configured redemption mode preserved"
 echo "Enrollment: wrong token rejected, one-time token left unused"
 echo "Redemption journal lines: $journal_after"
 printf 'Backups kept: %s\n' "${backups[*]}"

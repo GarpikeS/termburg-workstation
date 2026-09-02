@@ -366,7 +366,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-enrollment-'));
   const enrollmentToken = 'installer-one-time-token-for-test-only';
   const deviceToken = 'a'.repeat(64);
-  const deviceId = 'dolphin-moscow-cashier-0001';
+  const deviceId = 'dolphin-zelenogorsk-11111111-2222-4333-8444-555555555555';
   const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
   const service = await startFeedbackService({
     dataFile: path.join(tempRoot, 'feedback.jsonl'),
@@ -374,11 +374,21 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     redemptionsDataFile: path.join(tempRoot, 'reward-redemptions.jsonl'),
     dolphinConnectorsDataFile: connectorsDataFile,
     dolphinEnrollmentTokenHash: sha256(enrollmentToken),
+    dolphinConnectorToken: 'legacy-dolphin-connector-token-for-test-only',
     dolphinSourceApiKey: 'dolphin-source-api-key-for-test-only',
     dolphinSourceApiUrls: 'http://127.0.0.1:60888,http://10.10.0.250:60888,http://85.202.234.197:60888',
     dolphinSourceApiPath: '/api/v1/barcodes/game',
     dolphinSourceApply: false,
     dolphinSourceLookbackDays: 2,
+    dolphinSourceProfiles: {
+      zelenogorsk: {
+        apiKey: 'zelenogorsk-source-api-key-for-test-only',
+        apiUrls: 'http://127.0.0.1:61888',
+        apiPath: '/api/v1/barcodes/game',
+        apply: true,
+        lookbackDays: 3,
+      },
+    },
     host: '127.0.0.1',
     port: 0,
     logger: { info() {}, error() {} },
@@ -428,6 +438,19 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     });
     assert.equal(sourceConfig.status, 200);
     assert.deepEqual(await sourceConfig.json(), {
+      enabled: true,
+      baseUrls: ['http://127.0.0.1:61888'],
+      apiKey: 'zelenogorsk-source-api-key-for-test-only',
+      apiPath: '/api/v1/barcodes/game',
+      lookbackDays: 3,
+      applyRedemptions: true,
+    });
+
+    const legacySourceConfig = await fetch(`${origin}/api/integrations/dolphin/source-config`, {
+      headers: { Authorization: 'Bearer legacy-dolphin-connector-token-for-test-only' },
+    });
+    assert.equal(legacySourceConfig.status, 200);
+    assert.deepEqual(await legacySourceConfig.json(), {
       enabled: true,
       baseUrls: ['http://127.0.0.1:60888', 'http://10.10.0.250:60888'],
       apiKey: 'dolphin-source-api-key-for-test-only',

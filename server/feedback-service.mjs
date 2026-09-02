@@ -233,6 +233,7 @@ export function createFeedbackService(options) {
     dolphinSourceApiPath = '/api/v1/barcodes/game',
     dolphinSourceApply = false,
     dolphinSourceLookbackDays = 2,
+    dolphinSourceProfiles = {},
     connectorRateLimit = DEFAULT_CONNECTOR_RATE_LIMIT,
     connectorRateWindowMs = DEFAULT_CONNECTOR_RATE_WINDOW_MS,
     enrollmentRateLimit = DEFAULT_ENROLLMENT_RATE_LIMIT,
@@ -248,12 +249,33 @@ export function createFeedbackService(options) {
   const resolvedDolphinConnectorsDataFile = path.resolve(
     dolphinConnectorsDataFile || path.join(path.dirname(dataFile), 'dolphin-connectors.json'),
   );
-  const resolvedDolphinSourceUrls = normalizeDolphinSourceUrls(dolphinSourceApiUrls);
-  const resolvedDolphinSourceKey = text(dolphinSourceApiKey, 256);
-  const resolvedDolphinSourcePath = /^\/[a-zA-Z0-9/_-]{1,180}$/.test(dolphinSourceApiPath)
-    ? dolphinSourceApiPath
-    : '/api/v1/barcodes/game';
-  const resolvedDolphinLookbackDays = Math.min(7, Math.max(0, Number(dolphinSourceLookbackDays) || 0));
+  function normalizeSourceProfile(value = {}) {
+    const apiPath = /^\/[a-zA-Z0-9/_-]{1,180}$/.test(value.apiPath)
+      ? value.apiPath
+      : '/api/v1/barcodes/game';
+    return {
+      urls: normalizeDolphinSourceUrls(value.apiUrls),
+      apiKey: text(value.apiKey, 256),
+      apiPath,
+      lookbackDays: Math.min(7, Math.max(0, Number(value.lookbackDays) || 0)),
+      apply: value.apply === true,
+    };
+  }
+  const defaultDolphinSourceProfile = normalizeSourceProfile({
+    apiUrls: dolphinSourceApiUrls,
+    apiKey: dolphinSourceApiKey,
+    apiPath: dolphinSourceApiPath,
+    lookbackDays: dolphinSourceLookbackDays,
+    apply: dolphinSourceApply,
+  });
+  const resolvedDolphinSourceProfiles = Object.fromEntries(Object.entries(dolphinSourceProfiles || {})
+    .filter(([locationCode]) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(locationCode))
+    .map(([locationCode, profile]) => [locationCode, normalizeSourceProfile(profile)]));
+
+  function sourceProfileForDevice(deviceId) {
+    const match = String(deviceId || '').match(/^dolphin-([a-z0-9]+(?:-[a-z0-9]+)*)-[0-9a-f-]{36}$/);
+    return (match && resolvedDolphinSourceProfiles[match[1]]) || defaultDolphinSourceProfile;
+  }
   const accountService = createAccountService({
     databaseFile: accountOptions.databaseFile || path.join(path.dirname(resolvedDataFile), 'accounts.sqlite'),
     claimsDataFile: resolvedClaimsDataFile,
@@ -747,14 +769,15 @@ export function createFeedbackService(options) {
     }
     const identity = await requireDolphinConnector(request, response);
     if (!identity.authorized) return;
-    const enabled = resolvedDolphinSourceUrls.length > 0 && resolvedDolphinSourceKey.length >= 16;
+    const profile = sourceProfileForDevice(identity.deviceId);
+    const enabled = profile.urls.length > 0 && profile.apiKey.length >= 16;
     sendJson(response, 200, {
       enabled,
-      baseUrls: enabled ? resolvedDolphinSourceUrls : [],
-      apiKey: enabled ? resolvedDolphinSourceKey : '',
-      apiPath: resolvedDolphinSourcePath,
-      lookbackDays: resolvedDolphinLookbackDays,
-      applyRedemptions: enabled && dolphinSourceApply === true,
+      baseUrls: enabled ? profile.urls : [],
+      apiKey: enabled ? profile.apiKey : '',
+      apiPath: profile.apiPath,
+      lookbackDays: profile.lookbackDays,
+      applyRedemptions: enabled && profile.apply,
     });
   }
 

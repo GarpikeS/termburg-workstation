@@ -11,6 +11,8 @@ const unpackedDirectory = unpackedArgument
   ? path.resolve(unpackedArgument.slice('--unpacked-directory='.length))
   : path.join(repoRoot, 'release', 'workstation', 'win-unpacked');
 const enrollmentExpected = !process.argv.includes('--without-enrollment');
+const expectedLocationArgument = process.argv.find(argument => argument.startsWith('--expected-location='));
+const expectedLocation = expectedLocationArgument?.slice('--expected-location='.length) || '';
 
 async function freePort() {
   const server = net.createServer();
@@ -64,6 +66,8 @@ try {
     || result.dolphinSkipped !== true
     || result.dolphinPackage?.enrollmentReady !== enrollmentExpected
     || result.dolphinPackage?.excelReaderReady !== true
+    || (expectedLocation && result.dolphinPackage?.deviceProfile?.locationCode !== expectedLocation)
+    || (!expectedLocation && result.dolphinPackage?.deviceProfile !== null)
     || result.siteSyncBootstrap?.embedded !== true
     || result.siteSyncBootstrap?.applied !== true
     || result.siteSyncBootstrap?.locationIds?.length !== 2

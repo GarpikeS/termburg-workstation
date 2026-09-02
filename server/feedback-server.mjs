@@ -21,6 +21,15 @@ const service = await startFeedbackService({
   dolphinSourceApiPath: process.env.DOLPHIN_SOURCE_API_PATH || '/api/v1/barcodes/game',
   dolphinSourceApply: process.env.DOLPHIN_SOURCE_APPLY === '1',
   dolphinSourceLookbackDays: Number(process.env.DOLPHIN_SOURCE_LOOKBACK_DAYS || 2),
+  dolphinSourceProfiles: {
+    zelenogorsk: {
+      apiKey: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_KEY || '',
+      apiUrls: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_URLS || '',
+      apiPath: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_PATH || '/api/v1/barcodes/game',
+      apply: process.env.DOLPHIN_ZELENOGORSK_SOURCE_APPLY === '1',
+      lookbackDays: Number(process.env.DOLPHIN_ZELENOGORSK_SOURCE_LOOKBACK_DAYS || 2),
+    },
+  },
   dolphinConnectorsDataFile: process.env.DOLPHIN_CONNECTORS_DATA_FILE || path.join(
     path.dirname(process.env.REWARD_REDEMPTIONS_DATA_FILE || path.join(repoRoot, 'server', 'data', 'reward-redemptions.jsonl')),
     'dolphin-connectors.json',
