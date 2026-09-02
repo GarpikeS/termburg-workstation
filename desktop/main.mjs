@@ -441,9 +441,9 @@ async function startDesktop() {
   const siteSyncBootstrap = WORKSTATION_MODE
     ? await applyEmbeddedSiteSyncDefaults({ embeddedFile: embeddedSiteSyncFile, targetFile: siteSyncFile, logger })
     : { embedded: false, applied: false, locationIds: [] };
-  if (WORKSTATION_MODE) {
-    await applyEmbeddedScheduleAuthDefaults({ embeddedFile: embeddedAuthFile, targetFile: authFile, logger });
-  }
+  const authBootstrap = WORKSTATION_MODE
+    ? await applyEmbeddedScheduleAuthDefaults({ embeddedFile: embeddedAuthFile, targetFile: authFile, logger })
+    : { embedded: false, applied: false };
 
   scheduleService = await startScheduleService({
     staticRoot,
@@ -477,6 +477,7 @@ async function startDesktop() {
       dolphinSkipped: process.argv.includes('--skip-dolphin'),
       dolphinPackage,
       siteSyncBootstrap,
+      authBootstrap,
       version: app.getVersion(),
     }, null, 2)}\n`, 'utf8');
     app.quit();

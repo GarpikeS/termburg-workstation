@@ -68,6 +68,9 @@ try {
     || result.dolphinPackage?.excelReaderReady !== true
     || (expectedLocation && result.dolphinPackage?.deviceProfile?.locationCode !== expectedLocation)
     || (!expectedLocation && result.dolphinPackage?.deviceProfile !== null)
+    || (expectedLocation && result.authBootstrap?.applied !== true)
+    || (expectedLocation && !result.authBootstrap?.managedAccounts?.includes(expectedLocation))
+    || (!expectedLocation && result.authBootstrap?.embedded !== false)
     || result.siteSyncBootstrap?.embedded !== true
     || result.siteSyncBootstrap?.applied !== true
     || result.siteSyncBootstrap?.locationIds?.length !== 2

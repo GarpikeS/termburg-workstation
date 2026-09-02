@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stageWorkstationSiteSyncSecrets } from './workstation-site-sync-secrets.mjs';
+import { stageWorkstationScheduleAuth } from './workstation-schedule-auth-secrets.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
@@ -99,6 +100,13 @@ try {
   }
   const siteSync = await stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory });
   console.log(`Embedded schedule connections prepared for locations: ${siteSync.locationIds.join(', ')}.`);
+  if (locationProfile) {
+    const scheduleAuth = await stageWorkstationScheduleAuth({
+      generatedDirectory,
+      managedAccount: locationProfile.locationCode,
+    });
+    console.log(`Embedded schedule access prepared for: ${scheduleAuth.managedAccounts.join(', ')}.`);
+  }
 
   run(process.env.ComSpec || 'cmd.exe', [
     '/d',
