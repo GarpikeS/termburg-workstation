@@ -144,7 +144,8 @@ export function extractRedemptionsFromApi(value, options = {}) {
     const code = codeFromEntries(entries);
     if (!code) continue;
     rowsWithCode += 1;
-    const redeemedAt = timeFromEntries(entries, timezoneOffset);
+    const redeemedAt = timeFromEntries(entries, timezoneOffset)
+      || (options.allowBarcodeOnly === true ? String(options.fallbackRedeemedAt || '') : '');
     if (!redeemedAt) {
       skippedWithoutEntryTime += 1;
       continue;
@@ -223,7 +224,11 @@ export class DolphinSourceApiClient {
           } catch {
             throw new DolphinSourceApiError('Локальный API Dolphin вернул не JSON.');
           }
-          const extracted = extractRedemptionsFromApi(parsed, { timezoneOffset: options.timezoneOffset });
+          const extracted = extractRedemptionsFromApi(parsed, {
+            timezoneOffset: options.timezoneOffset,
+            allowBarcodeOnly: this.config.applyRedemptions,
+            fallbackRedeemedAt: options.fallbackRedeemedAt,
+          });
           return {
             ...extracted,
             baseUrl,

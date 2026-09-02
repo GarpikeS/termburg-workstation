@@ -79,3 +79,13 @@ test('ignores a ticket code without an actual entry time', () => {
   assert.equal(result.rows.length, 0);
   assert.equal(result.stats.skippedWithoutEntryTime, 1);
 });
+
+test('active API mode treats a returned barcode as an activation', () => {
+  const result = extractRedemptionsFromApi([{ barcode: 'TB-EE185628' }], {
+    allowBarcodeOnly: true,
+    fallbackRedeemedAt: '2026-09-02T20:55:00.000Z',
+  });
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].code, 'TB-EE185628');
+  assert.equal(result.rows[0].redeemedAt, '2026-09-02T20:55:00.000Z');
+});

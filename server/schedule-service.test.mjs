@@ -217,13 +217,13 @@ test('schedule editor login protects writes and scopes users to one complex', as
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        moscowPassword: 'Moscow-pass-2026',
-        zelenogorskPassword: 'Green-pass-2026',
+        moscowPassword: '301123!',
+        zelenogorskPassword: '301123!',
       }),
     });
     assert.equal(setup.status, 201);
     const storedAuth = await readFile(authFile, 'utf8');
-    assert.doesNotMatch(storedAuth, /Moscow-pass-2026|Green-pass-2026/);
+    assert.doesNotMatch(storedAuth, /301123!/);
     assert.match(storedAuth, /"scrypt"/);
 
     const wrongLogin = await fetch(`${origin}/api/auth/login`, {
@@ -236,7 +236,7 @@ test('schedule editor login protects writes and scopes users to one complex', as
     const login = await fetch(`${origin}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'moscow', password: 'Moscow-pass-2026' }),
+      body: JSON.stringify({ username: 'moscow', password: '301123!' }),
     });
     assert.equal(login.status, 200);
     const cookie = login.headers.get('set-cookie')?.split(';')[0];

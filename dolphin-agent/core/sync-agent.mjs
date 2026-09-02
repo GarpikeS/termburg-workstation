@@ -212,6 +212,7 @@ export class DolphinSyncAgent {
       const result = await this.sourceClientFactory(sourceConfig).fetchRedemptions({
         dateBegin: sourceDateBegin(attemptedAt, config.timezoneOffset, sourceConfig.lookbackDays),
         timezoneOffset: config.timezoneOffset,
+        fallbackRedeemedAt: new Date(attemptedAt).toISOString(),
       });
       const applyRedemptions = result.applyRedemptions === true;
       let newlyQueued = 0;

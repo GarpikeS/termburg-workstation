@@ -149,7 +149,7 @@ export function ScheduleAdminAccessScreen() {
               onPassword={setZelenogorskPassword}
               onConfirmation={setZelenogorskConfirm}
             />
-            <p className="schedule-access__hint">Не меньше 10 символов. Пароли хранятся только в защищённом виде и не показываются в программе.</p>
+            <p className="schedule-access__hint">Не меньше 7 символов. Пароли хранятся только в защищённом виде и не показываются в программе.</p>
             {error && <p className="schedule-access__error" role="alert">{error}</p>}
             <button type="submit" className="schedule-access__submit" disabled={busy}><ShieldCheck size={19} />{busy ? 'Сохраняем…' : 'Сохранить доступ'}</button>
           </form>
@@ -170,8 +170,8 @@ function PasswordPair({ title, username, password, confirmation, onPassword, onC
   return (
     <fieldset className="schedule-access__password-pair">
       <legend><Building2 size={18} /><span><strong>{title}</strong><small>Логин: {username}</small></span></legend>
-      <label className="schedule-access__field"><span>Новый пароль</span><div><LockKeyhole size={18} /><input type="password" minLength={10} maxLength={128} value={password} onChange={event => onPassword(event.target.value)} autoComplete="new-password" required /></div></label>
-      <label className="schedule-access__field"><span>Повторите пароль</span><div><LockKeyhole size={18} /><input type="password" minLength={10} maxLength={128} value={confirmation} onChange={event => onConfirmation(event.target.value)} autoComplete="new-password" required /></div></label>
+      <label className="schedule-access__field"><span>Новый пароль</span><div><LockKeyhole size={18} /><input type="password" minLength={7} maxLength={128} value={password} onChange={event => onPassword(event.target.value)} autoComplete="new-password" required /></div></label>
+      <label className="schedule-access__field"><span>Повторите пароль</span><div><LockKeyhole size={18} /><input type="password" minLength={7} maxLength={128} value={confirmation} onChange={event => onConfirmation(event.target.value)} autoComplete="new-password" required /></div></label>
     </fieldset>
   );
 }

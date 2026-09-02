@@ -7,6 +7,7 @@ import { applyWorkstationAutoStart, WORKSTATION_BACKGROUND_FLAG } from '../works
 import { checkForWorkstationUpdate, launchWorkstationInstaller } from '../workstation/github-updater.mjs';
 import { dolphinStatusLabel } from '../workstation/status.mjs';
 import { applyEmbeddedSiteSyncDefaults } from '../workstation/site-sync-bootstrap.mjs';
+import { applyEmbeddedScheduleAuthDefaults } from '../workstation/schedule-auth-bootstrap.mjs';
 
 const APP_NAME = 'Термбург Расписание';
 const WORKSTATION_MARKER = path.join(app.getAppPath(), 'workstation', 'mode.json');
@@ -431,6 +432,7 @@ async function startDesktop() {
   const siteSyncFile = path.join(userData, 'site-sync.json');
   const authFile = path.join(userData, 'schedule-auth.json');
   const embeddedSiteSyncFile = path.join(appRoot, 'workstation', 'generated', 'site-sync-defaults.json');
+  const embeddedAuthFile = path.join(appRoot, 'workstation', 'generated', 'schedule-auth-defaults.json');
 
   if (!existsSync(path.join(staticRoot, 'index.html')) || !existsSync(seedFile)) {
     throw new Error('В сборке отсутствуют файлы интерфейса или начального расписания.');
@@ -439,6 +441,9 @@ async function startDesktop() {
   const siteSyncBootstrap = WORKSTATION_MODE
     ? await applyEmbeddedSiteSyncDefaults({ embeddedFile: embeddedSiteSyncFile, targetFile: siteSyncFile, logger })
     : { embedded: false, applied: false, locationIds: [] };
+  if (WORKSTATION_MODE) {
+    await applyEmbeddedScheduleAuthDefaults({ embeddedFile: embeddedAuthFile, targetFile: authFile, logger });
+  }
 
   scheduleService = await startScheduleService({
     staticRoot,
