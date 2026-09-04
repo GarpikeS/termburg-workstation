@@ -14,9 +14,131 @@
     <meta property="og:description" content="Играй в мире термального комплекса Термбург! Собирай фишки, ухаживай за питомцами и получай бонусы." />
     <meta property="og:image" content="/images/og.webp" />
     <title>Термбург — Термлины</title>
+    <style data-startup-watchdog-styles>
+      #startup-help[hidden] { display: none !important; }
+      #startup-help {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+        padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+        color: #fffaf0;
+        background: rgba(19, 16, 31, 0.88);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      #startup-help-card {
+        position: relative;
+        width: min(100%, 22.5rem);
+        box-sizing: border-box;
+        padding: 1.5rem;
+        border: 1px solid rgba(227, 202, 121, 0.55);
+        border-radius: 1.25rem;
+        background: linear-gradient(145deg, #30283f, #211b30);
+        box-shadow: 0 1.25rem 4rem rgba(0, 0, 0, 0.48), 0 0 0 rgba(227, 202, 121, 0);
+        text-align: center;
+        animation: startup-help-pulse 1.8s ease-in-out 2;
+      }
+      #startup-help-icon {
+        display: grid;
+        width: 3rem;
+        height: 3rem;
+        margin: 0 auto 0.85rem;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(227, 202, 121, 0.14);
+        font-size: 1.45rem;
+      }
+      #startup-help-title {
+        margin: 0;
+        color: #ffe58b;
+        font-size: 1.35rem;
+        line-height: 1.2;
+      }
+      #startup-help-description {
+        margin: 0.8rem 0 0;
+        color: rgba(255, 250, 240, 0.86);
+        font-size: 0.98rem;
+        line-height: 1.5;
+      }
+      #startup-help-hint {
+        margin: 0.55rem 0 0;
+        color: rgba(255, 250, 240, 0.58);
+        font-size: 0.78rem;
+        line-height: 1.4;
+      }
+      #startup-help-actions {
+        display: grid;
+        gap: 0.65rem;
+        margin-top: 1.2rem;
+      }
+      #startup-help button {
+        min-height: 2.75rem;
+        border: 1px solid rgba(227, 202, 121, 0.3);
+        border-radius: 0.8rem;
+        color: #fffaf0;
+        background: rgba(255, 255, 255, 0.07);
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      #startup-help-retry {
+        border-color: #e3ca79;
+        color: #211b30;
+        background: #e3ca79;
+      }
+      #startup-help-close {
+        position: absolute;
+        top: 0.45rem;
+        right: 0.45rem;
+        width: 2.75rem;
+        min-height: 2.75rem;
+        padding: 0;
+        border-color: transparent;
+        background: transparent;
+        font-size: 1.4rem;
+      }
+      #startup-help button:focus-visible {
+        outline: 3px solid #fff3bd;
+        outline-offset: 2px;
+      }
+      @keyframes startup-help-pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 1.25rem 4rem rgba(0, 0, 0, 0.48), 0 0 0 rgba(227, 202, 121, 0); }
+        50% { transform: scale(1.012); box-shadow: 0 1.25rem 4rem rgba(0, 0, 0, 0.48), 0 0 1.5rem rgba(227, 202, 121, 0.28); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #startup-help-card { animation: none; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div
+      id="startup-help"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="startup-help-title"
+      aria-describedby="startup-help-description startup-help-hint"
+      hidden
+    >
+      <div id="startup-help-card">
+        <button id="startup-help-close" type="button" aria-label="Закрыть подсказку">×</button>
+        <div id="startup-help-icon" aria-hidden="true">⚠️</div>
+        <h1 id="startup-help-title">Игра загружается дольше обычного</h1>
+        <p id="startup-help-description">
+          Если у вас включён VPN, отключите его — он может мешать загрузке игры.
+        </p>
+        <p id="startup-help-hint">Затем попробуйте снова. Если VPN уже выключен, проверьте интернет.</p>
+        <div id="startup-help-actions">
+          <button id="startup-help-retry" type="button">Попробовать снова</button>
+          <button id="startup-help-wait" type="button">Продолжить ждать</button>
+        </div>
+      </div>
+    </div>
+    <script src="/startup-watchdog-v1.js" async data-startup-watchdog></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

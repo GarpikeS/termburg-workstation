@@ -47,7 +47,10 @@ function AppLayout() {
       style={{ '--app-viewport-height': `${viewport.height}px` } as CSSProperties}
     >
       <div className={`phone-frame bg-dark-surface relative flex flex-col ${standaloneSchedule ? 'phone-frame--standalone' : ''}`}>
-        <main className={`phone-screen ${withBottomNav ? 'phone-screen--with-nav' : ''} ${standaloneSchedule ? 'phone-screen--standalone' : ''}`}>
+        <main
+          className={`phone-screen ${withBottomNav ? 'phone-screen--with-nav' : ''} ${standaloneSchedule ? 'phone-screen--standalone' : ''}`}
+          data-termburg-route-key={location.key}
+        >
           <Suspense fallback={<div className="route-loading" role="status" aria-label="Загрузка страницы" />}>
             <Routes>
               <Route path="/" element={<SplashScreen />} />
@@ -79,6 +82,7 @@ function AppLayout() {
               <Route path="/schedule" element={<Navigate to="/schedule/admin" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            {location.pathname !== '/' && <span data-termburg-app-ready={location.key} hidden />}
           </Suspense>
           <BottomNav />
         </main>

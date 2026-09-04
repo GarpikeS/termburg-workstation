@@ -9,6 +9,7 @@
     "build": "npm --prefix frontend ci && npm --prefix frontend run build",
     "dev": "npm --prefix frontend run dev",
     "lint": "npm --prefix frontend run lint",
+    "frontend:test": "node --test frontend/tests/official-schedule.test.mjs frontend/tests/startup-watchdog.test.mjs",
     "schedule:start": "node server/schedule-server.mjs",
     "schedule:desktop": "npm --prefix frontend run build && electron desktop/main.mjs",
     "schedule:exe": "npm --prefix frontend run build && electron-builder --win portable --x64 && node scripts/write-schedule-release-checksum.mjs && node scripts/cleanup-schedule-releases.mjs",

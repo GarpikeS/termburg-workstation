@@ -17,6 +17,7 @@ const testFiles = [
   'dolphin-agent/core/sync-agent.test.mjs',
   'dolphin-agent/core/server-client.test.mjs',
   'frontend/tests/official-schedule.test.mjs',
+  'frontend/tests/startup-watchdog.test.mjs',
   'server/schedule-service.test.mjs',
   'server/wordpress-schedule.test.mjs',
 ];
