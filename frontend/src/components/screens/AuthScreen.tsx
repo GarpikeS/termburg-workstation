@@ -41,6 +41,7 @@ export function AuthScreen() {
   const { progress } = useGameContext();
   const { status, session, config, login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
+  const [identifier, setIdentifier] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [passwordRepeat, setPasswordRepeat] = useState('');
@@ -84,12 +85,13 @@ export function AuthScreen() {
     setPending(true);
     setError('');
     try {
-      const common = { phone, password, deviceId: getDeviceId() };
       if (mode === 'login') {
-        await login(common);
+        await login({ identifier, password, deviceId: getDeviceId() });
       } else {
         await register({
-          ...common,
+          phone,
+          password,
+          deviceId: getDeviceId(),
           name: name.trim(),
           city,
           consent: true,
@@ -142,7 +144,7 @@ export function AuthScreen() {
             <form className="pt-5" onSubmit={submit}>
               <div className="mb-5">
                 <h2 className="font-heading text-lg text-white">{mode === 'login' ? 'С возвращением' : 'Создать профиль'}</h2>
-                <p className="mt-1 text-sm leading-relaxed text-white/50">{mode === 'login' ? 'Введите телефон и пароль.' : 'Сохраним игровой прогресс в вашем профиле.'}</p>
+                <p className="mt-1 text-sm leading-relaxed text-white/50">{mode === 'login' ? 'Введите телефон или логин и пароль.' : 'Сохраним игровой прогресс в вашем профиле.'}</p>
               </div>
 
               {mode === 'register' && (
@@ -152,10 +154,17 @@ export function AuthScreen() {
                 </label>
               )}
 
-              <label className="mb-4 block">
-                <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><Phone size={14} /> Телефон</span>
-                <input value={displayPhone(phone)} onChange={event => setPhone(digitsOnly(event.target.value))} inputMode="tel" autoComplete="tel" required className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="+7 (900) 000-00-00" />
-              </label>
+              {mode === 'login' ? (
+                <label className="mb-4 block">
+                  <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><UserRound size={14} /> Телефон или логин</span>
+                  <input value={identifier} onChange={event => setIdentifier(event.target.value.slice(0, 40))} autoComplete="username" autoCapitalize="none" spellCheck={false} required className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="Телефон или логин" />
+                </label>
+              ) : (
+                <label className="mb-4 block">
+                  <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><Phone size={14} /> Телефон</span>
+                  <input value={displayPhone(phone)} onChange={event => setPhone(digitsOnly(event.target.value))} inputMode="tel" autoComplete="tel" required className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="+7 (900) 000-00-00" />
+                </label>
+              )}
 
               <label className="mb-4 block">
                 <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><LockKeyhole size={14} /> Пароль</span>
@@ -204,7 +213,7 @@ export function AuthScreen() {
         {!unavailable && (
           <div className="mx-auto mt-4 flex max-w-sm items-start gap-3 rounded-2xl border border-green-400/15 bg-green-400/[0.06] p-3 text-xs leading-relaxed text-white/50">
             <ShieldCheck className="mt-0.5 shrink-0 text-green-400" size={18} />
-            Вход работает по номеру телефона и паролю. Пароль хранится в защищённом виде.
+            Вход работает по номеру телефона или выданному логину и паролю. Пароль хранится в защищённом виде.
           </div>
         )}
       </main>

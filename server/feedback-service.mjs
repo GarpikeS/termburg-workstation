@@ -956,6 +956,7 @@ export function createFeedbackService(options) {
   server.keepAliveTimeout = 5_000;
 
   async function listen() {
+    await accountService.ready;
     await new Promise((resolve, reject) => {
       const onError = error => reject(error);
       server.once('error', onError);

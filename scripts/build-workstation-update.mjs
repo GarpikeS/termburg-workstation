@@ -3,7 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stageWorkstationSiteSyncSecrets } from './workstation-site-sync-secrets.mjs';
-import { stageWorkstationTestScheduleAuth } from './workstation-schedule-auth-secrets.mjs';
+import { stageWorkstationScheduleAuthCleanup } from './workstation-schedule-auth-secrets.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
@@ -56,14 +56,8 @@ try {
   runNodeScript('scripts/run-workstation-tests.mjs');
   const siteSync = await stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory });
   console.log(`Embedded schedule connections prepared for locations: ${siteSync.locationIds.join(', ')}.`);
-  const testProfilePassword = String(process.env.TERMBURG_TEST_PROFILE_PASSWORD || '');
-  if (testProfilePassword) {
-    const scheduleAuth = await stageWorkstationTestScheduleAuth({
-      generatedDirectory,
-      password: testProfilePassword,
-    });
-    console.log(`Embedded hidden schedule access prepared for: ${scheduleAuth.managedAccounts.join(', ')}.`);
-  }
+  const authCleanup = await stageWorkstationScheduleAuthCleanup({ generatedDirectory });
+  console.log(`Obsolete schedule access removal prepared for: ${authCleanup.removedAccounts.join(', ')}.`);
   run(process.env.ComSpec || 'cmd.exe', [
     '/d',
     '/s',
@@ -73,7 +67,7 @@ try {
   runNodeScript('scripts/test-workstation-packaged.mjs', [
     `--unpacked-directory=${unpackedDirectory}`,
     '--without-enrollment',
-    ...(testProfilePassword ? ['--expected-auth-account=testtb'] : []),
+    '--expected-removed-auth-account=testtb',
   ]);
   runNodeScript('scripts/write-workstation-update-checksum.mjs');
   await cleanupUpdateArtifacts();

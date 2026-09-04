@@ -7,6 +7,8 @@ export interface PlayerAccount {
   name: string;
   city: 'Москва' | 'Зеленогорск';
   phoneMasked: string;
+  login: string | null;
+  isTest: boolean;
   createdAt: number;
   lastLoginAt: number;
 }
@@ -24,12 +26,15 @@ export interface AccountSession {
 }
 
 export interface LoginPayload {
-  phone: string;
+  identifier: string;
   password: string;
   deviceId: string;
 }
 
-export interface RegisterPayload extends LoginPayload {
+export interface RegisterPayload {
+  phone: string;
+  password: string;
+  deviceId: string;
   name: string;
   city: 'Москва' | 'Зеленогорск';
   consent: true;

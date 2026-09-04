@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, KeyRound, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
+import { Building2, KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
 import '@/features/schedule/schedule.css';
 import { ScheduleLoading, ScheduleWaves, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
 import {
@@ -8,20 +8,17 @@ import {
   logoutScheduleEditor,
   setupScheduleAccess,
 } from '@/features/schedule/scheduleRepository';
-import type { ScheduleAuthStatus } from '@/features/schedule/types';
+import type { ScheduleAuthStatus, ScheduleEditorUser } from '@/features/schedule/types';
 import { ScheduleAdminScreen } from './ScheduleAdminScreen';
 
-type ComplexUsername = 'moscow' | 'zelenogorsk';
-
-const ACCOUNT_LABELS: Record<ComplexUsername, string> = {
+const ACCOUNT_LABELS: Record<ScheduleEditorUser['username'], string> = {
   moscow: 'Термбург Москва',
   zelenogorsk: 'Термбург Зеленогорск',
 };
 
 export function ScheduleAdminAccessScreen() {
   const [status, setStatus] = useState<ScheduleAuthStatus | null>(null);
-  const [username, setUsername] = useState<string>('moscow');
-  const [manualLogin, setManualLogin] = useState(false);
+  const [username, setUsername] = useState<ScheduleEditorUser['username']>('moscow');
   const [password, setPassword] = useState('');
   const [moscowPassword, setMoscowPassword] = useState('');
   const [moscowConfirm, setMoscowConfirm] = useState('');
@@ -111,47 +108,28 @@ export function ScheduleAdminAccessScreen() {
           <span><ShieldCheck size={24} /></span>
           <div>
             <small>{status?.configured ? 'Защищённый вход' : 'Первый запуск'}</small>
-            <h2>{status?.configured ? (manualLogin ? 'Введите логин' : 'Выберите комплекс') : 'Создайте два пароля'}</h2>
+            <h2>{status?.configured ? 'Выберите комплекс' : 'Создайте два пароля'}</h2>
           </div>
         </div>
 
         {status?.configured ? (
           <form onSubmit={login} className="schedule-access__form">
-            {manualLogin ? (
-              <label className="schedule-access__field">
-                <span>Логин</span>
-                <div><UserRound size={19} /><input value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} required autoFocus /></div>
-              </label>
-            ) : (
-              <fieldset className="schedule-access__accounts">
-                <legend>Логин</legend>
-                {(Object.keys(ACCOUNT_LABELS) as ComplexUsername[]).map(account => (
-                  <label key={account} className={username === account ? 'is-selected' : ''}>
-                    <input type="radio" name="schedule-username" value={account} checked={username === account} onChange={() => setUsername(account)} />
-                    <Building2 size={20} />
-                    <span><strong>{ACCOUNT_LABELS[account]}</strong><small>Логин: {account}</small></span>
-                  </label>
-                ))}
-              </fieldset>
-            )}
+            <fieldset className="schedule-access__accounts">
+              <legend>Логин</legend>
+              {(Object.keys(ACCOUNT_LABELS) as ScheduleEditorUser['username'][]).map(account => (
+                <label key={account} className={username === account ? 'is-selected' : ''}>
+                  <input type="radio" name="schedule-username" value={account} checked={username === account} onChange={() => setUsername(account)} />
+                  <Building2 size={20} />
+                  <span><strong>{ACCOUNT_LABELS[account]}</strong><small>Логин: {account}</small></span>
+                </label>
+              ))}
+            </fieldset>
             <label className="schedule-access__field">
               <span>Пароль</span>
-              <div><LockKeyhole size={19} /><input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required autoFocus={!manualLogin} /></div>
+              <div><LockKeyhole size={19} /><input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required autoFocus /></div>
             </label>
             {error && <p className="schedule-access__error" role="alert">{error}</p>}
             <button type="submit" className="schedule-access__submit" disabled={busy || !password}><KeyRound size={19} />{busy ? 'Проверяем…' : 'Войти в редактор'}</button>
-            <button
-              type="button"
-              className="schedule-access__manual-login"
-              onClick={() => {
-                setManualLogin(current => !current);
-                setUsername(manualLogin ? 'moscow' : '');
-                setPassword('');
-                setError('');
-              }}
-            >
-              {manualLogin ? 'Вернуться к выбору комплекса' : 'Войти с другим логином'}
-            </button>
           </form>
         ) : (
           <form onSubmit={setup} className="schedule-access__form schedule-access__form--setup">
@@ -183,7 +161,7 @@ export function ScheduleAdminAccessScreen() {
 
 function PasswordPair({ title, username, password, confirmation, onPassword, onConfirmation }: {
   title: string;
-  username: ComplexUsername;
+  username: ScheduleEditorUser['username'];
   password: string;
   confirmation: string;
   onPassword: (value: string) => void;

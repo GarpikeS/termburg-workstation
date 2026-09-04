@@ -1,13 +1,23 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
-import { promisify } from 'node:util';
 
 export const EMBEDDED_SCHEDULE_AUTH_FILE = 'schedule-auth-defaults.json';
-const scrypt = promisify(scryptCallback);
-const TEST_ACCOUNT_USERNAME = 'testtb';
-const TEST_ACCOUNT_LOCATION_ID = '1';
-const SCRYPT_OPTIONS = { N: 2 ** 17, r: 8, p: 1, maxmem: 192 * 1024 * 1024, keyLength: 64 };
+
+export async function stageWorkstationScheduleAuthCleanup({ generatedDirectory, removedAccounts = ['testtb'] }) {
+  const safeRemovedAccounts = [...new Set(removedAccounts.filter(username => username === 'testtb'))];
+  if (safeRemovedAccounts.length === 0) throw new Error('No supported schedule accounts selected for removal.');
+  const embedded = {
+    schemaVersion: 1,
+    updatedAt: new Date().toISOString(),
+    managedAccounts: [],
+    removeAccounts: safeRemovedAccounts,
+    accounts: {},
+  };
+  await fs.mkdir(generatedDirectory, { recursive: true });
+  const outputFile = path.join(generatedDirectory, EMBEDDED_SCHEDULE_AUTH_FILE);
+  await fs.writeFile(outputFile, `${JSON.stringify(embedded)}\n`, { encoding: 'utf8', mode: 0o600 });
+  return { outputFile, removedAccounts: safeRemovedAccounts };
+}
 
 function candidateFiles() {
   const explicit = String(process.env.TERMBURG_SCHEDULE_AUTH_FILE || '').trim();
@@ -57,37 +67,6 @@ export async function stageWorkstationScheduleAuth({ generatedDirectory, managed
     updatedAt: source.updatedAt || new Date().toISOString(),
     managedAccounts: [managedAccount],
     accounts: source.accounts,
-  };
-  await fs.mkdir(generatedDirectory, { recursive: true });
-  const outputFile = path.join(generatedDirectory, EMBEDDED_SCHEDULE_AUTH_FILE);
-  await fs.writeFile(outputFile, `${JSON.stringify(embedded)}\n`, { encoding: 'utf8', mode: 0o600 });
-  return { outputFile, managedAccounts: embedded.managedAccounts };
-}
-
-export async function stageWorkstationTestScheduleAuth({ generatedDirectory, password }) {
-  if (typeof password !== 'string' || password.length === 0 || password.length > 128) {
-    throw new Error('Test schedule profile password is missing or invalid.');
-  }
-  const salt = randomBytes(16).toString('base64');
-  const derived = await scrypt(password, Buffer.from(salt, 'base64'), SCRYPT_OPTIONS.keyLength, {
-    N: SCRYPT_OPTIONS.N,
-    r: SCRYPT_OPTIONS.r,
-    p: SCRYPT_OPTIONS.p,
-    maxmem: SCRYPT_OPTIONS.maxmem,
-  });
-  const embedded = {
-    schemaVersion: 1,
-    updatedAt: new Date().toISOString(),
-    managedAccounts: [TEST_ACCOUNT_USERNAME],
-    accounts: {
-      [TEST_ACCOUNT_USERNAME]: {
-        username: TEST_ACCOUNT_USERNAME,
-        locationId: TEST_ACCOUNT_LOCATION_ID,
-        salt,
-        hash: Buffer.from(derived).toString('base64'),
-        scrypt: SCRYPT_OPTIONS,
-      },
-    },
   };
   await fs.mkdir(generatedDirectory, { recursive: true });
   const outputFile = path.join(generatedDirectory, EMBEDDED_SCHEDULE_AUTH_FILE);

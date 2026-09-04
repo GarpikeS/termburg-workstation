@@ -3,9 +3,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const unpackedArgument = process.argv.find(argument => argument.startsWith('--unpacked-directory='));
@@ -15,10 +13,8 @@ const unpackedDirectory = unpackedArgument
 const enrollmentExpected = !process.argv.includes('--without-enrollment');
 const expectedLocationArgument = process.argv.find(argument => argument.startsWith('--expected-location='));
 const expectedLocation = expectedLocationArgument?.slice('--expected-location='.length) || '';
-const expectedAuthAccountArgument = process.argv.find(argument => argument.startsWith('--expected-auth-account='));
-const expectedAuthAccount = expectedAuthAccountArgument?.slice('--expected-auth-account='.length) || '';
-const expectedAuthPassword = String(process.env.TERMBURG_TEST_PROFILE_PASSWORD || '');
-const scrypt = promisify(scryptCallback);
+const expectedRemovedAuthArgument = process.argv.find(argument => argument.startsWith('--expected-removed-auth-account='));
+const expectedRemovedAuthAccount = expectedRemovedAuthArgument?.slice('--expected-removed-auth-account='.length) || '';
 
 function smokeAccount(username, locationId) {
   return {
@@ -65,13 +61,14 @@ try {
   if (!executable) throw new Error('Packaged Workstation executable was not found.');
   const outputPath = path.join(temporaryDirectory, 'result.json');
   const userDataPath = path.join(temporaryDirectory, 'user-data');
-  if (expectedAuthAccount) {
+  if (expectedRemovedAuthAccount) {
     await fs.mkdir(userDataPath, { recursive: true });
     await fs.writeFile(path.join(userDataPath, 'schedule-auth.json'), JSON.stringify({
       schemaVersion: 1,
       accounts: {
         moscow: smokeAccount('moscow', '1'),
         zelenogorsk: smokeAccount('zelenogorsk', '2'),
+        [expectedRemovedAuthAccount]: smokeAccount(expectedRemovedAuthAccount, ''),
       },
     }), 'utf8');
   }
@@ -96,10 +93,10 @@ try {
     || (!expectedLocation && result.dolphinPackage?.deviceProfile !== null)
     || (expectedLocation && result.authBootstrap?.applied !== true)
     || (expectedLocation && !result.authBootstrap?.managedAccounts?.includes(expectedLocation))
-    || (expectedAuthAccount && result.authBootstrap?.embedded !== true)
-    || (expectedAuthAccount && result.authBootstrap?.applied !== true)
-    || (expectedAuthAccount && !result.authBootstrap?.managedAccounts?.includes(expectedAuthAccount))
-    || (!expectedLocation && !expectedAuthAccount && result.authBootstrap?.embedded !== false)
+    || (expectedRemovedAuthAccount && result.authBootstrap?.embedded !== true)
+    || (expectedRemovedAuthAccount && result.authBootstrap?.applied !== true)
+    || (expectedRemovedAuthAccount && !result.authBootstrap?.removedAccounts?.includes(expectedRemovedAuthAccount))
+    || (!expectedLocation && !expectedRemovedAuthAccount && result.authBootstrap?.embedded !== false)
     || result.siteSyncBootstrap?.embedded !== true
     || result.siteSyncBootstrap?.applied !== true
     || result.siteSyncBootstrap?.locationIds?.length !== 2
@@ -110,28 +107,12 @@ try {
   if (!storedSiteSync.locations?.['1']?.token || !storedSiteSync.locations?.['2']?.token) {
     throw new Error('Packaged Workstation did not provision both schedule site tokens.');
   }
-  if (expectedAuthAccount) {
+  if (expectedRemovedAuthAccount) {
     const storedAuth = JSON.parse(await fs.readFile(path.join(userDataPath, 'schedule-auth.json'), 'utf8'));
-    const account = storedAuth.accounts?.[expectedAuthAccount];
-    if (!account || storedAuth.accounts.moscow.hash !== 'smoke-moscow-hash') {
-      throw new Error('Packaged Workstation did not merge the hidden schedule account safely.');
-    }
-    if (expectedAuthPassword) {
-      const actual = await scrypt(
-        expectedAuthPassword,
-        Buffer.from(account.salt, 'base64'),
-        account.scrypt.keyLength,
-        {
-          N: account.scrypt.N,
-          r: account.scrypt.r,
-          p: account.scrypt.p,
-          maxmem: account.scrypt.maxmem,
-        },
-      );
-      const expected = Buffer.from(account.hash, 'base64');
-      if (expected.length !== actual.length || !timingSafeEqual(expected, Buffer.from(actual))) {
-        throw new Error('Packaged Workstation hidden schedule account password does not match.');
-      }
+    if (storedAuth.accounts?.[expectedRemovedAuthAccount]
+      || storedAuth.accounts?.moscow?.hash !== 'smoke-moscow-hash'
+      || storedAuth.accounts?.zelenogorsk?.hash !== 'smoke-zelenogorsk-hash') {
+      throw new Error('Packaged Workstation did not remove only the obsolete schedule account.');
     }
   }
   console.log(`Packaged Workstation smoke test passed on port ${port}.`);

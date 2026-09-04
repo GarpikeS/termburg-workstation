@@ -160,7 +160,7 @@ export function ProfileScreen() {
                 ) : authStatus === 'authenticated' && authSession ? (
                   <>
                     <h2 id="account-status-title" className="mt-1 truncate text-xl font-bold leading-tight text-white">{authSession.account.name}</h2>
-                    <p className="mt-1 text-xs leading-relaxed text-white/60">{authSession.account.phoneMasked}<br />г. {authSession.account.city}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/60">{authSession.account.login ? `Логин: ${authSession.account.login}` : authSession.account.phoneMasked}<br />г. {authSession.account.city}</p>
                     <p className={cn('mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-semibold', syncState === 'error' ? 'border-red-300/25 bg-red-400/10 text-red-200' : 'border-green-300/20 bg-green-400/10 text-green-200')} aria-live="polite">
                       {syncState === 'error' ? <CloudAlert size={13} /> : <Cloud size={13} className={syncState === 'saving' ? 'animate-pulse' : ''} />}
                       <span className="truncate">

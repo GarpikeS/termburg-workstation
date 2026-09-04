@@ -225,7 +225,7 @@ export function setupScheduleAccess(input: { moscowPassword: string; zelenogorsk
   }, 15000);
 }
 
-export function loginScheduleEditor(input: { username: string; password: string }) {
+export function loginScheduleEditor(input: { username: ScheduleEditorUser['username']; password: string }) {
   return apiJson<{ authenticated: true; user: ScheduleEditorUser }>('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=utf-8' },

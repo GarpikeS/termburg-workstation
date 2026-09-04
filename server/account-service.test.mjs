@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { startFeedbackService } from './feedback-service.mjs';
 
@@ -43,7 +44,7 @@ function baseProgress(date = '2026-08-15') {
   };
 }
 
-async function startTestService(tempRoot, now) {
+async function startTestService(tempRoot, now, accountOptions = {}) {
   return startFeedbackService({
     dataFile: path.join(tempRoot, 'feedback.jsonl'),
     claimsDataFile: path.join(tempRoot, 'claims.jsonl'),
@@ -56,9 +57,52 @@ async function startTestService(tempRoot, now) {
       databaseFile: path.join(tempRoot, 'accounts.sqlite'),
       authSecret: AUTH_SECRET,
       secureCookies: true,
+      ...accountOptions,
     },
   });
 }
+
+test('hidden game profile logs in by name and remains separate from schedule access', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-test-profile-'));
+  const databaseFile = path.join(tempRoot, 'accounts.sqlite');
+  const service = await startTestService(tempRoot, () => Date.UTC(2026, 8, 4, 7, 0, 0), {
+    testProfile: {
+      username: 'qaHidden',
+      password: '4321',
+      name: 'Тестовый профиль',
+      city: 'Москва',
+    },
+  });
+  const origin = `http://127.0.0.1:${service.port}`;
+
+  try {
+    const login = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        identifier: 'QAHIDDEN',
+        password: '4321',
+        deviceId: 'device-hidden-profile-0001',
+      }),
+    });
+    assert.equal(login.status, 200);
+    const body = await login.json();
+    assert.equal(body.account.login, 'qaHidden');
+    assert.equal(body.account.phoneMasked, '');
+    assert.equal(body.account.isTest, true);
+    assert.equal(body.account.name, 'Тестовый профиль');
+
+    const database = new DatabaseSync(databaseFile, { readOnly: true });
+    const stored = database.prepare('SELECT login_name, is_test, password_hash FROM users WHERE login_name = ?').get('qaHidden');
+    database.close();
+    assert.equal(stored.login_name, 'qaHidden');
+    assert.equal(stored.is_test, 1);
+    assert.notEqual(stored.password_hash, '4321');
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
 
 test('phone/password registration, session, progress sync, logout and cross-device login work', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-'));
@@ -189,7 +233,7 @@ test('password auth validates origin and rate-limits repeated failures without r
         body: JSON.stringify({ phone: '89990000001', password: 'definitely-wrong', deviceId }),
       });
       assert.equal(invalid.status, 401);
-      assert.equal((await invalid.json()).error, 'Неверный телефон или пароль.');
+      assert.equal((await invalid.json()).error, 'Неверный телефон, логин или пароль.');
     }
 
     const locked = await fetch(`${origin}/api/auth/login`, {
@@ -214,7 +258,7 @@ test('password auth validates origin and rate-limits repeated failures without r
       body: JSON.stringify({ phone: '89990000002', password: 'definitely-wrong', deviceId }),
     });
     assert.equal(unknown.status, 401);
-    assert.equal((await unknown.json()).error, 'Неверный телефон или пароль.');
+    assert.equal((await unknown.json()).error, 'Неверный телефон, логин или пароль.');
   } finally {
     await service.close();
     await rm(tempRoot, { recursive: true, force: true });

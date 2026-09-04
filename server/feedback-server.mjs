@@ -39,6 +39,12 @@ const service = await startFeedbackService({
     authSecret: process.env.AUTH_SECRET || (production ? '' : 'termburg-local-development-secret-change-me'),
     secureCookies: production && process.env.AUTH_COOKIE_SECURE !== '0',
     legacyCoinCap: Number(process.env.AUTH_LEGACY_COIN_CAP || 600),
+    testProfile: process.env.TEST_PROFILE_USERNAME || process.env.TEST_PROFILE_PASSWORD ? {
+      username: process.env.TEST_PROFILE_USERNAME || '',
+      password: process.env.TEST_PROFILE_PASSWORD || '',
+      name: process.env.TEST_PROFILE_NAME || 'Тестовый профиль',
+      city: process.env.TEST_PROFILE_CITY || 'Москва',
+    } : null,
   },
 });
 

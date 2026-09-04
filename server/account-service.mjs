@@ -109,6 +109,11 @@ function normalizePhone(value) {
   return '';
 }
 
+function normalizeLogin(value) {
+  const login = cleanText(value, 40).toLowerCase();
+  return /^[a-z][a-z0-9_-]{2,31}$/.test(login) ? login : '';
+}
+
 function maskedPhone(last4) {
   return `+7 ••• •••-${String(last4).slice(0, 2)}-${String(last4).slice(2)}`;
 }
@@ -405,7 +410,9 @@ function publicAccount(row) {
     id: row.id,
     name: row.name,
     city: row.city,
-    phoneMasked: maskedPhone(row.phone_last4),
+    phoneMasked: row.login_name ? '' : maskedPhone(row.phone_last4),
+    login: row.login_name || null,
+    isTest: Boolean(row.is_test),
     createdAt: Number(row.created_at),
     lastLoginAt: Number(row.last_login_at),
   };
@@ -421,6 +428,8 @@ function initializeDatabase(database) {
       id TEXT PRIMARY KEY,
       phone_hash TEXT NOT NULL UNIQUE,
       phone_last4 TEXT NOT NULL,
+      login_name TEXT,
+      is_test INTEGER NOT NULL DEFAULT 0 CHECK(is_test IN (0, 1)),
       name TEXT NOT NULL,
       city TEXT NOT NULL,
       consent_version TEXT NOT NULL,
@@ -464,9 +473,12 @@ function initializeDatabase(database) {
     ['password_salt', 'TEXT'],
     ['password_hash', 'TEXT'],
     ['password_changed_at', 'INTEGER'],
+    ['login_name', 'TEXT'],
+    ['is_test', 'INTEGER NOT NULL DEFAULT 0'],
   ]) {
     if (!userColumns.has(name)) database.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
   }
+  database.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_login_name_idx ON users(login_name) WHERE login_name IS NOT NULL');
 
   // Password auth fully replaces the former one-time-code flow.
   database.exec('DROP TABLE IF EXISTS otp_challenges');
@@ -493,6 +505,7 @@ export function createAccountService(options) {
     authSecret = '',
     secureCookies = true,
     legacyCoinCap = DEFAULT_LEGACY_COIN_CAP,
+    testProfile = null,
     now = () => Date.now(),
     logger = console,
   } = options;
@@ -511,13 +524,67 @@ export function createAccountService(options) {
     userById: database.prepare('SELECT * FROM users WHERE id = ?'),
     sessionWithUser: database.prepare(`
       SELECT s.token_hash, s.user_id, s.device_hash, s.expires_at, s.last_seen_at,
-             u.id, u.phone_hash, u.phone_last4, u.name, u.city, u.progress_json,
+             u.id, u.phone_hash, u.phone_last4, u.login_name, u.is_test, u.name, u.city, u.progress_json,
              u.progress_revision, u.created_at, u.updated_at, u.last_login_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?
     `),
   };
+
+  const configuredTestUsername = cleanText(testProfile?.username, 40);
+  const normalizedTestUsername = normalizeLogin(configuredTestUsername);
+  const configuredTestPassword = typeof testProfile?.password === 'string' ? testProfile.password : '';
+  const hasAnyTestProfileSetting = Boolean(configuredTestUsername || configuredTestPassword);
+  if (hasAnyTestProfileSetting && (!authConfigured || !normalizedTestUsername || !configuredTestPassword || configuredTestPassword.length > PASSWORD_MAX_LENGTH)) {
+    throw new Error('Test profile configuration is incomplete or invalid.');
+  }
+
+  const ready = hasAnyTestProfileSetting ? (async () => {
+    const currentTime = now();
+    const identityHash = hmac(secret, `login:${normalizedTestUsername}`);
+    const passwordData = await passwordRecord(configuredTestPassword);
+    const existing = statements.userByPhone.get(identityHash);
+    if (existing) {
+      database.prepare(`
+        UPDATE users SET login_name = ?, is_test = 1, name = ?, city = ?,
+          password_salt = ?, password_hash = ?, password_changed_at = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        configuredTestUsername,
+        cleanText(testProfile?.name, 80) || 'Тестовый профиль',
+        CITIES.has(testProfile?.city) ? testProfile.city : 'Москва',
+        passwordData.salt,
+        passwordData.hash,
+        currentTime,
+        currentTime,
+        existing.id,
+      );
+      return;
+    }
+    database.prepare(`
+      INSERT INTO users (
+        id, phone_hash, phone_last4, login_name, is_test, name, city,
+        consent_version, consent_at, registration_device_hash, progress_json, progress_revision,
+        password_salt, password_hash, password_changed_at, created_at, updated_at, last_login_at
+      ) VALUES (?, ?, '', ?, 1, ?, ?, 'internal-test-profile', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(),
+      identityHash,
+      configuredTestUsername,
+      cleanText(testProfile?.name, 80) || 'Тестовый профиль',
+      CITIES.has(testProfile?.city) ? testProfile.city : 'Москва',
+      currentTime,
+      hmac(secret, `test-device:${normalizedTestUsername}`),
+      JSON.stringify(DEFAULT_PROGRESS),
+      passwordData.salt,
+      passwordData.hash,
+      currentTime,
+      currentTime,
+      currentTime,
+      currentTime,
+    );
+  })() : Promise.resolve();
 
   async function validClaims(phoneHash) {
     if (!claimsDataFile) return [];
@@ -752,16 +819,19 @@ export function createAccountService(options) {
     requireJson(request);
     requireAuthConfigured();
     const payload = await readJsonBody(request);
-    const phone = normalizePhone(payload.phone);
+    await ready;
+    const identifier = cleanText(payload.identifier ?? payload.phone, 40);
+    const phone = normalizePhone(identifier);
+    const login = phone ? '' : normalizeLogin(identifier);
     const password = payload.password;
     const deviceId = cleanText(payload.deviceId, 100);
-    if (!phone) throw new AccountHttpError(400, 'Укажите российский номер телефона.', { field: 'phone' });
+    if (!phone && !login) throw new AccountHttpError(400, 'Укажите телефон или логин.', { field: 'identifier' });
     validatePassword(password);
     validateDevice(deviceId);
 
     const currentTime = now();
     cleanup(currentTime);
-    const phoneHash = hmac(secret, `phone:${phone}`);
+    const phoneHash = hmac(secret, phone ? `phone:${phone}` : `login:${login}`);
     const ipHash = hmac(secret, `ip:${requestIp(request)}`);
     const deviceHash = hmac(secret, `device:${deviceId}`);
     checkLoginLimits(phoneHash, ipHash, currentTime);
@@ -776,7 +846,7 @@ export function createAccountService(options) {
     if (!valid) {
       database.prepare('INSERT INTO auth_attempts (phone_hash, ip_hash, success, created_at) VALUES (?, ?, 0, ?)')
         .run(phoneHash, ipHash, currentTime);
-      throw new AccountHttpError(401, 'Неверный телефон или пароль.', { code: 'INVALID_CREDENTIALS' });
+      throw new AccountHttpError(401, 'Неверный телефон, логин или пароль.', { code: 'INVALID_CREDENTIALS' });
     }
 
     database.prepare('DELETE FROM auth_attempts WHERE (phone_hash = ? OR ip_hash = ?) AND success = 0').run(phoneHash, ipHash);
@@ -876,6 +946,7 @@ export function createAccountService(options) {
   }
 
   return {
+    ready,
     handle,
     matches(pathname) {
       return pathname.startsWith('/api/auth/') || pathname === '/api/account/progress';
