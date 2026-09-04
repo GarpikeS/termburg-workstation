@@ -8,7 +8,7 @@ import { startFeedbackService } from './feedback-service.mjs';
 
 const ALLOWED_ORIGIN = 'https://tbgame.ru';
 const AUTH_SECRET = 'synthetic-test-secret-that-is-long-enough-for-account-authentication';
-const TEST_PASSWORD = 'test-only-passphrase';
+const TEST_PASSWORD = '4321';
 
 function authHeaders(extra = {}) {
   return { Origin: ALLOWED_ORIGIN, 'Content-Type': 'application/json', ...extra };
@@ -62,6 +62,58 @@ async function startTestService(tempRoot, now, accountOptions = {}) {
   });
 }
 
+test('existing accounts keep their city timezone when the timezone column is added', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-migration-'));
+  const databaseFile = path.join(tempRoot, 'accounts.sqlite');
+  const currentTime = Date.UTC(2026, 8, 4, 7, 0, 0);
+  const legacyDatabase = new DatabaseSync(databaseFile);
+  legacyDatabase.exec(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      phone_hash TEXT NOT NULL UNIQUE,
+      phone_last4 TEXT NOT NULL,
+      login_name TEXT,
+      is_test INTEGER NOT NULL DEFAULT 0 CHECK(is_test IN (0, 1)),
+      name TEXT NOT NULL,
+      city TEXT NOT NULL,
+      consent_version TEXT NOT NULL,
+      consent_at INTEGER NOT NULL,
+      registration_device_hash TEXT NOT NULL,
+      progress_json TEXT NOT NULL,
+      progress_revision INTEGER NOT NULL DEFAULT 1,
+      password_salt TEXT,
+      password_hash TEXT,
+      password_changed_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_login_at INTEGER NOT NULL
+    ) STRICT;
+  `);
+  legacyDatabase.prepare(`
+    INSERT INTO users (
+      id, phone_hash, phone_last4, is_test, name, city, consent_version, consent_at,
+      registration_device_hash, progress_json, progress_revision, created_at, updated_at, last_login_at
+    ) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+  `).run(
+    'legacy-user', 'legacy-phone-hash', '0000', 'Старый профиль', 'Зеленогорск',
+    'legacy-consent', currentTime, 'legacy-device-hash', JSON.stringify(baseProgress()),
+    currentTime, currentTime, currentTime,
+  );
+  legacyDatabase.close();
+
+  const service = await startTestService(tempRoot, () => currentTime);
+  try {
+    const migratedDatabase = new DatabaseSync(databaseFile, { readOnly: true });
+    const migrated = migratedDatabase.prepare('SELECT city, time_zone FROM users WHERE id = ?').get('legacy-user');
+    migratedDatabase.close();
+    assert.equal(migrated.city, 'Зеленогорск');
+    assert.equal(migrated.time_zone, 'Asia/Krasnoyarsk');
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('hidden game profile logs in by name and remains separate from schedule access', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-test-profile-'));
   const databaseFile = path.join(tempRoot, 'accounts.sqlite');
@@ -106,7 +158,7 @@ test('hidden game profile logs in by name and remains separate from schedule acc
 
 test('phone/password registration, session, progress sync, logout and cross-device login work', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-'));
-  let currentTime = Date.UTC(2026, 7, 15, 12, 0, 0);
+  let currentTime = Date.UTC(2026, 7, 15, 15, 0, 0);
   const service = await startTestService(tempRoot, () => currentTime);
   const origin = `http://127.0.0.1:${service.port}`;
   const firstDevice = 'device-account-test-0001';
@@ -114,7 +166,7 @@ test('phone/password registration, session, progress sync, logout and cross-devi
   try {
     const config = await fetch(`${origin}/api/auth/config`);
     assert.equal(config.status, 200);
-    assert.deepEqual(await config.json(), { available: true, method: 'password', passwordMinLength: 8 });
+    assert.deepEqual(await config.json(), { available: true, method: 'password', passwordMinLength: 4 });
 
     const register = await fetch(`${origin}/api/auth/register`, {
       method: 'POST',
@@ -123,11 +175,12 @@ test('phone/password registration, session, progress sync, logout and cross-devi
         phone: '8 999 123-45-67',
         password: TEST_PASSWORD,
         name: 'Анна',
-        city: 'Москва',
+        city: '  Владивосток  ',
+        timeZone: 'Asia/Vladivostok',
         consent: true,
         consentVersion: 'account-2026-08-15',
         deviceId: firstDevice,
-        progress: baseProgress(),
+        progress: baseProgress('2026-08-16'),
       }),
     });
     assert.equal(register.status, 201);
@@ -137,25 +190,33 @@ test('phone/password registration, session, progress sync, logout and cross-devi
     assert.match(String(register.headers.get('set-cookie')), /Secure/);
     const registered = await register.json();
     assert.equal(registered.account.name, 'Анна');
+    assert.equal(registered.account.city, 'Владивосток');
     assert.equal(registered.account.phoneMasked, '+7 ••• •••-45-67');
     assert.equal(registered.progress.currency, 181);
+    assert.equal(registered.progress.dailyGameRewards.date, '2026-08-16');
     assert.equal(JSON.stringify(registered).includes(TEST_PASSWORD), false);
+
+    const database = new DatabaseSync(path.join(tempRoot, 'accounts.sqlite'), { readOnly: true });
+    const storedAccount = database.prepare('SELECT city, time_zone FROM users WHERE id = ?').get(registered.account.id);
+    database.close();
+    assert.equal(storedAccount.city, 'Владивосток');
+    assert.equal(storedAccount.time_zone, 'Asia/Vladivostok');
 
     const duplicate = await fetch(`${origin}/api/auth/register`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
-        phone: '+79991234567', password: TEST_PASSWORD, name: 'Анна', city: 'Москва',
-        consent: true, consentVersion: 'account-2026-08-15', deviceId: firstDevice, progress: baseProgress(),
+        phone: '+79991234567', password: TEST_PASSWORD, name: 'Анна', city: 'Владивосток', timeZone: 'Asia/Vladivostok',
+        consent: true, consentVersion: 'account-2026-08-15', deviceId: firstDevice, progress: baseProgress('2026-08-16'),
       }),
     });
     assert.equal(duplicate.status, 409);
 
     const me = await fetch(`${origin}/api/auth/me`, { headers: { Cookie: firstSessionCookie } });
     assert.equal(me.status, 200);
-    assert.equal((await me.json()).account.city, 'Москва');
+    assert.equal((await me.json()).account.city, 'Владивосток');
 
-    const tampered = baseProgress();
+    const tampered = baseProgress('2026-08-16');
     tampered.currency = 999_999;
     tampered.dailyGameRewards.earned = { match3: 30, game2048: 30, bubbles: 30, pet: 30 };
     const firstSync = await fetch(`${origin}/api/account/progress`, {
@@ -211,18 +272,29 @@ test('password auth validates origin and rate-limits repeated failures without r
     });
     assert.equal(foreign.status, 403);
 
+    const emptyCity = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, name: 'Иван', city: '   ', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+    });
+    assert.equal(emptyCity.status, 400);
+    assert.deepEqual(await emptyCity.json(), { error: 'Укажите город.', field: 'city' });
+
     const shortPassword = await fetch(`${origin}/api/auth/register`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ phone: '89990000001', password: 'short', name: 'Иван', city: 'Москва', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+      body: JSON.stringify({ phone: '89990000001', password: '123', name: 'Иван', city: 'Казань', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
     });
     assert.equal(shortPassword.status, 400);
-    assert.equal((await shortPassword.json()).field, 'password');
+    assert.deepEqual(await shortPassword.json(), {
+      error: 'Пароль должен содержать не менее 4 символов.',
+      field: 'password',
+    });
 
     const register = await fetch(`${origin}/api/auth/register`, {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, name: 'Иван', city: 'Москва', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
+      body: JSON.stringify({ phone: '89990000001', password: TEST_PASSWORD, name: 'Иван', city: 'Казань', consent: true, consentVersion: 'account-2026-08-15', deviceId, progress: baseProgress() }),
     });
     assert.equal(register.status, 201);
 

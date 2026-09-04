@@ -8,10 +8,12 @@ import { useGameContext } from '@/store/GameContext';
 import { cn } from '@/utils/cn';
 
 type AuthMode = 'login' | 'register';
-type City = 'Москва' | 'Зеленогорск';
 
 const PERSONAL_DATA_URL = '/legal/consent';
 const PRIVACY_URL = '/legal/privacy';
+const DEFAULT_PASSWORD_MIN_LENGTH = 4;
+const PASSWORD_MAX_LENGTH = 128;
+const CITY_MAX_LENGTH = 40;
 
 function digitsOnly(value: string) {
   return value.replace(/\D/g, '').slice(0, 11);
@@ -36,6 +38,10 @@ function errorMessage(error: unknown) {
   return error instanceof AccountApiError ? error.message : 'Не удалось выполнить запрос. Попробуйте ещё раз.';
 }
 
+function browserTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
 export function AuthScreen() {
   const navigate = useNavigate();
   const { progress } = useGameContext();
@@ -47,13 +53,13 @@ export function AuthScreen() {
   const [passwordRepeat, setPasswordRepeat] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
-  const [city, setCity] = useState<City>('Москва');
+  const [city, setCity] = useState('');
   const [consent, setConsent] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
 
   const unavailable = config?.available === false;
-  const passwordMinLength = config?.passwordMinLength || 8;
+  const passwordMinLength = config?.passwordMinLength || DEFAULT_PASSWORD_MIN_LENGTH;
 
   useEffect(() => {
     if (status === 'authenticated' && session) navigate('/profile', { replace: true });
@@ -69,12 +75,17 @@ export function AuthScreen() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    const normalizedCity = city.trim();
     if (mode === 'register' && password.length < passwordMinLength) {
       setError(`Пароль должен содержать не менее ${passwordMinLength} символов.`);
       return;
     }
     if (mode === 'register' && password !== passwordRepeat) {
       setError('Пароли не совпадают.');
+      return;
+    }
+    if (mode === 'register' && !normalizedCity) {
+      setError('Укажите город.');
       return;
     }
     if (mode === 'register' && !consent) {
@@ -93,7 +104,8 @@ export function AuthScreen() {
           password,
           deviceId: getDeviceId(),
           name: name.trim(),
-          city,
+          city: normalizedCity,
+          timeZone: browserTimeZone(),
           consent: true,
           consentVersion: ACCOUNT_CONSENT_VERSION,
           progress,
@@ -166,32 +178,29 @@ export function AuthScreen() {
                 </label>
               )}
 
-              <label className="mb-4 block">
-                <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><LockKeyhole size={14} /> Пароль</span>
+              <div className="mb-4">
+                <label htmlFor="account-password" className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><LockKeyhole size={14} /> Пароль</label>
                 <span className="relative block">
-                  <input value={password} onChange={event => setPassword(event.target.value.slice(0, 128))} type={showPassword ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'register' ? passwordMinLength : 1} className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 pr-12 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder={mode === 'register' ? `Минимум ${passwordMinLength} символов` : 'Ваш пароль'} />
+                  <input id="account-password" value={password} onChange={event => setPassword(event.target.value.slice(0, PASSWORD_MAX_LENGTH))} type={showPassword ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={mode === 'register' ? passwordMinLength : 1} maxLength={PASSWORD_MAX_LENGTH} aria-describedby={mode === 'register' ? 'registration-password-hint' : undefined} className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 pr-12 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder={mode === 'register' ? 'Придумайте пароль' : 'Ваш пароль'} />
                   <button type="button" aria-label={showPassword ? 'Скрыть пароль' : 'Показать пароль'} onClick={() => setShowPassword(value => !value)} className="absolute inset-y-0 right-0 flex min-w-12 items-center justify-center text-white/45 hover:text-white">
                     {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                   </button>
                 </span>
-              </label>
+                {mode === 'register' && <span id="registration-password-hint" className="mt-1.5 block text-[11px] text-white/40">Не менее {passwordMinLength} символов</span>}
+              </div>
 
               {mode === 'register' && (
                 <label className="mb-4 block">
                   <span className="mb-2 block text-xs font-semibold text-white/65">Повторите пароль</span>
-                  <input value={passwordRepeat} onChange={event => setPasswordRepeat(event.target.value.slice(0, 128))} type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={passwordMinLength} className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="Ещё раз" />
+                  <input value={passwordRepeat} onChange={event => setPasswordRepeat(event.target.value.slice(0, PASSWORD_MAX_LENGTH))} type={showPassword ? 'text' : 'password'} autoComplete="new-password" required minLength={passwordMinLength} maxLength={PASSWORD_MAX_LENGTH} className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="Ещё раз" />
                 </label>
               )}
 
               {mode === 'register' && (
-                <fieldset className="mb-4">
-                  <legend className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><MapPin size={14} /> Ваш город</legend>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(['Москва', 'Зеленогорск'] as const).map(item => (
-                      <button key={item} type="button" aria-pressed={city === item} onClick={() => setCity(item)} className={cn('min-h-11 rounded-xl border px-2 text-xs font-bold transition-colors', city === item ? 'border-primary bg-primary/15 text-primary' : 'border-white/10 text-white/50 hover:text-white')}>{item}</button>
-                    ))}
-                  </div>
-                </fieldset>
+                <label className="mb-4 block">
+                  <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-white/65"><MapPin size={14} aria-hidden="true" /> Ваш город</span>
+                  <input value={city} onChange={event => setCity(event.target.value.slice(0, CITY_MAX_LENGTH))} autoComplete="address-level2" autoCapitalize="words" required maxLength={CITY_MAX_LENGTH} className="min-h-12 w-full rounded-xl border border-white/15 bg-black/25 px-4 text-base text-white outline-none placeholder:text-white/25 focus:border-primary focus:ring-2 focus:ring-primary/25" placeholder="Например, Казань" />
+                </label>
               )}
 
               {mode === 'register' && (

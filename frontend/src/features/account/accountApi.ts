@@ -5,7 +5,7 @@ export const ACCOUNT_CONSENT_VERSION = 'account-2026-08-15';
 export interface PlayerAccount {
   id: string;
   name: string;
-  city: 'Москва' | 'Зеленогорск';
+  city: string;
   phoneMasked: string;
   login: string | null;
   isTest: boolean;
@@ -36,7 +36,8 @@ export interface RegisterPayload {
   password: string;
   deviceId: string;
   name: string;
-  city: 'Москва' | 'Зеленогорск';
+  city: string;
+  timeZone: string;
   consent: true;
   consentVersion: typeof ACCOUNT_CONSENT_VERSION;
   progress: PlayerProgress;

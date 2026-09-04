@@ -7,7 +7,7 @@ const target = process.argv[2] || 'http://127.0.0.1:4174';
 const liveOnly = process.argv.includes('--live');
 const report = { consoleErrors: [], cases: [] };
 
-const authConfig = { available: true, method: 'password', passwordMinLength: 8 };
+const authConfig = { available: true, method: 'password', passwordMinLength: 4 };
 const savedProgress = {
   currentLevel: 1,
   levels: {},
@@ -50,7 +50,7 @@ function watchConsole(page) {
       report.cases.push({ name: 'Live phone/password form on iPhone viewport', status: 'passed' });
       await context.close();
     } else {
-      const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true });
+      const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, timezoneId: 'Asia/Vladivostok' });
       const mobilePage = await mobileContext.newPage();
       watchConsole(mobilePage);
       await mobilePage.route('**/api/auth/config', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(authConfig) }));
@@ -62,7 +62,7 @@ function watchConsole(page) {
           status: 201,
           contentType: 'application/json',
           body: JSON.stringify({
-            account: { id: 'qa-user', name: 'Юлия', city: 'Зеленогорск', phoneMasked: '+7 ••• •••-12-34', createdAt: Date.now(), lastLoginAt: Date.now() },
+            account: { id: 'qa-user', name: 'Юлия', city: 'Владивосток', phoneMasked: '+7 ••• •••-12-34', createdAt: Date.now(), lastLoginAt: Date.now() },
             progress: savedProgress,
             revision: 1,
           }),
@@ -74,15 +74,23 @@ function watchConsole(page) {
       await mobilePage.getByRole('button', { name: 'Регистрация' }).click();
       await mobilePage.getByLabel('Имя').fill('Юлия');
       await mobilePage.getByLabel('Телефон').fill('9000001234');
-      await mobilePage.getByLabel('Пароль', { exact: true }).fill('synthetic-password');
-      await mobilePage.getByLabel('Повторите пароль').fill('synthetic-password');
-      await mobilePage.getByRole('button', { name: 'Зеленогорск' }).click();
+      assert.equal(await mobilePage.getByLabel('Пароль', { exact: true }).getAttribute('minlength'), '4');
+      await mobilePage.getByLabel('Пароль', { exact: true }).fill('123');
+      await mobilePage.getByLabel('Повторите пароль').fill('123');
+      await mobilePage.getByLabel('Ваш город').fill('  Владивосток  ');
       await mobilePage.getByRole('checkbox').check();
+      assert.equal(await mobilePage.getByLabel('Пароль', { exact: true }).evaluate(input => input.validity.tooShort), true);
+      await mobilePage.getByRole('button', { name: 'Создать профиль' }).click();
+      assert.equal(registerBody, null);
+
+      await mobilePage.getByLabel('Пароль', { exact: true }).fill('4321');
+      await mobilePage.getByLabel('Повторите пароль').fill('4321');
       await mobilePage.getByRole('button', { name: 'Создать профиль' }).click();
       await mobilePage.waitForURL('**/profile');
       assert.equal(registerBody.phone, '9000001234');
-      assert.equal(registerBody.password, 'synthetic-password');
-      assert.equal(registerBody.city, 'Зеленогорск');
+      assert.equal(registerBody.password, '4321');
+      assert.equal(registerBody.city, 'Владивосток');
+      assert.equal(registerBody.timeZone, 'Asia/Vladivostok');
       assert.equal(await mobilePage.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth), false);
       report.cases.push({ name: 'iPhone password registration', status: 'passed' });
       await mobilePage.screenshot({ path: path.join(os.tmpdir(), 'termburg-auth-mobile.png'), fullPage: true });

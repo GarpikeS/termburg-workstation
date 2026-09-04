@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 export const ACCOUNT_CONSENT_VERSION = 'account-2026-08-15';
 
 const COOKIE_NAME = 'tb_session';
-const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MIN_LENGTH = 4;
 const PASSWORD_MAX_LENGTH = 128;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_PHONE_FAILURE_LIMIT = 5;
@@ -21,9 +21,10 @@ const DEFAULT_LEGACY_COIN_CAP = 600;
 const GAME_REWARD_SOURCES = ['match3', 'game2048', 'bubbles', 'pet'];
 const DAILY_GAME_REWARD_LIMIT = 30;
 const DAILY_TOTAL_REWARD_LIMIT = 120;
-const CITIES = new Set(['Москва', 'Зеленогорск']);
+const DEFAULT_CITY = 'Москва';
+const DEFAULT_TIME_ZONE = 'Europe/Moscow';
 const CITY_TIMEZONES = {
-  Москва: 'Europe/Moscow',
+  Москва: DEFAULT_TIME_ZONE,
   Зеленогорск: 'Asia/Krasnoyarsk',
 };
 const CHARACTER_IDS = new Set(['yaromir', 'valkiriya', 'pereslav', 'kazimir', 'vedagor', 'milovan', 'lelya']);
@@ -181,9 +182,22 @@ function sessionCookie(token, secure, maxAgeSeconds = Math.floor(SESSION_TTL_MS 
   ].filter(Boolean).join('; ');
 }
 
-function localDateKey(timestamp, city) {
+function normalizeTimeZone(value, city) {
+  const timeZone = cleanText(value, 100);
+  if (timeZone) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone });
+      return timeZone;
+    } catch {
+      // Fall back to the known city zone for older or malformed clients.
+    }
+  }
+  return CITY_TIMEZONES[city] || DEFAULT_TIME_ZONE;
+}
+
+function localDateKey(timestamp, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: CITY_TIMEZONES[city] || CITY_TIMEZONES.Москва,
+    timeZone: timeZone || DEFAULT_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -211,8 +225,8 @@ function uniqueStrings(value, maxItems, maxLength) {
   return [...new Set(value.map(item => cleanText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
 }
 
-function normalizeDailyRewards(value, now, city) {
-  const currentDate = localDateKey(now, city);
+function normalizeDailyRewards(value, now, timeZone) {
+  const currentDate = localDateKey(now, timeZone);
   const source = plainObject(value);
   const earned = plainObject(source.earned);
   const normalized = {};
@@ -321,7 +335,7 @@ function publicClaim(claim, currentTime) {
 function sanitizeProgress(inputValue, options) {
   const {
     now,
-    city,
+    timeZone,
     previous = DEFAULT_PROGRESS,
     initial = false,
     legacyCoinCap = DEFAULT_LEGACY_COIN_CAP,
@@ -329,8 +343,8 @@ function sanitizeProgress(inputValue, options) {
   } = options;
   const input = plainObject(inputValue);
   const before = plainObject(previous);
-  const previousDaily = normalizeDailyRewards(before.dailyGameRewards, now, city);
-  const incomingDaily = normalizeDailyRewards(input.dailyGameRewards, now, city);
+  const previousDaily = normalizeDailyRewards(before.dailyGameRewards, now, timeZone);
+  const incomingDaily = normalizeDailyRewards(input.dailyGameRewards, now, timeZone);
   const mergedEarned = {};
   let dailyGain = 0;
   for (const source of GAME_REWARD_SOURCES) {
@@ -432,6 +446,7 @@ function initializeDatabase(database) {
       is_test INTEGER NOT NULL DEFAULT 0 CHECK(is_test IN (0, 1)),
       name TEXT NOT NULL,
       city TEXT NOT NULL,
+      time_zone TEXT NOT NULL DEFAULT 'Europe/Moscow',
       consent_version TEXT NOT NULL,
       consent_at INTEGER NOT NULL,
       registration_device_hash TEXT NOT NULL,
@@ -469,14 +484,20 @@ function initializeDatabase(database) {
   `);
 
   const userColumns = new Set(database.prepare('PRAGMA table_info(users)').all().map(column => column.name));
+  const needsTimeZoneMigration = !userColumns.has('time_zone');
   for (const [name, definition] of [
     ['password_salt', 'TEXT'],
     ['password_hash', 'TEXT'],
     ['password_changed_at', 'INTEGER'],
     ['login_name', 'TEXT'],
     ['is_test', 'INTEGER NOT NULL DEFAULT 0'],
+    ['time_zone', `TEXT NOT NULL DEFAULT '${DEFAULT_TIME_ZONE}'`],
   ]) {
     if (!userColumns.has(name)) database.exec(`ALTER TABLE users ADD COLUMN ${name} ${definition}`);
+  }
+  if (needsTimeZoneMigration) {
+    database.prepare('UPDATE users SET time_zone = ? WHERE city = ?')
+      .run(CITY_TIMEZONES.Зеленогорск, 'Зеленогорск');
   }
   database.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_login_name_idx ON users(login_name) WHERE login_name IS NOT NULL');
 
@@ -524,7 +545,7 @@ export function createAccountService(options) {
     userById: database.prepare('SELECT * FROM users WHERE id = ?'),
     sessionWithUser: database.prepare(`
       SELECT s.token_hash, s.user_id, s.device_hash, s.expires_at, s.last_seen_at,
-             u.id, u.phone_hash, u.phone_last4, u.login_name, u.is_test, u.name, u.city, u.progress_json,
+             u.id, u.phone_hash, u.phone_last4, u.login_name, u.is_test, u.name, u.city, u.time_zone, u.progress_json,
              u.progress_revision, u.created_at, u.updated_at, u.last_login_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
@@ -535,6 +556,8 @@ export function createAccountService(options) {
   const configuredTestUsername = cleanText(testProfile?.username, 40);
   const normalizedTestUsername = normalizeLogin(configuredTestUsername);
   const configuredTestPassword = typeof testProfile?.password === 'string' ? testProfile.password : '';
+  const configuredTestCity = cleanText(testProfile?.city, 40) || DEFAULT_CITY;
+  const configuredTestTimeZone = normalizeTimeZone(testProfile?.timeZone, configuredTestCity);
   const hasAnyTestProfileSetting = Boolean(configuredTestUsername || configuredTestPassword);
   if (hasAnyTestProfileSetting && (!authConfigured || !normalizedTestUsername || !configuredTestPassword || configuredTestPassword.length > PASSWORD_MAX_LENGTH)) {
     throw new Error('Test profile configuration is incomplete or invalid.');
@@ -547,13 +570,14 @@ export function createAccountService(options) {
     const existing = statements.userByPhone.get(identityHash);
     if (existing) {
       database.prepare(`
-        UPDATE users SET login_name = ?, is_test = 1, name = ?, city = ?,
+        UPDATE users SET login_name = ?, is_test = 1, name = ?, city = ?, time_zone = ?,
           password_salt = ?, password_hash = ?, password_changed_at = ?, updated_at = ?
         WHERE id = ?
       `).run(
         configuredTestUsername,
         cleanText(testProfile?.name, 80) || 'Тестовый профиль',
-        CITIES.has(testProfile?.city) ? testProfile.city : 'Москва',
+        configuredTestCity,
+        configuredTestTimeZone,
         passwordData.salt,
         passwordData.hash,
         currentTime,
@@ -564,16 +588,17 @@ export function createAccountService(options) {
     }
     database.prepare(`
       INSERT INTO users (
-        id, phone_hash, phone_last4, login_name, is_test, name, city,
+        id, phone_hash, phone_last4, login_name, is_test, name, city, time_zone,
         consent_version, consent_at, registration_device_hash, progress_json, progress_revision,
         password_salt, password_hash, password_changed_at, created_at, updated_at, last_login_at
-      ) VALUES (?, ?, '', ?, 1, ?, ?, 'internal-test-profile', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, '', ?, 1, ?, ?, ?, 'internal-test-profile', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
     `).run(
       randomUUID(),
       identityHash,
       configuredTestUsername,
       cleanText(testProfile?.name, 80) || 'Тестовый профиль',
-      CITIES.has(testProfile?.city) ? testProfile.city : 'Москва',
+      configuredTestCity,
+      configuredTestTimeZone,
       currentTime,
       hmac(secret, `test-device:${normalizedTestUsername}`),
       JSON.stringify(DEFAULT_PROGRESS),
@@ -684,7 +709,7 @@ export function createAccountService(options) {
     const stored = parseProgress(row.progress_json);
     const progress = sanitizeProgress(stored, {
       now: now(),
-      city: row.city,
+      timeZone: row.time_zone,
       previous: stored,
       validClaims: claims,
       legacyCoinCap,
@@ -765,7 +790,8 @@ export function createAccountService(options) {
     validatePassword(password, true);
     validateDevice(deviceId);
     if (name.length < 2) throw new AccountHttpError(400, 'Укажите имя.', { field: 'name' });
-    if (!CITIES.has(city)) throw new AccountHttpError(400, 'Выберите город.', { field: 'city' });
+    if (!city) throw new AccountHttpError(400, 'Укажите город.', { field: 'city' });
+    const timeZone = normalizeTimeZone(payload.timeZone, city);
     if (payload.consent !== true || payload.consentVersion !== ACCOUNT_CONSENT_VERSION) {
       throw new AccountHttpError(400, 'Для регистрации нужно согласие на обработку данных.', { field: 'consent' });
     }
@@ -788,7 +814,7 @@ export function createAccountService(options) {
     const claims = await validClaims(phoneHash);
     const progress = sanitizeProgress(payload.progress, {
       now: currentTime,
-      city,
+      timeZone,
       initial: true,
       legacyCoinCap,
       validClaims: claims,
@@ -797,13 +823,13 @@ export function createAccountService(options) {
     const userId = randomUUID();
     database.prepare(`
       INSERT INTO users (
-        id, phone_hash, phone_last4, name, city, consent_version, consent_at,
+        id, phone_hash, phone_last4, name, city, time_zone, consent_version, consent_at,
         registration_device_hash, progress_json, progress_revision,
         password_salt, password_hash, password_changed_at,
         created_at, updated_at, last_login_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
     `).run(
-      userId, phoneHash, phone.slice(-4), name, city, ACCOUNT_CONSENT_VERSION, currentTime,
+      userId, phoneHash, phone.slice(-4), name, city, timeZone, ACCOUNT_CONSENT_VERSION, currentTime,
       deviceHash, JSON.stringify(progress), passwordData.salt, passwordData.hash, currentTime,
       currentTime, currentTime, currentTime,
     );
@@ -889,7 +915,7 @@ export function createAccountService(options) {
     const claims = await validClaims(currentUser.phone_hash);
     const progress = sanitizeProgress(payload.progress, {
       now: currentTime,
-      city: currentUser.city,
+      timeZone: currentUser.time_zone,
       previous,
       validClaims: claims,
       legacyCoinCap,
