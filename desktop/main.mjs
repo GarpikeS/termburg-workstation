@@ -97,6 +97,15 @@ function openLocalRouteInBrowser(route) {
   void shell.openExternal(`${LOCAL_ORIGIN}${route}`);
 }
 
+function scheduleAdminUrl() {
+  const url = new URL('/schedule/admin', LOCAL_ORIGIN);
+  if (app.isPackaged) {
+    url.searchParams.set('desktop', WORKSTATION_MODE ? 'workstation' : 'schedule');
+    url.searchParams.set('version', app.getVersion());
+  }
+  return url.toString();
+}
+
 function getIconPath() {
   return path.join(app.getAppPath(), 'desktop', 'assets', 'icon.png');
 }
@@ -126,7 +135,7 @@ async function confirmWorkstationUpdate() {
     type: 'info',
     title: 'Обновление Термбург Рабочее место',
     message: `Доступна версия ${pendingWorkstationUpdate.version}`,
-    detail: 'Программа закроется, установит проверенное обновление и сохранит расписание и настройки Dolphin.',
+    detail: 'Программа закроется на несколько секунд, установит проверенное обновление и откроется снова. Расписание и настройки Dolphin сохранятся.',
     buttons: ['Обновить сейчас', 'Позже'],
     defaultId: 0,
     cancelId: 1,
@@ -143,7 +152,11 @@ async function confirmWorkstationUpdate() {
       toVersion: pendingWorkstationUpdate.version,
       targetFile: pendingWorkstationUpdate.targetFile,
     });
-    launchWorkstationInstaller({ installerPath: pendingWorkstationUpdate.targetFile });
+    const launcher = await launchWorkstationInstaller({
+      installerPath: pendingWorkstationUpdate.targetFile,
+      relaunchPath: process.execPath,
+    });
+    logger.info('Workstation update helper started', { pid: launcher.pid });
     app.quit();
   } catch (error) {
     workstationUpdateInstalling = false;
@@ -227,7 +240,7 @@ function buildApplicationMenu() {
       submenu: [
         { label: 'Редактор', accelerator: 'Ctrl+1', click: () => {
           showMainWindow();
-          void mainWindow?.loadURL(`${LOCAL_ORIGIN}/schedule/admin`);
+          void mainWindow?.loadURL(scheduleAdminUrl());
         } },
         { label: 'ТВ-экран · горизонтальный', accelerator: 'Ctrl+2', click: () => openLocalRouteInBrowser('/schedule/screen/1/landscape') },
         { label: 'ТВ-экран · вертикальный', accelerator: 'Ctrl+Shift+2', click: () => openLocalRouteInBrowser('/schedule/screen/1/portrait') },
@@ -318,7 +331,7 @@ function createMainWindow() {
     return { action: 'deny' };
   });
 
-  void mainWindow.loadURL(`${LOCAL_ORIGIN}/schedule/admin`);
+  void mainWindow.loadURL(scheduleAdminUrl());
 }
 
 function createTray() {

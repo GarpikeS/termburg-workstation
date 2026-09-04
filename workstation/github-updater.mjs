@@ -179,21 +179,30 @@ function quotePowerShellLiteral(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-export function buildInstallerLauncherCommand(installerPath, currentPid = process.pid) {
+export function buildInstallerLauncherCommand(installerPath, currentPid = process.pid, relaunchPath = process.execPath) {
   const pid = Number(currentPid);
   if (!Number.isInteger(pid) || pid <= 0) throw new Error('Invalid Workstation process id.');
   const installer = quotePowerShellLiteral(path.resolve(installerPath));
-  return `$ErrorActionPreference='Stop'; Wait-Process -Id ${pid}; Start-Process -FilePath ${installer} -ArgumentList '/S' -WindowStyle Hidden`;
+  const relaunch = quotePowerShellLiteral(path.resolve(relaunchPath));
+  return [
+    `$ErrorActionPreference='Stop'`,
+    `$runningProcess=Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
+    `if($null -ne $runningProcess){$runningProcess | Wait-Process -ErrorAction SilentlyContinue}`,
+    `$installerProcess=Start-Process -FilePath ${installer} -ArgumentList '/S' -PassThru -Wait`,
+    `if($installerProcess.ExitCode -ne 0){exit $installerProcess.ExitCode}`,
+    `if(Test-Path -LiteralPath ${relaunch}){Start-Process -FilePath ${relaunch}}`,
+  ].join('; ');
 }
 
-export function launchWorkstationInstaller({
+export async function launchWorkstationInstaller({
   installerPath,
   currentPid = process.pid,
+  relaunchPath = process.execPath,
   platform = process.platform,
   spawnImpl = spawn,
 } = {}) {
   if (platform !== 'win32') throw new Error('Workstation automatic updates are supported only on Windows.');
-  const command = buildInstallerLauncherCommand(installerPath, currentPid);
+  const command = buildInstallerLauncherCommand(installerPath, currentPid, relaunchPath);
   const encodedCommand = Buffer.from(command, 'utf16le').toString('base64');
   const child = spawnImpl('powershell.exe', [
     '-NoProfile',
@@ -204,6 +213,10 @@ export function launchWorkstationInstaller({
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+  });
+  await new Promise((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', reject);
   });
   child.unref();
   return { command, pid: child.pid };

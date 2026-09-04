@@ -17,6 +17,12 @@ const ACCOUNT_LABELS: Record<ScheduleEditorUser['username'], string> = {
 };
 
 export function ScheduleAdminAccessScreen() {
+  const desktopLabel = (() => {
+    const params = new URLSearchParams(window.location.search);
+    const version = params.get('version') || '';
+    if (!/^\d+\.\d+\.\d+$/.test(version)) return '';
+    return `${params.get('desktop') === 'workstation' ? 'Термбург Рабочее место' : 'Термбург Расписание'} · версия ${version}`;
+  })();
   const [status, setStatus] = useState<ScheduleAuthStatus | null>(null);
   const [username, setUsername] = useState<ScheduleEditorUser['username']>('moscow');
   const [password, setPassword] = useState('');
@@ -155,6 +161,7 @@ export function ScheduleAdminAccessScreen() {
           </form>
         )}
       </section>
+      {desktopLabel && <small className="schedule-access__version" aria-label="Текущая версия программы">{desktopLabel}</small>}
     </main>
   );
 }

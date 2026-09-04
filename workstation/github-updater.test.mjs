@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -72,24 +73,40 @@ test('rejects a release without a checksum asset', async () => {
 });
 
 test('builds a deferred installer launch without exposing shell metacharacters', () => {
-  const command = buildInstallerLauncherCommand("C:\\Updates\\Termburg's Update.exe", 4321);
-  assert.match(command, /Wait-Process -Id 4321/);
+  const command = buildInstallerLauncherCommand(
+    "C:\\Updates\\Termburg's Update.exe",
+    4321,
+    'C:\\Programs\\Termburg Workstation.exe',
+  );
+  assert.match(command, /Get-Process -Id 4321 -ErrorAction SilentlyContinue/);
+  assert.match(command, /if\(\$null -ne \$runningProcess\)/);
   assert.match(command, /Termburg''s Update\.exe/);
   assert.match(command, /-ArgumentList '\/S'/);
+  assert.match(command, /-PassThru -Wait/);
+  assert.match(command, /Termburg Workstation\.exe/);
 });
 
-test('launches the installer helper as a hidden detached PowerShell process', () => {
+test('waits until the hidden detached installer helper has actually started', async () => {
   let invocation = null;
-  const result = launchWorkstationInstaller({
+  let unrefCalled = false;
+  const resultPromise = launchWorkstationInstaller({
     installerPath: 'C:\\Updates\\Workstation.exe',
     currentPid: 9876,
+    relaunchPath: 'C:\\Programs\\Workstation.exe',
     platform: 'win32',
     spawnImpl: (command, args, options) => {
       invocation = { command, args, options };
-      return { pid: 2468, unref() {} };
+      const child = new EventEmitter();
+      child.pid = 2468;
+      child.unref = () => { unrefCalled = true; };
+      queueMicrotask(() => child.emit('spawn'));
+      return child;
     },
   });
+  assert.equal(unrefCalled, false);
+  const result = await resultPromise;
   assert.equal(result.pid, 2468);
+  assert.equal(unrefCalled, true);
   assert.equal(invocation.command, 'powershell.exe');
   assert.equal(invocation.options.detached, true);
   assert.equal(invocation.options.windowsHide, true);

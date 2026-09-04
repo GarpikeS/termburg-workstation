@@ -1918,6 +1918,21 @@
   box-shadow: var(--schedule-shadow);
 }
 
+.schedule-access__version {
+  position: fixed;
+  right: 1rem;
+  bottom: 0.7rem;
+  z-index: 3;
+  padding: 0.3rem 0.55rem;
+  color: #526b79;
+  background: rgba(237, 242, 242, 0.9);
+  border-radius: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
 .schedule-access__card-heading {
   display: flex;
   align-items: center;
@@ -3138,6 +3153,11 @@
 
   .schedule-access__card {
     margin-top: 2rem;
+  }
+
+  .schedule-access__version {
+    color: rgba(255, 255, 255, 0.68);
+    background: rgba(16, 51, 68, 0.82);
   }
 
   .schedule-admin__header {
