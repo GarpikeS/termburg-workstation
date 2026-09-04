@@ -16,6 +16,7 @@ const testFiles = [
   'dolphin-agent/core/source-api-client.test.mjs',
   'dolphin-agent/core/sync-agent.test.mjs',
   'dolphin-agent/core/server-client.test.mjs',
+  'frontend/tests/official-schedule.test.mjs',
   'server/schedule-service.test.mjs',
   'server/wordpress-schedule.test.mjs',
 ];

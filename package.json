@@ -12,7 +12,7 @@
     "schedule:start": "node server/schedule-server.mjs",
     "schedule:desktop": "npm --prefix frontend run build && electron desktop/main.mjs",
     "schedule:exe": "npm --prefix frontend run build && electron-builder --win portable --x64 && node scripts/write-schedule-release-checksum.mjs && node scripts/cleanup-schedule-releases.mjs",
-    "schedule:test": "node --test server/schedule-service.test.mjs server/wordpress-schedule.test.mjs",
+    "schedule:test": "node --test frontend/tests/official-schedule.test.mjs server/schedule-service.test.mjs server/wordpress-schedule.test.mjs",
     "dolphin:desktop": "electron dolphin-agent/main.mjs",
     "dolphin:exe": "node scripts/build-dolphin-zero-config.mjs",
     "dolphin:test": "node --test dolphin-agent/core/redemption-extractor.test.mjs dolphin-agent/core/source-api-client.test.mjs dolphin-agent/core/sync-agent.test.mjs dolphin-agent/core/server-client.test.mjs",
