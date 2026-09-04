@@ -58,11 +58,11 @@ try {
     if (message.type() === 'error' && !message.text().includes('401 (Unauthorized)')) errors.push(message.text());
   });
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(`${baseUrl}/schedule/admin?desktop=workstation&version=1.1.7`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/schedule/admin?desktop=workstation&version=1.1.8`, { waitUntil: 'networkidle' });
   const version = page.locator('.schedule-access__version');
   await version.waitFor({ state: 'visible' });
   await assert.doesNotReject(() => page.locator('.schedule-access__card').waitFor({ state: 'visible' }));
-  assert.equal(await version.textContent(), 'Термбург Рабочее место · версия 1.1.7');
+  assert.equal(await version.textContent(), 'Термбург Рабочее место · версия 1.1.8');
   const bounds = await version.boundingBox();
   assert.ok(bounds, 'Version label has no layout bounds.');
   assert.ok(bounds.x + bounds.width <= 1432, 'Version label is not aligned to the lower-right edge.');

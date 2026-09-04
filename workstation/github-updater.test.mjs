@@ -83,6 +83,7 @@ test('builds a deferred installer launch without exposing shell metacharacters',
   assert.match(command, /Termburg''s Update\.exe/);
   assert.match(command, /-ArgumentList '\/S'/);
   assert.match(command, /-PassThru -Wait/);
+  assert.match(command, /\$null -ne \$installerProcess\.ExitCode/);
   assert.match(command, /Termburg Workstation\.exe/);
 });
 

@@ -189,7 +189,7 @@ export function buildInstallerLauncherCommand(installerPath, currentPid = proces
     `$runningProcess=Get-Process -Id ${pid} -ErrorAction SilentlyContinue`,
     `if($null -ne $runningProcess){$runningProcess | Wait-Process -ErrorAction SilentlyContinue}`,
     `$installerProcess=Start-Process -FilePath ${installer} -ArgumentList '/S' -PassThru -Wait`,
-    `if($installerProcess.ExitCode -ne 0){exit $installerProcess.ExitCode}`,
+    `if($null -ne $installerProcess.ExitCode -and $installerProcess.ExitCode -ne 0){exit $installerProcess.ExitCode}`,
     `if(Test-Path -LiteralPath ${relaunch}){Start-Process -FilePath ${relaunch}}`,
   ].join('; ');
 }
