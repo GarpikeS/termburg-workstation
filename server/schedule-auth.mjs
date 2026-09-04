@@ -59,6 +59,7 @@ function publicUser(account) {
   return {
     username: account.username,
     locationId: account.locationId,
+    ...(account.isTest ? { isTest: true } : {}),
   };
 }
 
@@ -73,9 +74,25 @@ export function createScheduleAuth({
   authFile,
   sessionTtlMs = SESSION_TTL_MS,
   scryptOptions = DEFAULT_SCRYPT_OPTIONS,
+  testProfile = null,
   now = () => Date.now(),
 } = {}) {
   if (!authFile) throw new Error('authFile is required');
+
+  const normalizedTestProfile = testProfile ? {
+    username: normalizeUsername(testProfile.username),
+    locationId: String(testProfile.locationId || ''),
+    password: typeof testProfile.password === 'string' ? testProfile.password : '',
+    version: Number(testProfile.version) || 1,
+  } : null;
+  if (normalizedTestProfile && (
+    normalizedTestProfile.username !== 'testtb'
+    || normalizedTestProfile.locationId !== 'test'
+    || !normalizedTestProfile.password
+    || normalizedTestProfile.password.length > PASSWORD_MAX_LENGTH
+  )) {
+    throw new Error('Invalid schedule test profile configuration.');
+  }
 
   const resolvedAuthFile = path.resolve(authFile);
   const sessions = new Map();
@@ -91,16 +108,41 @@ export function createScheduleAuth({
 
   async function readStore() {
     if (cachedStore) return cachedStore;
+    let store;
     try {
       const parsed = JSON.parse(await fs.readFile(resolvedAuthFile, 'utf8'));
-      cachedStore = parsed && parsed.schemaVersion === 1 && parsed.accounts && typeof parsed.accounts === 'object'
+      store = parsed && parsed.schemaVersion === 1 && parsed.accounts && typeof parsed.accounts === 'object'
         ? parsed
         : { schemaVersion: 1, accounts: {} };
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
-      cachedStore = { schemaVersion: 1, accounts: {} };
+      store = { schemaVersion: 1, accounts: {} };
     }
-    return cachedStore;
+    if (normalizedTestProfile) {
+      const current = store.accounts[normalizedTestProfile.username];
+      const markerMatches = store.managedTestProfileVersion === normalizedTestProfile.version;
+      const accountMatches = current?.username === normalizedTestProfile.username
+        && current?.locationId === normalizedTestProfile.locationId
+        && current?.isTest === true
+        && current?.hash
+        && current?.salt;
+      if (!markerMatches || !accountMatches) {
+        store.accounts[normalizedTestProfile.username] = {
+          ...await createAccount(
+            normalizedTestProfile.username,
+            normalizedTestProfile.locationId,
+            normalizedTestProfile.password,
+          ),
+          isTest: true,
+        };
+        store.managedTestProfileVersion = normalizedTestProfile.version;
+        store.updatedAt = new Date(now()).toISOString();
+        await writeStore(store);
+        return store;
+      }
+    }
+    cachedStore = store;
+    return store;
   }
 
   async function writeStore(store) {
@@ -222,7 +264,9 @@ export function createScheduleAuth({
       if (message) throw authError('AUTH_WEAK_PASSWORD', `${definition.username}: ${message}`);
     }
 
-    const accounts = {};
+    const accounts = normalizedTestProfile && store.accounts[normalizedTestProfile.username]
+      ? { [normalizedTestProfile.username]: store.accounts[normalizedTestProfile.username] }
+      : {};
     for (const definition of ACCOUNT_DEFINITIONS) {
       accounts[definition.username] = await createAccount(
         definition.username,
@@ -233,6 +277,7 @@ export function createScheduleAuth({
     await writeStore({
       schemaVersion: 1,
       updatedAt: new Date(now()).toISOString(),
+      ...(normalizedTestProfile ? { managedTestProfileVersion: normalizedTestProfile.version } : {}),
       accounts,
     });
     return { configured: true };
@@ -257,6 +302,8 @@ export function createScheduleAuth({
     return issueSession(account);
   }
 
+  const ready = readStore();
+
   function authorize(request, locationId = '') {
     const session = getSession(request);
     if (!session) return { allowed: false, status: 401, error: 'Войдите в редактор.' };
@@ -267,6 +314,7 @@ export function createScheduleAuth({
   }
 
   return {
+    ready,
     authorize,
     login,
     logout: revokeSession,

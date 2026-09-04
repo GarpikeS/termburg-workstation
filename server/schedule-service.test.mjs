@@ -274,3 +274,86 @@ test('schedule editor login protects writes and scopes users to one complex', as
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('manual test login uses an isolated schedule and cannot publish production data', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-test-schedule-'));
+  const dataFile = path.join(tempRoot, 'schedule.json');
+  const testDataFile = path.join(tempRoot, 'schedule-test.json');
+  const authFile = path.join(tempRoot, 'schedule-auth.json');
+  const service = await startScheduleService({
+    staticRoot: path.join(repoRoot, 'frontend', 'build'),
+    dataFile,
+    testDataFile,
+    authFile,
+    seedFile: path.join(repoRoot, 'frontend', 'public', 'data', 'default-schedule.json'),
+    host: '127.0.0.1',
+    port: 0,
+    localWritesOnly: true,
+    testProfile: { username: 'testtb', password: '2026', locationId: 'test', version: 1 },
+    authScryptOptions: { N: 1024, r: 8, p: 1, maxmem: 16 * 1024 * 1024 },
+    logger: { info() {}, error() {} },
+  });
+  const origin = `http://127.0.0.1:${service.port}`;
+
+  try {
+    const setup = await fetch(`${origin}/api/auth/setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        moscowPassword: 'Moscow-pass-2026',
+        zelenogorskPassword: 'Green-pass-2026',
+      }),
+    });
+    assert.equal(setup.status, 201);
+
+    const login = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'testTB', password: '2026' }),
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie')?.split(';')[0];
+    assert.ok(cookie);
+    assert.deepEqual((await login.json()).user, { username: 'testtb', locationId: 'test', isTest: true });
+
+    const liveSchedule = await fetch(`${origin}/api/schedule`).then(response => response.json());
+    const testSchedule = await fetch(`${origin}/api/schedule`, { headers: { Cookie: cookie } }).then(response => response.json());
+    assert.deepEqual(testSchedule.locations.map(location => location.id), ['test']);
+    assert.equal(testSchedule.weeklyEvents.length, 0);
+
+    const testEvent = {
+      id: 'test-weekly-1',
+      locationId: 'test',
+      daysOfWeek: [1],
+      time: '12:00',
+      endTime: '12:30',
+      title: 'Тестовое событие',
+      venue: 'Тестовый зал',
+      priceKind: 'free',
+      published: true,
+    };
+    const savedResponse = await fetch(`${origin}/api/schedule`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        ...testSchedule,
+        weeklyEvents: [testEvent, ...liveSchedule.weeklyEvents],
+      }),
+    });
+    assert.equal(savedResponse.status, 200);
+    const savedTest = await savedResponse.json();
+    assert.deepEqual(savedTest.weeklyEvents, [testEvent]);
+
+    const liveAfterTestSave = await fetch(`${origin}/api/schedule`).then(response => response.json());
+    assert.deepEqual(liveAfterTestSave.weeklyEvents, liveSchedule.weeklyEvents);
+    const storedTest = JSON.parse(await readFile(testDataFile, 'utf8'));
+    assert.deepEqual(storedTest.locations.map(location => location.id), ['test']);
+    assert.deepEqual(storedTest.weeklyEvents, [testEvent]);
+
+    const publishSettings = await fetch(`${origin}/api/site-sync/settings?locationId=test`, { headers: { Cookie: cookie } });
+    assert.equal(publishSettings.status, 404);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

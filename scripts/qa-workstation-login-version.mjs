@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { chromium } = require('C:/Claude Code/node_modules/playwright');
+const playwrightRoots = [
+  path.join(process.env.USERPROFILE || '', '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'node', 'node_modules', 'playwright'),
+  'C:/Claude Code/node_modules/playwright',
+];
+const playwrightRoot = playwrightRoots.find(candidate => fs.existsSync(candidate));
+if (!playwrightRoot) throw new Error('Playwright is unavailable for workstation browser QA.');
+const { chromium } = require(playwrightRoot);
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const frontendRoot = path.join(repoRoot, 'frontend');
 const screenshotPath = path.join(repoRoot, 'release', 'qa-workstation-login-version.png');
@@ -58,11 +65,14 @@ try {
     if (message.type() === 'error' && !message.text().includes('401 (Unauthorized)')) errors.push(message.text());
   });
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto(`${baseUrl}/schedule/admin?desktop=workstation&version=1.1.8`, { waitUntil: 'networkidle' });
+  await page.goto(`${baseUrl}/schedule/admin?desktop=workstation&version=1.1.9`, { waitUntil: 'networkidle' });
   const version = page.locator('.schedule-access__version');
   await version.waitFor({ state: 'visible' });
   await assert.doesNotReject(() => page.locator('.schedule-access__card').waitFor({ state: 'visible' }));
-  assert.equal(await version.textContent(), 'Термбург Рабочее место · версия 1.1.8');
+  const loginField = page.locator('input[autocomplete="username"]');
+  await loginField.fill('testTB');
+  assert.equal(await loginField.inputValue(), 'testTB');
+  assert.equal(await version.textContent(), 'Термбург Рабочее место · версия 1.1.9');
   const bounds = await version.boundingBox();
   assert.ok(bounds, 'Version label has no layout bounds.');
   assert.ok(bounds.x + bounds.width <= 1432, 'Version label is not aligned to the lower-right edge.');

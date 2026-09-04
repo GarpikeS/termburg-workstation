@@ -53,6 +53,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
   const [draft, setDraft] = useState<ScheduleData | null>(null);
   const [tab, setTab] = useState<EditorTab>('weekly');
   const locationId = session.locationId;
+  const isTestSession = session.isTest === true || locationId === 'test';
   const [form, setForm] = useState<EditorForm>(emptyForm);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -87,6 +88,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
   }, []);
 
   useEffect(() => {
+    if (isTestSession) return;
     let cancelled = false;
     void loadSiteSyncSettings(locationId)
       .then(settings => {
@@ -103,7 +105,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
         setNotice({ tone: 'error', text: reason instanceof Error ? reason.message : 'Не удалось загрузить настройки сайта.' });
       });
     return () => { cancelled = true; };
-  }, [locationId]);
+  }, [isTestSession, locationId]);
 
   const visibleWeekly = useMemo(() => (draft?.weeklyEvents ?? [])
     .filter(item => item.locationId === locationId)
@@ -112,6 +114,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     .filter(item => item.locationId === locationId)
     .sort((a, b) => a.date.localeCompare(b.date) || timeToMinutes(a.time) - timeToMinutes(b.time)), [draft, locationId]);
   const tvUrls = useMemo(() => {
+    if (isTestSession) return { editor: '', landscape: '', portrait: '' };
     const bases = serverInfo?.baseUrls ?? [];
     const lanBase = bases.find(item => {
       try {
@@ -126,11 +129,18 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
       landscape: lanBase ? `${lanBase}/schedule/screen/${locationId}/landscape` : '',
       portrait: lanBase ? `${lanBase}/schedule/screen/${locationId}/portrait` : '',
     };
-  }, [serverInfo, locationId]);
+  }, [isTestSession, serverInfo, locationId]);
 
   if (error && !data) return <ScheduleError message={error} />;
   if (!draft) return <ScheduleLoading />;
-  const activeLocation = draft.locations.find(item => item.id === locationId) ?? draft.locations[0];
+  const activeLocation = draft.locations.find(item => item.id === locationId) ?? (isTestSession ? {
+    id: 'test',
+    city: 'Тестовый режим',
+    name: 'Тестовое расписание',
+    shortName: 'Тест',
+    address: 'Не публикуется на сайте',
+    timezone: 'Europe/Moscow',
+  } : draft.locations[0]);
 
   const setFormField = <K extends keyof EditorForm>(field: K, value: EditorForm[K]) => setForm(current => ({ ...current, [field]: value }));
 
@@ -349,19 +359,19 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
           </span>
           <span className="schedule-admin__session">{session.username}</span>
         </div>
-        <nav aria-label="Предпросмотр и печать">
+        {!isTestSession && <nav aria-label="Предпросмотр и печать">
           <a href={`/schedule/screen/${locationId}/landscape`} target="_blank" rel="noreferrer"><MonitorUp size={17} />Горизонтальный<ExternalLink size={14} /></a>
           <a href={`/schedule/screen/${locationId}/portrait`} target="_blank" rel="noreferrer"><MonitorUp size={17} />Вертикальный<ExternalLink size={14} /></a>
           <a href={`/schedule/print/${locationId}`} target="_blank" rel="noreferrer"><FileText size={17} />Печать<ExternalLink size={14} /></a>
           <a href={`/schedule/poster/${locationId}`} target="_blank" rel="noreferrer"><CalendarPlus size={17} />Афиша месяца<ExternalLink size={14} /></a>
-        </nav>
+        </nav>}
       </header>
 
       <main className="schedule-admin__main">
         <section className="schedule-admin__toolbar">
           <div className="schedule-admin__locked-location">
             <span><Building2 size={20} /></span>
-            <div><small>Вы вошли в комплекс</small><strong>{activeLocation?.name ?? (locationId === '1' ? 'Термбург Москва' : 'Термбург Зеленогорск')}</strong></div>
+            <div><small>{isTestSession ? 'Изолированный тестовый режим' : 'Вы вошли в комплекс'}</small><strong>{activeLocation?.name ?? (locationId === '1' ? 'Термбург Москва' : 'Термбург Зеленогорск')}</strong></div>
           </div>
           <div className="schedule-admin__toolbar-actions">
             <button type="button" className="schedule-admin-secondary" onClick={downloadBackup}><Download size={17} />JSON-копия</button>
@@ -370,7 +380,14 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
           </div>
         </section>
 
-        <details className="schedule-site-sync">
+        {isTestSession && (
+          <div className="schedule-admin-notice schedule-admin-notice--warning" role="status">
+            <ShieldCheck size={18} />
+            <span>Вы вошли как testTB. Здесь можно пробовать редактор: изменения хранятся отдельно и не попадут в расписание Москвы, Зеленогорска или на сайт.</span>
+          </div>
+        )}
+
+        {!isTestSession && <details className="schedule-site-sync">
           <summary>
             <span className="schedule-site-sync__icon"><Settings2 size={20} /></span>
             <span><strong>Синхронизация с сайтом</strong><small>{siteSettings?.lastPublishedAt ? `Последняя отправка: ${new Date(siteSettings.lastPublishedAt).toLocaleString('ru-RU')} · ${siteSettings.lastPublishedCount ?? 0} событий` : 'Подключите WordPress API и отправляйте полное расписание одной кнопкой'}</small></span>
@@ -387,7 +404,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
             </div>
             <p>Передаётся полный массив опубликованных событий выбранного комплекса. Новая отправка заменяет расписание на сайте.</p>
           </div>
-        </details>
+        </details>}
 
         {tvUrls.landscape && (
           <section className="schedule-admin-monitor-links" aria-label="Адреса для телевизоров">

@@ -15,6 +15,14 @@ import {
 
 const MAX_BODY_BYTES = 12 * 1024 * 1024;
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const TEST_SCHEDULE_LOCATION = {
+  id: 'test',
+  city: 'Тестовый режим',
+  name: 'Тестовое расписание',
+  shortName: 'Тест',
+  address: 'Не публикуется на сайте',
+  timezone: 'Europe/Moscow',
+};
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -71,8 +79,10 @@ export function createScheduleService(options) {
     dataFile,
     seedFile,
     siteSyncFile = path.join(path.dirname(dataFile), 'site-sync.json'),
+    testDataFile = '',
     authFile = '',
     authScryptOptions,
+    testProfile = null,
     host = '0.0.0.0',
     port = 4174,
     adminToken = '',
@@ -87,9 +97,10 @@ export function createScheduleService(options) {
 
   const resolvedStaticRoot = path.resolve(staticRoot);
   const resolvedDataFile = path.resolve(dataFile);
+  const resolvedTestDataFile = path.resolve(testDataFile || path.join(path.dirname(dataFile), 'schedule-test.json'));
   const resolvedSeedFile = path.resolve(seedFile);
   const resolvedSiteSyncFile = path.resolve(siteSyncFile);
-  const scheduleAuth = authFile ? createScheduleAuth({ authFile, scryptOptions: authScryptOptions }) : null;
+  const scheduleAuth = authFile ? createScheduleAuth({ authFile, scryptOptions: authScryptOptions, testProfile }) : null;
   let boundPort = port;
 
   function setCommonHeaders(response) {
@@ -127,6 +138,49 @@ export function createScheduleService(options) {
     const tempFile = `${resolvedDataFile}.${process.pid}.tmp`;
     await fs.writeFile(tempFile, `${JSON.stringify(schedule, null, 2)}\n`, 'utf8');
     await fs.rename(tempFile, resolvedDataFile);
+  }
+
+  function emptyTestSchedule() {
+    return {
+      schemaVersion: 1,
+      revision: 0,
+      updatedAt: new Date().toISOString(),
+      locations: [TEST_SCHEDULE_LOCATION],
+      weeklyEvents: [],
+      exceptions: [],
+      monthlyPosters: [],
+    };
+  }
+
+  async function readTestSchedule() {
+    try {
+      const value = JSON.parse(await fs.readFile(resolvedTestDataFile, 'utf8'));
+      return isScheduleData(value) ? value : emptyTestSchedule();
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      return emptyTestSchedule();
+    }
+  }
+
+  async function writeTestSchedule(schedule) {
+    await fs.mkdir(path.dirname(resolvedTestDataFile), { recursive: true });
+    const tempFile = `${resolvedTestDataFile}.${process.pid}.tmp`;
+    await fs.writeFile(tempFile, `${JSON.stringify(schedule, null, 2)}\n`, 'utf8');
+    await fs.rename(tempFile, resolvedTestDataFile);
+  }
+
+  function isolateTestSchedule(incoming, current) {
+    return {
+      schemaVersion: 1,
+      revision: Math.max(current.revision + 1, incoming.revision),
+      updatedAt: new Date().toISOString(),
+      locations: [TEST_SCHEDULE_LOCATION],
+      weeklyEvents: incoming.weeklyEvents.filter(item => item?.locationId === 'test'),
+      exceptions: incoming.exceptions.filter(item => item?.locationId === 'test'),
+      monthlyPosters: Array.isArray(incoming.monthlyPosters)
+        ? incoming.monthlyPosters.filter(item => item?.locationId === 'test')
+        : [],
+    };
   }
 
   async function readSiteSyncStore() {
@@ -487,7 +541,10 @@ export function createScheduleService(options) {
       }
 
       if (url.pathname === '/api/schedule' && request.method === 'GET') {
-        sendJson(response, 200, await readSchedule());
+        const access = scheduleAuth?.authorize(request);
+        sendJson(response, 200, access?.allowed && access.user?.isTest
+          ? await readTestSchedule()
+          : await readSchedule());
         return;
       }
 
@@ -510,10 +567,14 @@ export function createScheduleService(options) {
           sendJson(response, 400, { error: 'Неверный формат расписания.' });
           return;
         }
-        const saved = access.user?.locationId
-          ? mergeScheduleForLocation(await readSchedule(), value, access.user.locationId)
-          : value;
-        await writeSchedule(saved);
+        const testSession = access.user?.isTest === true;
+        const saved = testSession
+          ? isolateTestSchedule(value, await readTestSchedule())
+          : access.user?.locationId
+            ? mergeScheduleForLocation(await readSchedule(), value, access.user.locationId)
+            : value;
+        if (testSession) await writeTestSchedule(saved);
+        else await writeSchedule(saved);
         broadcastScheduleUpdate(saved);
         sendJson(response, 200, saved);
         return;
@@ -636,6 +697,7 @@ export function createScheduleService(options) {
   heartbeat.unref?.();
 
   async function listen() {
+    await scheduleAuth?.ready;
     await new Promise((resolve, reject) => {
       const onError = (error) => reject(error);
       server.once('error', onError);
@@ -674,6 +736,7 @@ export function createScheduleService(options) {
     paths: {
       staticRoot: resolvedStaticRoot,
       dataFile: resolvedDataFile,
+      testDataFile: resolvedTestDataFile,
       seedFile: resolvedSeedFile,
       siteSyncFile: resolvedSiteSyncFile,
       ...(scheduleAuth ? { authFile: scheduleAuth.paths.authFile } : {}),

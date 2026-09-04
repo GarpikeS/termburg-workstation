@@ -80,8 +80,9 @@ export interface ScheduleSaveResult {
 }
 
 export interface ScheduleEditorUser {
-  username: 'moscow' | 'zelenogorsk';
-  locationId: '1' | '2';
+  username: 'moscow' | 'zelenogorsk' | 'testtb';
+  locationId: '1' | '2' | 'test';
+  isTest?: boolean;
 }
 
 export interface ScheduleAuthStatus {

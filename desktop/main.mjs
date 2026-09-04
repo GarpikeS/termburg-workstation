@@ -16,6 +16,12 @@ const WORKSTATION_MODE = app.isPackaged
   : process.argv.includes('--workstation');
 const DISPLAY_NAME = WORKSTATION_MODE ? 'Термбург Рабочее место' : APP_NAME;
 const APP_ID = WORKSTATION_MODE ? 'ru.termburg.workstation' : 'ru.termburg.schedule';
+const SCHEDULE_TEST_PROFILE = Object.freeze({
+  username: 'testtb',
+  password: '2026',
+  locationId: 'test',
+  version: 1,
+});
 const BACKGROUND_FLAG = WORKSTATION_BACKGROUND_FLAG;
 const HOST = '0.0.0.0';
 const requestedPort = Number(cliValue('--schedule-port'));
@@ -464,6 +470,7 @@ async function startDesktop() {
     seedFile,
     siteSyncFile,
     authFile,
+    testProfile: WORKSTATION_MODE ? SCHEDULE_TEST_PROFILE : null,
     host: HOST,
     port: PORT,
     localWritesOnly: false,

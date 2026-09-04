@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { Building2, KeyRound, LockKeyhole, ShieldCheck, UserRound } from 'lucide-react';
 import '@/features/schedule/schedule.css';
 import { ScheduleLoading, ScheduleWaves, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
 import {
@@ -11,10 +11,10 @@ import {
 import type { ScheduleAuthStatus, ScheduleEditorUser } from '@/features/schedule/types';
 import { ScheduleAdminScreen } from './ScheduleAdminScreen';
 
-const ACCOUNT_LABELS: Record<ScheduleEditorUser['username'], string> = {
-  moscow: 'Термбург Москва',
-  zelenogorsk: 'Термбург Зеленогорск',
-};
+const QUICK_ACCOUNTS = [
+  { username: 'moscow' as const, label: 'Термбург Москва' },
+  { username: 'zelenogorsk' as const, label: 'Термбург Зеленогорск' },
+];
 
 export function ScheduleAdminAccessScreen() {
   const desktopLabel = (() => {
@@ -24,7 +24,7 @@ export function ScheduleAdminAccessScreen() {
     return `${params.get('desktop') === 'workstation' ? 'Термбург Рабочее место' : 'Термбург Расписание'} · версия ${version}`;
   })();
   const [status, setStatus] = useState<ScheduleAuthStatus | null>(null);
-  const [username, setUsername] = useState<ScheduleEditorUser['username']>('moscow');
+  const [username, setUsername] = useState('moscow');
   const [password, setPassword] = useState('');
   const [moscowPassword, setMoscowPassword] = useState('');
   const [moscowConfirm, setMoscowConfirm] = useState('');
@@ -85,7 +85,7 @@ export function ScheduleAdminAccessScreen() {
     setError('');
     setBusy(true);
     try {
-      const result = await loginScheduleEditor({ username, password });
+      const result = await loginScheduleEditor({ username: username.trim(), password });
       setPassword('');
       setStatus({ configured: true, authenticated: true, user: result.user });
     } catch (reason) {
@@ -103,7 +103,7 @@ export function ScheduleAdminAccessScreen() {
           <span>Управление расписанием</span>
           <h1>{status?.configured ? 'Вход в редактор' : 'Настройка доступа'}</h1>
           <p>{status?.configured
-            ? 'Войдите под своим комплексом. Вы сможете менять только его расписание.'
+            ? 'Выберите комплекс или введите отдельный логин. Каждый профиль имеет свою зону доступа.'
             : 'Задайте отдельный пароль для Москвы и Зеленогорска. Логины уже созданы.'}</p>
         </div>
         <ScheduleWaves />
@@ -114,28 +114,32 @@ export function ScheduleAdminAccessScreen() {
           <span><ShieldCheck size={24} /></span>
           <div>
             <small>{status?.configured ? 'Защищённый вход' : 'Первый запуск'}</small>
-            <h2>{status?.configured ? 'Выберите комплекс' : 'Создайте два пароля'}</h2>
+            <h2>{status?.configured ? 'Вход в редактор' : 'Создайте два пароля'}</h2>
           </div>
         </div>
 
         {status?.configured ? (
           <form onSubmit={login} className="schedule-access__form">
             <fieldset className="schedule-access__accounts">
-              <legend>Логин</legend>
-              {(Object.keys(ACCOUNT_LABELS) as ScheduleEditorUser['username'][]).map(account => (
-                <label key={account} className={username === account ? 'is-selected' : ''}>
-                  <input type="radio" name="schedule-username" value={account} checked={username === account} onChange={() => setUsername(account)} />
+              <legend>Быстрый вход</legend>
+              {QUICK_ACCOUNTS.map(account => (
+                <label key={account.username} className={username === account.username ? 'is-selected' : ''}>
+                  <input type="radio" name="schedule-username" value={account.username} checked={username === account.username} onChange={() => setUsername(account.username)} />
                   <Building2 size={20} />
-                  <span><strong>{ACCOUNT_LABELS[account]}</strong><small>Логин: {account}</small></span>
+                  <span><strong>{account.label}</strong><small>Логин: {account.username}</small></span>
                 </label>
               ))}
             </fieldset>
+            <label className="schedule-access__field">
+              <span>Логин</span>
+              <div><UserRound size={19} /><input type="text" value={username} onChange={event => setUsername(event.target.value.slice(0, 40))} autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="Например, testTB" required /></div>
+            </label>
             <label className="schedule-access__field">
               <span>Пароль</span>
               <div><LockKeyhole size={19} /><input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required autoFocus /></div>
             </label>
             {error && <p className="schedule-access__error" role="alert">{error}</p>}
-            <button type="submit" className="schedule-access__submit" disabled={busy || !password}><KeyRound size={19} />{busy ? 'Проверяем…' : 'Войти в редактор'}</button>
+            <button type="submit" className="schedule-access__submit" disabled={busy || !username.trim() || !password}><KeyRound size={19} />{busy ? 'Проверяем…' : 'Войти в редактор'}</button>
           </form>
         ) : (
           <form onSubmit={setup} className="schedule-access__form schedule-access__form--setup">
@@ -168,7 +172,7 @@ export function ScheduleAdminAccessScreen() {
 
 function PasswordPair({ title, username, password, confirmation, onPassword, onConfirmation }: {
   title: string;
-  username: ScheduleEditorUser['username'];
+  username: Extract<ScheduleEditorUser['username'], 'moscow' | 'zelenogorsk'>;
   password: string;
   confirmation: string;
   onPassword: (value: string) => void;
