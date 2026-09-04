@@ -2083,6 +2083,28 @@
   opacity: 0.5;
 }
 
+.schedule-access__manual-login {
+  justify-self: center;
+  padding: 0.35rem 0.5rem;
+  color: #607987;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed #9eb1b8;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.schedule-access__manual-login:hover {
+  color: var(--schedule-aqua-dark);
+  border-bottom-color: var(--schedule-aqua-dark);
+}
+
+.schedule-access__manual-login:focus-visible {
+  outline: 3px solid #71d1d7;
+  outline-offset: 3px;
+  border-radius: 0.25rem;
+}
+
 .schedule-access__error {
   padding: 0.8rem 0.9rem;
   color: #8d4437;

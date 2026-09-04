@@ -80,7 +80,7 @@ export interface ScheduleSaveResult {
 }
 
 export interface ScheduleEditorUser {
-  username: 'moscow' | 'zelenogorsk';
+  username: 'moscow' | 'zelenogorsk' | 'testtb';
   locationId: '1' | '2';
 }
 

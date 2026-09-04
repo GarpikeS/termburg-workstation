@@ -3,7 +3,9 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const unpackedArgument = process.argv.find(argument => argument.startsWith('--unpacked-directory='));
@@ -13,6 +15,20 @@ const unpackedDirectory = unpackedArgument
 const enrollmentExpected = !process.argv.includes('--without-enrollment');
 const expectedLocationArgument = process.argv.find(argument => argument.startsWith('--expected-location='));
 const expectedLocation = expectedLocationArgument?.slice('--expected-location='.length) || '';
+const expectedAuthAccountArgument = process.argv.find(argument => argument.startsWith('--expected-auth-account='));
+const expectedAuthAccount = expectedAuthAccountArgument?.slice('--expected-auth-account='.length) || '';
+const expectedAuthPassword = String(process.env.TERMBURG_TEST_PROFILE_PASSWORD || '');
+const scrypt = promisify(scryptCallback);
+
+function smokeAccount(username, locationId) {
+  return {
+    username,
+    locationId,
+    salt: `smoke-${username}-salt`,
+    hash: `smoke-${username}-hash`,
+    scrypt: { N: 1024, r: 8, p: 1, maxmem: 16_777_216, keyLength: 64 },
+  };
+}
 
 async function freePort() {
   const server = net.createServer();
@@ -49,6 +65,16 @@ try {
   if (!executable) throw new Error('Packaged Workstation executable was not found.');
   const outputPath = path.join(temporaryDirectory, 'result.json');
   const userDataPath = path.join(temporaryDirectory, 'user-data');
+  if (expectedAuthAccount) {
+    await fs.mkdir(userDataPath, { recursive: true });
+    await fs.writeFile(path.join(userDataPath, 'schedule-auth.json'), JSON.stringify({
+      schemaVersion: 1,
+      accounts: {
+        moscow: smokeAccount('moscow', '1'),
+        zelenogorsk: smokeAccount('zelenogorsk', '2'),
+      },
+    }), 'utf8');
+  }
   const port = await freePort();
   const child = spawn(path.join(unpackedDirectory, executable), [
     '--no-update',
@@ -70,7 +96,10 @@ try {
     || (!expectedLocation && result.dolphinPackage?.deviceProfile !== null)
     || (expectedLocation && result.authBootstrap?.applied !== true)
     || (expectedLocation && !result.authBootstrap?.managedAccounts?.includes(expectedLocation))
-    || (!expectedLocation && result.authBootstrap?.embedded !== false)
+    || (expectedAuthAccount && result.authBootstrap?.embedded !== true)
+    || (expectedAuthAccount && result.authBootstrap?.applied !== true)
+    || (expectedAuthAccount && !result.authBootstrap?.managedAccounts?.includes(expectedAuthAccount))
+    || (!expectedLocation && !expectedAuthAccount && result.authBootstrap?.embedded !== false)
     || result.siteSyncBootstrap?.embedded !== true
     || result.siteSyncBootstrap?.applied !== true
     || result.siteSyncBootstrap?.locationIds?.length !== 2
@@ -80,6 +109,30 @@ try {
   const storedSiteSync = JSON.parse(await fs.readFile(path.join(userDataPath, 'site-sync.json'), 'utf8'));
   if (!storedSiteSync.locations?.['1']?.token || !storedSiteSync.locations?.['2']?.token) {
     throw new Error('Packaged Workstation did not provision both schedule site tokens.');
+  }
+  if (expectedAuthAccount) {
+    const storedAuth = JSON.parse(await fs.readFile(path.join(userDataPath, 'schedule-auth.json'), 'utf8'));
+    const account = storedAuth.accounts?.[expectedAuthAccount];
+    if (!account || storedAuth.accounts.moscow.hash !== 'smoke-moscow-hash') {
+      throw new Error('Packaged Workstation did not merge the hidden schedule account safely.');
+    }
+    if (expectedAuthPassword) {
+      const actual = await scrypt(
+        expectedAuthPassword,
+        Buffer.from(account.salt, 'base64'),
+        account.scrypt.keyLength,
+        {
+          N: account.scrypt.N,
+          r: account.scrypt.r,
+          p: account.scrypt.p,
+          maxmem: account.scrypt.maxmem,
+        },
+      );
+      const expected = Buffer.from(account.hash, 'base64');
+      if (expected.length !== actual.length || !timingSafeEqual(expected, Buffer.from(actual))) {
+        throw new Error('Packaged Workstation hidden schedule account password does not match.');
+      }
+    }
   }
   console.log(`Packaged Workstation smoke test passed on port ${port}.`);
 } finally {
