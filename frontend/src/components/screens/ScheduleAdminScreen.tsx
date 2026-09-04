@@ -529,8 +529,11 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
       </main>
 
       <footer className="schedule-admin-savebar">
-        <div><span className={dirty ? 'is-dirty' : ''} /><strong>{dirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}</strong><small>Версия {draft.revision} · {new Date(draft.updatedAt).toLocaleString('ru-RU')}</small></div>
-        <button type="button" className="schedule-admin-primary" onClick={() => void saveChanges()} disabled={!dirty || saving}><Save size={19} />{saving ? 'Сохраняем…' : 'Сохранить и показать всем'}</button>
+        <div className="schedule-admin-savebar__status"><span className={dirty ? 'is-dirty' : ''} /><strong>{dirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}</strong><small>Версия {draft.revision} · {new Date(draft.updatedAt).toLocaleString('ru-RU')}</small></div>
+        <div className="schedule-admin-savebar__actions">
+          {!isTestSession && <button type="button" className="schedule-admin-secondary schedule-admin-savebar__publish" onClick={() => void publishToSite()} disabled={siteBusy || dirty}><Send size={19} />{siteBusy ? 'Отправляем…' : 'Отправить на сайт'}</button>}
+          <button type="button" className="schedule-admin-primary" onClick={() => void saveChanges()} disabled={!dirty || saving}><Save size={19} />{saving ? 'Сохраняем…' : 'Сохранить и показать всем'}</button>
+        </div>
       </footer>
     </div>
   );

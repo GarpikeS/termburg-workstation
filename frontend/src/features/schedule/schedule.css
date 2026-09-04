@@ -3037,7 +3037,7 @@
   transform: translateX(-50%);
 }
 
-.schedule-admin-savebar > div {
+.schedule-admin-savebar__status {
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-rows: auto auto;
@@ -3045,7 +3045,7 @@
   column-gap: 0.65rem;
 }
 
-.schedule-admin-savebar > div > span {
+.schedule-admin-savebar__status > span {
   grid-row: 1 / -1;
   width: 0.62rem;
   height: 0.62rem;
@@ -3054,9 +3054,33 @@
   box-shadow: 0 0 0 0.3rem rgba(127, 214, 179, 0.12);
 }
 
-.schedule-admin-savebar > div > span.is-dirty {
+.schedule-admin-savebar__status > span.is-dirty {
   background: #f0bf69;
   box-shadow: 0 0 0 0.3rem rgba(240, 191, 105, 0.12);
+}
+
+.schedule-admin-savebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.schedule-admin-savebar__actions > button {
+  min-height: 3.1rem;
+  white-space: nowrap;
+}
+
+.schedule-admin-savebar__publish {
+  color: #dff9f4;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.schedule-admin-savebar__publish:hover:not(:disabled) {
+  color: white;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.42);
 }
 
 .schedule-admin-savebar strong {
@@ -3289,7 +3313,13 @@
 
   .schedule-admin__toolbar-actions > *,
   .schedule-admin-form__actions > *,
-  .schedule-admin-savebar > button {
+  .schedule-admin-savebar__actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .schedule-admin-savebar__actions > button {
     width: 100%;
   }
 
