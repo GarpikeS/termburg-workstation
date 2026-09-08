@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bathhouses } from '../frontend/src/data/bathhouses.ts';
+import { bathhouses, getBathhouseEntryLevel } from '../frontend/src/data/bathhouses.ts';
 import { getLevelsForBathhouse, levels as match3Levels } from '../frontend/src/data/levels.ts';
 import { getBubbleLevel, getTotalLevels } from '../frontend/src/engine/engine-bubbles/bubbleLevels.ts';
 import { getPetLevel, getPetLevelProgress } from '../frontend/src/engine/engine-pet/petEngine.ts';
 import {
   GAME_LEVEL_TOTAL,
+  SLAVICH_LEVEL_TARGETS,
+  SLAVICH_LEVEL_TOTAL,
   getNextPlayableLevel,
+  getNextPlayableSlavichLevel,
   getSlavichLevelTarget,
   isSlavichLevelComplete,
+  migrateLegacySlavichCompletedLevels,
 } from '../frontend/src/data/gameProgression.ts';
 
 test('Хоровод и Бирюльки содержат непрерывные 50 уровней', () => {
@@ -37,20 +41,49 @@ test('Хоровод и Бирюльки содержат непрерывные
   assert.equal(getBubbleLevel(GAME_LEVEL_TOTAL + 1), undefined);
 });
 
-test('Славич имеет 50 последовательных раундов с реальной целью по очкам', () => {
+test('домик Хоровода сразу ведёт в подходящий уровень без второй карты', () => {
+  assert.equal(getBathhouseEntryLevel(bathhouses[0], 1), 1);
+  assert.equal(getBathhouseEntryLevel(bathhouses[0], 4), 4);
+  assert.equal(getBathhouseEntryLevel(bathhouses[0], 6), 5);
+  assert.equal(getBathhouseEntryLevel(bathhouses[1], 5), null);
+  assert.equal(getBathhouseEntryLevel(bathhouses[1], 6), 6);
+  assert.equal(getBathhouseEntryLevel(bathhouses[1], 8), 8);
+  assert.equal(getBathhouseEntryLevel(bathhouses[9], 51), 50);
+});
+
+test('Славич имеет четыре крупных этапа при прежней финальной цели по очкам', () => {
   assert.equal(getNextPlayableLevel(0), 1);
   assert.equal(getNextPlayableLevel(49), 50);
   assert.equal(getNextPlayableLevel(50), 50);
   assert.equal(getNextPlayableLevel(100), 50);
-  assert.equal(getSlavichLevelTarget(1), 64);
-  assert.equal(getSlavichLevelTarget(50), 3200);
+  assert.equal(SLAVICH_LEVEL_TOTAL, 4);
+  assert.deepEqual(SLAVICH_LEVEL_TARGETS, [800, 1600, 2400, 3200]);
+  assert.equal(getNextPlayableSlavichLevel(0), 1);
+  assert.equal(getNextPlayableSlavichLevel(3), 4);
+  assert.equal(getNextPlayableSlavichLevel(50), 4);
+  assert.equal(getSlavichLevelTarget(1), 800);
+  assert.equal(getSlavichLevelTarget(4), 3200);
 
-  for (let level = 1; level <= GAME_LEVEL_TOTAL; level += 1) {
+  for (let level = 1; level <= SLAVICH_LEVEL_TOTAL; level += 1) {
     const target = getSlavichLevelTarget(level);
     assert.equal(isSlavichLevelComplete(target - 1, level), false);
     assert.equal(isSlavichLevelComplete(target, level), true);
     if (level > 1) assert.ok(target > getSlavichLevelTarget(level - 1));
   }
+});
+
+test('старые микролевелы Славича мигрируют один раз без потери первого зачёта', () => {
+  assert.equal(migrateLegacySlavichCompletedLevels(0, 0), 0);
+  assert.equal(migrateLegacySlavichCompletedLevels(1, 0), 1);
+  assert.equal(migrateLegacySlavichCompletedLevels(12, 0), 1);
+  assert.equal(migrateLegacySlavichCompletedLevels(13, 0), 1);
+  assert.equal(migrateLegacySlavichCompletedLevels(24, 0), 1);
+  assert.equal(migrateLegacySlavichCompletedLevels(25, 0), 2);
+  assert.equal(migrateLegacySlavichCompletedLevels(37, 0), 2);
+  assert.equal(migrateLegacySlavichCompletedLevels(38, 0), 3);
+  assert.equal(migrateLegacySlavichCompletedLevels(49, 0), 3);
+  assert.equal(migrateLegacySlavichCompletedLevels(50, 0), 4);
+  assert.equal(migrateLegacySlavichCompletedLevels(0, 1600), 2);
 });
 
 test('Пестун растёт до 50 уровня без изменения накопленного опыта', () => {

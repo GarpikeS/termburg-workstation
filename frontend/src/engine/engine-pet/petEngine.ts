@@ -208,7 +208,9 @@ export function createPet(
   now = Date.now(),
   retainedExperience = 0,
   adoptionId = createAdoptionId(characterId, now),
+  retainedCompanionExperience = 0,
 ): PetState {
+  const experience = Math.max(0, Math.floor(Number.isFinite(retainedExperience) ? retainedExperience : 0));
   const pet: PetState = {
     adoptionId,
     characterId,
@@ -222,7 +224,12 @@ export function createPet(
     lastUpdated: now,
     cooldowns: {},
     activityCooldowns: {},
-    experience: Math.max(0, Math.floor(Number.isFinite(retainedExperience) ? retainedExperience : 0)),
+    experience,
+    companionExperience: Math.min(
+      experience,
+      Math.max(0, Math.floor(Number.isFinite(retainedCompanionExperience) ? retainedCompanionExperience : 0)),
+    ),
+    companionRewardSessionIds: [],
     bond: 10,
     careStreak: 0,
     lastCareDate: null,
@@ -238,8 +245,33 @@ export function createPet(
   return { ...pet, stage: resolveStage(pet) };
 }
 
+export const PET_COMPANION_REWARD_LEDGER_LIMIT = 256;
+const PET_COMPANION_SESSION_ID_MAX_LENGTH = 72;
+
+export function normalizePetCompanionRewardSessionIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    const rawId = value[index];
+    if (typeof rawId !== 'string') continue;
+    const id = rawId.trim().slice(0, PET_COMPANION_SESSION_ID_MAX_LENGTH);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    normalized.push(id);
+    if (normalized.length >= PET_COMPANION_REWARD_LEDGER_LIMIT) break;
+  }
+  return normalized.reverse();
+}
+
 export function normalizePetState(pet: PetState, now = Date.now()): PetState {
   const fallback = createPet(pet.characterId || 'yaromir', now);
+  const experience = Math.max(0, Math.floor(Number.isFinite(pet.experience) ? pet.experience : 0));
+  const companionExperience = Math.min(
+    experience,
+    Math.max(0, Math.floor(Number.isFinite(pet.companionExperience) ? pet.companionExperience ?? 0 : 0)),
+  );
   const currentDate = getPetDateKey(now);
   const daily = pet.daily && pet.daily.date === currentDate
     ? {
@@ -261,7 +293,9 @@ export function normalizePetState(pet: PetState, now = Date.now()): PetState {
     happiness: clamp(Number.isFinite(pet.happiness) ? pet.happiness : fallback.happiness),
     energy: clamp(Number.isFinite(pet.energy) ? pet.energy : fallback.energy),
     cleanliness: clamp(Number.isFinite(pet.cleanliness) ? pet.cleanliness : fallback.cleanliness),
-    experience: Math.max(0, Math.floor(Number.isFinite(pet.experience) ? pet.experience : 0)),
+    experience,
+    companionExperience,
+    companionRewardSessionIds: normalizePetCompanionRewardSessionIds(pet.companionRewardSessionIds),
     bond: clamp(Number.isFinite(pet.bond) ? pet.bond : 10),
     careStreak: Math.max(0, Math.floor(Number.isFinite(pet.careStreak) ? pet.careStreak : 0)),
     lastCareDate: typeof pet.lastCareDate === 'string' ? pet.lastCareDate : null,
@@ -295,8 +329,19 @@ export function hasPetAdvancedLevel(previous: PetState, next: PetState): boolean
   return getPetLevel(next) > getPetLevel(previous);
 }
 
+function getPetCareExperience(pet: Pick<PetState, 'experience' | 'companionExperience'>): number {
+  const experience = Math.max(0, Number.isFinite(pet.experience) ? pet.experience : 0);
+  const companionExperience = Math.max(
+    0,
+    Number.isFinite(pet.companionExperience) ? pet.companionExperience ?? 0 : 0,
+  );
+  return Math.max(0, experience - companionExperience);
+}
+
 export function qualifiesPetLevelCompletion(previous: PetState, next: PetState): boolean {
-  return hasPetAdvancedLevel(previous, next) || getPetLevel(previous) >= GAME_LEVEL_TOTAL;
+  const previousLevel = getPetLevel({ experience: getPetCareExperience(previous) });
+  const nextLevel = getPetLevel({ experience: getPetCareExperience(next) });
+  return nextLevel > previousLevel || previousLevel >= GAME_LEVEL_TOTAL;
 }
 
 function resolveStage(pet: PetState): PetState['stage'] {

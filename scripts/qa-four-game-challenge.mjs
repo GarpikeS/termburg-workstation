@@ -34,13 +34,18 @@ function baseProgress(overrides = {}) {
       date: '2026-09-05',
       earned: { match3: 0, game2048: 0, bubbles: 0, pet: 0 },
     },
-    fourGameChallenge: { version: 1, completedGames: [] },
+    fourGameChallenge: {
+      version: 1,
+      completedGames: [],
+      stageCounts: { game2048: 0, bubbles: 0, pet: 0, match3: 0 },
+    },
     lives: 5,
     nextLifeAt: null,
     selectedCharacter: 'yaromir',
     tutorialCompleted: true,
     tutorialFlags: [],
     best2048Score: 0,
+    game2048ProgressVersion: 2,
     bubbleLevelsCompleted: 0,
     pet: null,
     petDeparture: null,
@@ -319,10 +324,10 @@ try {
     assert.ok(revealDelay >= 3_000, `challenge appeared before all four blinks (${revealDelay}ms)`);
     assert.ok(revealDelay < 7_000, `challenge appeared too late (${revealDelay}ms)`);
     assert.equal(await challenge.getAttribute('data-four-game-challenge-state'), 'intro');
-    await page.getByText('Выиграй бесплатный час в Термбурге', { exact: true }).waitFor();
-    await page.getByText('Пройди первый этап в каждой из 4 игр. Первый час — за 4 игры и 0 термокоинов. Монеты останутся в кошельке.', { exact: true }).waitFor();
-    await page.getByText('Следующий час — за 50 термокоинов', { exact: true }).waitFor();
-    await page.getByText('Сейчас в кошельке: 0', { exact: true }).waitFor();
+    await page.getByText('1 час посещения — за 4 уровня', { exact: true }).waitFor();
+    await page.getByText('Пройди любые 4 новых уровня: все четыре в любимой игре, по одному в каждой или в любой комбинации. Термокоины за подарок не списываются.', { exact: true }).waitFor();
+    await page.getByText('К этому подарку монеты не относятся. Новые часы — по 50 термокоинов, не чаще раза в 7 дней.', { exact: true }).waitFor();
+    await page.getByText('Баланс: 0 · осталось накопить: 50', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Открыть кошелёк. Баланс: 0 термокоинов' }).waitFor();
     const globalWallet = page.locator('[data-global-wallet]');
     assert.equal(await globalWallet.textContent(), '0');
@@ -389,9 +394,9 @@ try {
     await page.goto(`${baseUrl}/games`, { waitUntil: 'domcontentloaded' });
     await page.locator('[data-four-game-challenge-state="compact"]').click();
     const action = page.locator('[data-four-game-start]');
-    await action.getByText('Дальше: Пестун', { exact: true }).waitFor();
+    await action.getByText('Продолжить: Славич', { exact: true }).waitFor();
     await action.click();
-    await page.waitForURL('**/games/pet');
+    await page.waitForURL('**/games/2048');
     assert.deepEqual(runtimeErrors, []);
     await context.close();
   }
@@ -400,7 +405,11 @@ try {
     const { context, page, runtimeErrors } = await createScenario(browser, {
       progress: baseProgress({
         tutorialFlags: ['four-games-challenge-intro-v1'],
-        fourGameChallenge: { version: 1, completedGames: ['match3', 'pet', 'bubbles', 'game2048'] },
+        fourGameChallenge: {
+          version: 1,
+          completedGames: ['game2048'],
+          stageCounts: { game2048: 4, bubbles: 0, pet: 0, match3: 0 },
+        },
       }),
       viewport: { width: 320, height: 568 },
     });
@@ -408,7 +417,7 @@ try {
     const complete = page.locator('[data-four-game-challenge-state="complete"]');
     await complete.waitFor();
     await assertPortalLoopRunning(page, 'completed challenge');
-    await page.getByText('Бесплатный час разблокирован', { exact: true }).waitFor();
+    await page.getByText('Подарочный час открыт', { exact: true }).waitFor();
     const targets = await complete.locator('[data-four-game-dismiss], [data-four-game-start]').evaluateAll(elements => (
       elements.map(element => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }))
     ));
@@ -419,7 +428,7 @@ try {
     await complete.locator('[data-four-game-start]').click();
     await page.waitForURL('**/shop/free-hour?campaign=four-games-v1');
     await page.getByText('Сохраните приз в профиле', { exact: true }).waitFor();
-    await page.getByText(/0 термокоинов/).waitFor();
+    await page.getByText('Бесплатно · монеты не списываются', { exact: true }).waitFor();
     assert.deepEqual(runtimeErrors, []);
     await context.close();
   }
@@ -499,7 +508,7 @@ try {
     await page.goto(`${baseUrl}/shop/free-hour`, { waitUntil: 'domcontentloaded' });
     assert.equal(await page.getByText(campaignClaim.code, { exact: true }).count(), 0, 'regular reward route must not expose a campaign code');
     await page.goto(`${baseUrl}/shop/free-hour?campaign=four-games-v1`, { waitUntil: 'domcontentloaded' });
-    await page.getByText('Пока не все 4 игры пройдены', { exact: true }).waitFor();
+    await page.getByText('Пока не все задания выполнены', { exact: true }).waitFor();
     assert.equal(await page.getByText(campaignClaim.code, { exact: true }).count(), 0, 'guest must not see a prior account claim code');
     assert.deepEqual(runtimeErrors, []);
     await context.close();

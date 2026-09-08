@@ -33,6 +33,7 @@ function baseProgress(date = '2026-08-15') {
     tutorialCompleted: true,
     tutorialFlags: ['match3:swap'],
     best2048Score: 1024,
+    game2048ProgressVersion: 2,
     game2048LevelsCompleted: 2,
     bubbleLevelsCompleted: 2,
     pet: null,
@@ -195,11 +196,13 @@ test('phone/password registration, session, progress sync, logout and cross-devi
     assert.equal(registered.account.city, 'Владивосток');
     assert.equal(registered.account.phoneMasked, '+7 ••• •••-45-67');
     assert.equal(registered.progress.currency, 181);
+    assert.equal(registered.progress.game2048ProgressVersion, 2);
     assert.equal(registered.progress.game2048LevelsCompleted, 2);
     assert.equal(registered.progress.dailyGameRewards.date, '2026-08-16');
     assert.deepEqual(registered.progress.fourGameChallenge, {
       version: 1,
       completedGames: ['game2048', 'bubbles', 'match3'],
+      stageCounts: { game2048: 2, bubbles: 2, pet: 0, match3: 2 },
     });
     assert.equal(JSON.stringify(registered).includes(TEST_PASSWORD), false);
 
@@ -248,7 +251,7 @@ test('phone/password registration, session, progress sync, logout and cross-devi
     assert.equal(firstSyncProgress.levels[50]?.completed, true);
     assert.equal(firstSyncProgress.levels[51], undefined);
     assert.equal(firstSyncProgress.levels[100], undefined);
-    assert.equal(firstSyncProgress.game2048LevelsCompleted, 50);
+    assert.equal(firstSyncProgress.game2048LevelsCompleted, 4);
     assert.equal(firstSyncProgress.bubbleLevelsCompleted, 50);
     assert.deepEqual(firstSyncProgress.fourGameChallenge.completedGames, ['game2048', 'bubbles', 'match3']);
 
@@ -483,6 +486,7 @@ test('registration preserves a departed pet level from guest progress', async ()
     assert.equal(registered.progress.pet, null);
     assert.equal(registered.progress.petDeparture.characterId, 'yaromir');
     assert.equal(registered.progress.petDeparture.experience, 9_899);
+    assert.equal(registered.progress.petDeparture.companionExperience, 0);
 
     const staleLegacyPet = await fetch(`${origin}/api/account/progress`, {
       method: 'PUT',
@@ -534,6 +538,372 @@ test('registration preserves a departed pet level from guest progress', async ()
   }
 });
 
+test('legacy Slavich micro-levels migrate once and never erase current four-stage progress', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-slavich-v2-'));
+  const currentTime = Date.UTC(2026, 8, 7, 11, 0, 0);
+  const service = await startTestService(tempRoot, () => currentTime);
+  const origin = `http://127.0.0.1:${service.port}`;
+
+  try {
+    const register = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        phone: '+7 999 444-30-01',
+        password: TEST_PASSWORD,
+        name: 'Славич',
+        city: 'Казань',
+        timeZone: 'Europe/Moscow',
+        consent: true,
+        consentVersion: 'account-2026-08-15',
+        deviceId: 'device-slavich-migration-0001',
+        progress: {
+          best2048Score: 64,
+          game2048LevelsCompleted: 1,
+          fourGameChallenge: { version: 1, completedGames: [] },
+        },
+      }),
+    });
+    assert.equal(register.status, 201);
+    const cookie = cookieFrom(register);
+    const registered = await register.json();
+    assert.equal(registered.progress.game2048ProgressVersion, 2);
+    assert.equal(registered.progress.game2048LevelsCompleted, 1);
+    assert.equal(registered.progress.fourGameChallenge.stageCounts.game2048, 1);
+
+    const migratedSync = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          best2048Score: 1600,
+          game2048LevelsCompleted: 25,
+        },
+      }),
+    });
+    assert.equal(migratedSync.status, 200);
+    const migrated = (await migratedSync.json()).progress;
+    assert.equal(migrated.game2048LevelsCompleted, 2);
+    assert.equal(migrated.fourGameChallenge.stageCounts.game2048, 2);
+
+    const currentSync = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          game2048ProgressVersion: 2,
+          game2048LevelsCompleted: 3,
+          best2048Score: 0,
+        },
+      }),
+    });
+    assert.equal(currentSync.status, 200);
+    const current = (await currentSync.json()).progress;
+    assert.equal(current.game2048LevelsCompleted, 3);
+    assert.equal(current.fourGameChallenge.stageCounts.game2048, 3);
+
+    const staleLegacySync = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: { best2048Score: 64, game2048LevelsCompleted: 1 },
+      }),
+    });
+    const afterStale = (await staleLegacySync.json()).progress;
+    assert.equal(afterStale.game2048LevelsCompleted, 3);
+    assert.equal(afterStale.fourGameChallenge.stageCounts.game2048, 3);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('companion pet progress is sanitized, merged, transferred and excluded from pet challenge XP', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-pet-companion-'));
+  const currentTime = Date.UTC(2026, 8, 7, 12, 0, 0);
+  const service = await startTestService(tempRoot, () => currentTime);
+  const origin = `http://127.0.0.1:${service.port}`;
+  const progress = baseProgress('2026-09-07');
+  progress.currentLevel = 1;
+  progress.levels = {};
+  progress.game2048LevelsCompleted = 0;
+  progress.bubbleLevelsCompleted = 0;
+  progress.fourGameChallenge = { version: 1, completedGames: [] };
+  progress.pet = {
+    adoptionId: 'pet-yaromir-companion',
+    characterId: 'yaromir',
+    name: 'Яромир',
+    experience: 108,
+    companionExperience: 12,
+    companionRewardSessionIds: [
+      'session-a',
+      ' session-b ',
+      'session-a',
+      'x'.repeat(80),
+      '',
+      42,
+    ],
+    lastUpdated: currentTime - 100,
+  };
+
+  try {
+    const register = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        phone: '+7 999 444-33-22',
+        password: TEST_PASSWORD,
+        name: 'Спутник',
+        city: 'Казань',
+        timeZone: 'Europe/Moscow',
+        consent: true,
+        consentVersion: 'account-2026-08-15',
+        deviceId: 'device-pet-companion-0001',
+        progress,
+      }),
+    });
+    assert.equal(register.status, 201);
+    const cookie = cookieFrom(register);
+    const registered = await register.json();
+    assert.equal(registered.progress.pet.experience, 108);
+    assert.equal(registered.progress.pet.companionExperience, 12);
+    assert.deepEqual(registered.progress.pet.companionRewardSessionIds, [
+      'session-a',
+      'session-b',
+      'x'.repeat(72),
+    ]);
+    assert.deepEqual(registered.progress.fourGameChallenge.completedGames, []);
+
+    const mergeResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...registered.progress,
+          pet: {
+            ...registered.progress.pet,
+            experience: 110,
+            companionExperience: 1,
+            companionRewardSessionIds: ['session-b', 'session-c'],
+            lastUpdated: currentTime + 100,
+          },
+        },
+      }),
+    });
+    assert.equal(mergeResponse.status, 200);
+    const merged = (await mergeResponse.json()).progress;
+    assert.equal(merged.pet.companionExperience, 12);
+    assert.deepEqual(merged.pet.companionRewardSessionIds, [
+      'session-a',
+      'session-b',
+      'x'.repeat(72),
+      'session-c',
+    ]);
+    assert.deepEqual(merged.fourGameChallenge.completedGames, []);
+
+    const cappedIds = Array.from({ length: 300 }, (_, index) => `session-${String(index).padStart(3, '0')}`);
+    const capResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...merged,
+          pet: {
+            ...merged.pet,
+            companionRewardSessionIds: cappedIds,
+            lastUpdated: currentTime + 200,
+          },
+        },
+      }),
+    });
+    assert.equal(capResponse.status, 200);
+    const capped = (await capResponse.json()).progress;
+    assert.equal(capped.pet.companionRewardSessionIds.length, 256);
+    assert.equal(capped.pet.companionRewardSessionIds[0], 'session-044');
+    assert.equal(capped.pet.companionRewardSessionIds.at(-1), 'session-299');
+
+    const departureResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...capped,
+          pet: null,
+          petDeparture: {
+            adoptionId: capped.pet.adoptionId,
+            characterId: capped.pet.characterId,
+            name: capped.pet.name,
+            depletedStat: 'hunger',
+            departedAt: currentTime + 300,
+            experience: 110,
+            companionExperience: 0,
+          },
+        },
+      }),
+    });
+    assert.equal(departureResponse.status, 200);
+    const departed = (await departureResponse.json()).progress;
+    assert.equal(departed.pet, null);
+    assert.equal(departed.petDeparture.experience, 110);
+    assert.equal(departed.petDeparture.companionExperience, 12);
+    assert.deepEqual(departed.fourGameChallenge.completedGames, []);
+
+    const adoptionResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...departed,
+          pet: {
+            adoptionId: 'pet-valkiriya-after-companion',
+            characterId: 'valkiriya',
+            name: 'Валькирия',
+            experience: 110,
+            companionExperience: 0,
+            companionRewardSessionIds: ['new-session'],
+            lastUpdated: currentTime + 400,
+          },
+          petDeparture: departed.petDeparture,
+        },
+      }),
+    });
+    assert.equal(adoptionResponse.status, 200);
+    const adopted = (await adoptionResponse.json()).progress;
+    assert.equal(adopted.pet.companionExperience, 12);
+    assert.deepEqual(adopted.pet.companionRewardSessionIds, ['new-session']);
+    assert.deepEqual(adopted.fourGameChallenge.completedGames, []);
+
+    const challengeResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...adopted,
+          pet: {
+            ...adopted.pet,
+            experience: 112,
+            companionExperience: 12,
+            lastUpdated: currentTime + 500,
+          },
+        },
+      }),
+    });
+    assert.equal(challengeResponse.status, 200);
+    const challengeSaved = (await challengeResponse.json()).progress;
+    assert.deepEqual(challengeSaved.fourGameChallenge.completedGames, ['pet']);
+
+    const clampResponse = await fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...challengeSaved,
+          pet: {
+            ...challengeSaved.pet,
+            companionExperience: 999_999,
+            lastUpdated: currentTime + 600,
+          },
+        },
+      }),
+    });
+    assert.equal(clampResponse.status, 200);
+    const clamped = (await clampResponse.json()).progress;
+    assert.equal(clamped.pet.companionExperience, clamped.pet.experience);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('parallel companion wins from phone and tablet keep both rewards', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-pet-parallel-'));
+  const currentTime = Date.UTC(2026, 8, 7, 14, 0, 0);
+  const service = await startTestService(tempRoot, () => currentTime);
+  const origin = `http://127.0.0.1:${service.port}`;
+  const progress = baseProgress('2026-09-07');
+  progress.currentLevel = 1;
+  progress.levels = {};
+  progress.game2048LevelsCompleted = 0;
+  progress.bubbleLevelsCompleted = 0;
+  progress.fourGameChallenge = { version: 1, completedGames: [] };
+  progress.pet = {
+    adoptionId: 'pet-yaromir-parallel',
+    characterId: 'yaromir',
+    name: 'Яромир',
+    experience: 0,
+    companionExperience: 0,
+    companionRewardSessionIds: [],
+    lastUpdated: currentTime,
+  };
+
+  try {
+    const register = await fetch(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        phone: '+7 999 555-44-33',
+        password: TEST_PASSWORD,
+        name: 'Два устройства',
+        city: 'Казань',
+        timeZone: 'Europe/Moscow',
+        consent: true,
+        consentVersion: 'account-2026-08-15',
+        deviceId: 'device-pet-parallel-0001',
+        progress,
+      }),
+    });
+    assert.equal(register.status, 201);
+    const cookie = cookieFrom(register);
+    const registered = await register.json();
+    const commonSnapshot = registered.progress;
+
+    const saveBranch = (sessionId, lastUpdated) => fetch(`${origin}/api/account/progress`, {
+      method: 'PUT',
+      headers: authHeaders({ Cookie: cookie }),
+      body: JSON.stringify({
+        expectedAccountId: registered.account.id,
+        progress: {
+          ...commonSnapshot,
+          pet: {
+            ...commonSnapshot.pet,
+            experience: 12,
+            companionExperience: 12,
+            companionRewardSessionIds: [sessionId],
+            lastUpdated,
+          },
+        },
+      }),
+    });
+
+    // The newer tablet snapshot reaches the server first; the older phone
+    // snapshot arrives later and must still contribute its distinct win.
+    const tabletResponse = await saveBranch('parallel-tablet-win', currentTime + 200);
+    assert.equal(tabletResponse.status, 200);
+    const phoneResponse = await saveBranch('parallel-phone-win', currentTime + 100);
+    assert.equal(phoneResponse.status, 200);
+    const merged = (await phoneResponse.json()).progress;
+
+    assert.equal(merged.pet.experience, 24);
+    assert.equal(merged.pet.companionExperience, 24);
+    assert.deepEqual(merged.pet.companionRewardSessionIds, [
+      'parallel-tablet-win',
+      'parallel-phone-win',
+    ]);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('four-game challenge progress is allowlisted and cannot regress across stale or parallel sync', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-account-four-games-'));
   const currentTime = Date.UTC(2026, 7, 20, 12, 0, 0);
@@ -571,6 +941,7 @@ test('four-game challenge progress is allowlisted and cannot regress across stal
     assert.deepEqual(registered.progress.fourGameChallenge, {
       version: 1,
       completedGames: ['pet'],
+      stageCounts: { game2048: 0, bubbles: 0, pet: 1, match3: 0 },
     });
 
     const disjointSyncs = await Promise.all([
@@ -606,6 +977,7 @@ test('four-game challenge progress is allowlisted and cannot regress across stal
     assert.deepEqual(afterParallelSaved.progress.fourGameChallenge, {
       version: 1,
       completedGames: ['game2048', 'pet', 'match3'],
+      stageCounts: { game2048: 1, bubbles: 0, pet: 1, match3: 1 },
     });
 
     const staleSync = await fetch(`${origin}/api/account/progress`, {
@@ -618,6 +990,7 @@ test('four-game challenge progress is allowlisted and cannot regress across stal
     assert.deepEqual(staleSaved.progress.fourGameChallenge, {
       version: 1,
       completedGames: ['game2048', 'pet', 'match3'],
+      stageCounts: { game2048: 1, bubbles: 0, pet: 1, match3: 1 },
     });
 
     const login = await fetch(`${origin}/api/auth/login`, {
@@ -642,6 +1015,7 @@ test('four-game challenge progress is allowlisted and cannot regress across stal
     assert.deepEqual(loggedIn.progress.fourGameChallenge, {
       version: 1,
       completedGames: ['game2048', 'bubbles', 'pet', 'match3'],
+      stageCounts: { game2048: 1, bubbles: 1, pet: 1, match3: 1 },
     });
     assert.equal(loggedIn.progress.currency, registered.progress.currency);
     assert.equal(loggedIn.revision, staleSaved.revision + 1);

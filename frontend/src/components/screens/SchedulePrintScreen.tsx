@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import '@/features/schedule/schedule.css';
 import { useParams } from 'react-router-dom';
-import { CalendarDays, MapPin, Printer, RotateCcw, Rows3 } from 'lucide-react';
+import { CalendarDays, Download, MapPin, Printer, RotateCcw, Rows3 } from 'lucide-react';
 import { ScheduleError, ScheduleEventRow, ScheduleLoading, ScheduleWaves, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
+import { downloadScheduleImage } from '@/features/schedule/downloadScheduleImage';
+import { getSchedulePrintKinds, schedulePrintKindLabel, type SchedulePrintKind } from '@/features/schedule/schedulePrintKinds';
 import { useSchedule } from '@/features/schedule/useSchedule';
 import { useNow } from '@/features/schedule/useNow';
 import {
@@ -30,6 +32,9 @@ export function SchedulePrintScreen() {
   const [view, setView] = useState<PrintViewMode>('day');
   const [orientation, setOrientation] = useState<PrintOrientation>('portrait');
   const [dateKey, setDateKey] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const paperRef = useRef<HTMLDivElement>(null);
 
   if (error && !data) return <ScheduleError message={error} />;
   if (!data || !location || !clock) return <ScheduleLoading />;
@@ -43,6 +48,22 @@ export function SchedulePrintScreen() {
     setView(nextView);
     if (nextView === 'week') setOrientation('landscape');
   };
+  const downloadPng = async () => {
+    if (!paperRef.current || downloading) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await downloadScheduleImage(paperRef.current, {
+        fileName: `termburg-${location.shortName.toLocaleLowerCase('ru-RU')}-${view}-${activeDate}.png`,
+        targetWidth: orientation === 'portrait' ? 2480 : 3508,
+        backgroundColor: '#ffffff',
+      });
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Не удалось сохранить PNG.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className={`schedule-print-studio schedule-print-studio--${orientation} schedule-print-studio--${view}`}>
@@ -51,7 +72,7 @@ export function SchedulePrintScreen() {
         <div>
           <span className="schedule-kicker">Студия печати</span>
           <h1>Готовый макет</h1>
-          <p>Выберите вид и ориентацию, затем отправьте на печать или сохраните в PDF.</p>
+          <p>Выберите день или неделю. Для соцсетей скачивайте PNG — он сохраняется в высоком качестве без скриншота.</p>
         </div>
         <label>
           <span>Период</span>
@@ -82,12 +103,17 @@ export function SchedulePrintScreen() {
           </div>
           {view === 'week' && <p className="schedule-print-orientation__hint" role="status">Неделя автоматически помещается на горизонтальный A4.</p>}
         </fieldset>
-        <button type="button" className="schedule-admin-primary" onClick={() => window.print()}><Printer size={19} />Печать / PDF</button>
+        <div className="schedule-print-controls__actions">
+          <button type="button" className="schedule-admin-secondary" onClick={() => void downloadPng()} disabled={downloading}><Download size={19} />{downloading ? 'Сохраняю…' : 'PNG для соцсетей'}</button>
+          <button type="button" className="schedule-admin-primary" onClick={() => window.print()}><Printer size={19} />Печать / PDF</button>
+          {downloadError && <p className="schedule-print-controls__error" role="alert">{downloadError}</p>}
+        </div>
       </aside>
 
       <main className="schedule-print-preview">
-        <div className="schedule-paper">
+        <div className="schedule-paper" ref={paperRef}>
           <PrintHeader locationCity={location.city} view={view} dateKey={activeDate} eventCount={eventCount} />
+          <PrintLegend />
           {view === 'day' && <PrintDay data={data} locationId={location.id} dateKey={activeDate} />}
           {view === 'week' && <PrintWeek items={weekItems} />}
           <footer className="schedule-paper__footer">
@@ -120,6 +146,9 @@ function PrintHeader({
     week: 'Неделя в Термбурге',
   };
   const weekday = formatScheduleDate(dateKey, { weekday: 'long' });
+  const weekStart = startOfIsoWeek(dateKey);
+  const weekEnd = addDays(weekStart, 6);
+  const weekPeriod = `${formatScheduleDate(weekStart, { day: 'numeric', month: 'long' })} — ${formatScheduleDate(weekEnd, { day: 'numeric', month: 'long' })}`;
   const eventWord = view === 'week' ? 'программа' : 'событие';
   const eventCountLabel = `${eventCount} ${pluralize(eventCount, eventWord)}`;
 
@@ -132,7 +161,7 @@ function PrintHeader({
         <div className="schedule-paper__headline">
           <span>{kickers[view]}</span>
           <h1>{titles[view]}</h1>
-          <p><MapPin size={15} />{locationCity}</p>
+          <p><MapPin size={15} />{locationCity}{view === 'week' && <span>· {weekPeriod}</span>}</p>
         </div>
         <TermburgScheduleMark />
       </header>
@@ -146,12 +175,22 @@ function PrintHeader({
   );
 }
 
+function PrintLegend() {
+  return (
+    <div className="schedule-paper__legend" aria-label="Обозначения категорий">
+      <span className="schedule-print-kind schedule-print-kind--steam"><i aria-hidden="true" />Парения</span>
+      <span className="schedule-print-kind schedule-print-kind--kids"><i aria-hidden="true" />Детские мероприятия</span>
+      <span>Стоимость указана справа</span>
+    </div>
+  );
+}
+
 function PrintDay({ data, locationId, dateKey }: PrintViewProps) {
   const items = getEventsForDate(data, locationId, dateKey);
   return (
     <div className="schedule-paper-events schedule-paper-events--day">
       {items.length > 0 ? items.map(item => (
-        <ScheduleEventRow key={`${item.id}-${dateKey}`} item={item} compact />
+        <ScheduleEventRow key={`${item.id}-${dateKey}`} item={item} compact printKinds={getSchedulePrintKinds(item)} />
       )) : <PrintEmpty />}
     </div>
   );
@@ -187,12 +226,17 @@ function WeekSummaryRow({ item, dayIndexes }: WeekSummaryItem) {
   const closed = isClosedScheduleItem(item);
   const dayNames = dayIndexes.map(index => DAY_LABELS[index]).join(', ');
   const dayTokens = getWeekDayTokens(dayIndexes);
+  const printKinds = getSchedulePrintKinds(item);
+  const printKindClasses = printKinds.map(kind => `schedule-week-summary-event--${kind}`).join(' ');
 
   return (
-    <article className={`schedule-week-summary-event ${closed ? 'schedule-week-summary-event--closed' : ''}`}>
+    <article className={`schedule-week-summary-event ${closed ? 'schedule-week-summary-event--closed' : ''} ${printKindClasses}`}>
       <time>{closed ? 'Закрыто' : item.time}</time>
       <div className="schedule-week-summary-event__content">
-        <h3>{item.title}</h3>
+        <div className="schedule-week-summary-event__title">
+          <h3>{item.title}</h3>
+          <WeekKindMarkers kinds={printKinds} />
+        </div>
         <p><MapPin size={12} aria-hidden="true" />{item.venue || 'Площадка уточняется'}</p>
       </div>
       <div className="schedule-week-summary-event__meta">
@@ -200,12 +244,21 @@ function WeekSummaryRow({ item, dayIndexes }: WeekSummaryItem) {
           {dayTokens.map(token => <span aria-hidden="true" key={token}>{token}</span>)}
         </div>
         {!closed && (
-          <span className="schedule-week-summary-event__price">
+          <span className={`schedule-week-summary-event__price ${item.priceKind === 'free' ? 'is-free' : 'is-paid'}`}>
             {item.priceKind === 'free' ? 'Бесплатно' : item.price ? `+${item.price} ₽` : 'Платно'}
           </span>
         )}
       </div>
     </article>
+  );
+}
+
+function WeekKindMarkers({ kinds }: { kinds: SchedulePrintKind[] }) {
+  if (kinds.length === 0) return null;
+  return (
+    <span className="schedule-week-summary-event__kinds" aria-label={`Категории: ${kinds.map(schedulePrintKindLabel).join(', ')}`}>
+      {kinds.map(kind => <i className={`schedule-week-kind schedule-week-kind--${kind}`} title={schedulePrintKindLabel(kind)} key={kind} />)}
+    </span>
   );
 }
 

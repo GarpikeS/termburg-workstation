@@ -5,9 +5,9 @@ import { applyMove, canMove, type Direction } from '@/engine/engine-2048/moves20
 import { useGameContext } from '@/store/GameContext';
 import { getSlavichMilestoneRewards } from '@/data/economy';
 import {
-  GAME_LEVEL_TOTAL,
-  clampGameLevel,
-  getNextPlayableLevel,
+  SLAVICH_LEVEL_TOTAL,
+  clampSlavichLevel,
+  getNextPlayableSlavichLevel,
   getSlavichLevelTarget,
   isSlavichLevelComplete,
 } from '@/data/gameProgression';
@@ -36,7 +36,7 @@ interface Game2048Snapshot {
 }
 
 function createRound(level: number, bestScore: number, campaignCompleted = false): Game2048State {
-  const safeLevel = clampGameLevel(level);
+  const safeLevel = clampSlavichLevel(level);
   resetTileIdCounter();
   return {
     grid: initGrid(),
@@ -58,9 +58,9 @@ export function useGame2048(scoreMultiplier = 1) {
   const [earnedReward, setEarnedReward] = useState<number | null>(null);
   const [state, setState] = useState<Game2048State>(() => (
     createRound(
-      getNextPlayableLevel(progress.game2048LevelsCompleted),
+      getNextPlayableSlavichLevel(progress.game2048LevelsCompleted),
       progress.best2048Score,
-      progress.game2048LevelsCompleted >= GAME_LEVEL_TOTAL,
+      progress.game2048LevelsCompleted >= SLAVICH_LEVEL_TOTAL,
     )
   ));
 
@@ -131,8 +131,8 @@ export function useGame2048(scoreMultiplier = 1) {
   const continueGame = useCallback(() => {
     setEarnedReward(null);
     previousMove.current = null;
-    const campaignCompleted = state.campaignCompleted || state.level >= GAME_LEVEL_TOTAL;
-    const nextLevel = campaignCompleted ? GAME_LEVEL_TOTAL : state.level + 1;
+    const campaignCompleted = state.campaignCompleted || state.level >= SLAVICH_LEVEL_TOTAL;
+    const nextLevel = campaignCompleted ? SLAVICH_LEVEL_TOTAL : state.level + 1;
     if (state.isLost) {
       rewardedMilestones.current.clear();
       setState(createRound(nextLevel, state.bestScore, campaignCompleted));

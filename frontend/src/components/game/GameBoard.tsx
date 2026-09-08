@@ -22,18 +22,29 @@ interface GameBoardProps {
 }
 
 const SWIPE_THRESHOLD = 20;
-const SPECIAL_MATCH_HOLD_DELAY = 920;
-const SPECIAL_CREATION_DELAY = 920;
+const SPECIAL_MATCH_HOLD_DELAY = 180;
+const SPECIAL_CREATION_DELAY = 360;
 const PHASE_DELAYS: Partial<Record<AnimationPhase, number>> = {
-  swap: 220,
-  swap_back: 190,
-  match_hold: 300,
-  match: 200,
-  powerup: 920,
-  score: 120,
+  swap: 160,
+  swap_back: 120,
+  match_hold: 80,
+  match: 150,
+  powerup: 600,
+  score: 30,
   fall: 190,
-  spawn: 120,
+  spawn: 80,
 };
+
+type BufferedInput =
+  | { kind: 'tap'; position: Position }
+  | { kind: 'swipe'; position: Position; dx: number; dy: number };
+
+function getSwipeDirection(dx: number, dy: number) {
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { dx: dx >= 0 ? 1 : -1, dy: 0 };
+  }
+  return { dx: 0, dy: dy >= 0 ? 1 : -1 };
+}
 
 const BURST_DIRECTIONS = Array.from({ length: 8 }, (_, index) => {
   const angle = (Math.PI * 2 * index) / 8;
@@ -48,14 +59,14 @@ function MatchBurst({ color }: { color: string }) {
         style={{ borderColor: color }}
         initial={{ opacity: 0.95, scale: 0.3 }}
         animate={{ opacity: 0, scale: 1.75 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
+        transition={{ duration: 0.14, ease: 'easeOut' }}
       />
       <motion.span
         className="match3-burst__flash"
         style={{ backgroundColor: color, boxShadow: `0 0 16px ${color}` }}
         initial={{ opacity: 0.9, scale: 0.3 }}
         animate={{ opacity: 0, scale: 1.3 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
       />
       {BURST_DIRECTIONS.map((direction, index) => (
         <motion.i
@@ -64,7 +75,7 @@ function MatchBurst({ color }: { color: string }) {
           style={{ backgroundColor: index % 2 === 0 ? '#fff1ad' : color }}
           initial={{ x: 0, y: 0, opacity: 0.95, scale: 0.65 }}
           animate={{ x: direction.x, y: direction.y, opacity: 0, scale: 0.15 }}
-          transition={{ duration: 0.3, delay: index * 0.008, ease: 'easeOut' }}
+          transition={{ duration: 0.12, delay: index * 0.004, ease: 'easeOut' }}
         />
       ))}
     </span>
@@ -98,7 +109,7 @@ function PowerUpEffect({ special, origin, target, rows, cols }: PowerUpEffectPro
         className="pointer-events-none absolute z-30 -translate-x-1/2 -translate-y-1/2"
         style={{ ...start, width: `calc(${100 / cols}% - 2px)` }}
         animate={{ ...finish, scale: [1, 1.22, 1], rotate: [0, -8, 7, 0] }}
-        transition={{ duration: 0.78, times: [0, 0.25, 0.72, 1], ease: 'easeInOut' }}
+        transition={{ duration: 0.54, times: [0, 0.25, 0.72, 1], ease: 'easeInOut' }}
         aria-hidden="true"
       >
         <img
@@ -121,7 +132,7 @@ function PowerUpEffect({ special, origin, target, rows, cols }: PowerUpEffectPro
         alt=""
         className="relative z-[2] h-auto w-full drop-shadow-[0_5px_10px_rgba(224,94,57,.7)]"
         animate={{ scale: [1, 1.2, 0.88], rotate: [0, -7, 7, 0], opacity: [1, 1, 0.15] }}
-        transition={{ duration: 0.8, times: [0, 0.42, 0.78, 1] }}
+        transition={{ duration: 0.54, times: [0, 0.42, 0.78, 1] }}
       />
       {[0, 0.14].map(delay => (
         <motion.span
@@ -130,7 +141,7 @@ function PowerUpEffect({ special, origin, target, rows, cols }: PowerUpEffectPro
           style={{ width: `calc(${500}% + 10px)` }}
           initial={{ x: '-50%', y: '-50%', scale: 0.12, opacity: 0.95 }}
           animate={{ scale: 1, opacity: 0 }}
-          transition={{ duration: 0.68, delay, ease: 'easeOut' }}
+          transition={{ duration: 0.44, delay: delay * 0.7, ease: 'easeOut' }}
         />
       ))}
     </div>
@@ -183,8 +194,17 @@ export function GameBoard({
   tutorialStep,
   onCellClick, onSwipe, onAnimationComplete,
 }: GameBoardProps) {
-  const touchStart = useRef<{ x: number; y: number; row: number; col: number } | null>(null);
-  const ignoreNextClick = useRef(false);
+  const touchStart = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    row: number;
+    col: number;
+  } | null>(null);
+  const bufferedInput = useRef<BufferedInput | null>(null);
+  const interactive = phase === 'idle';
+  const canBufferInput = phase === 'fall' || phase === 'spawn';
+  const inputEnabled = interactive || canBufferInput;
 
   const matchState = phase === 'match_hold' || phase === 'powerup'
     ? 'hold'
@@ -201,16 +221,49 @@ export function GameBoard({
     () => new Set(hintPositions.map(pos => `${pos.row},${pos.col}`)),
     [hintPositions]
   );
-  const animateTilePosition = phase === 'swap' || phase === 'swap_back' || phase === 'fall';
 
-  const handlePointerDown = useCallback((e: React.PointerEvent, row: number, col: number) => {
+  const executeInput = useCallback((input: BufferedInput) => {
+    if (input.kind === 'swipe') {
+      onSwipe(input.position, input.dx, input.dy);
+      return;
+    }
+    onCellClick(input.position);
+  }, [onCellClick, onSwipe]);
+
+  const submitInput = useCallback((input: BufferedInput) => {
+    if (interactive) {
+      executeInput(input);
+      return;
+    }
+    if (canBufferInput) bufferedInput.current = input;
+  }, [canBufferInput, executeInput, interactive]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent, pos: Position) => {
+    if (!inputEnabled) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    touchStart.current = { x: e.clientX, y: e.clientY, row, col };
-    ignoreNextClick.current = false;
-  }, []);
+    touchStart.current = {
+      pointerId: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      row: pos.row,
+      col: pos.col,
+    };
+  }, [inputEnabled]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!inputEnabled || !touchStart.current || touchStart.current.pointerId !== e.pointerId) return;
+    const { x, y, row, col } = touchStart.current;
+    const dx = e.clientX - x;
+    const dy = e.clientY - y;
+    if (Math.hypot(dx, dy) < SWIPE_THRESHOLD) return;
+
+    touchStart.current = null;
+    const direction = getSwipeDirection(dx, dy);
+    submitInput({ kind: 'swipe', position: { row, col }, ...direction });
+  }, [inputEnabled, submitInput]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    if (!touchStart.current) return;
+    if (!inputEnabled || !touchStart.current || touchStart.current.pointerId !== e.pointerId) return;
     const { x, y, row, col } = touchStart.current;
     touchStart.current = null;
 
@@ -219,20 +272,42 @@ export function GameBoard({
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist >= SWIPE_THRESHOLD) {
-      const dirX = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : -1) : 0;
-      const dirY = Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? 1 : -1) : 0;
-      ignoreNextClick.current = true;
-      onSwipe({ row, col }, dirX, dirY);
-    }
-  }, [onSwipe]);
-
-  const handleCellActivate = useCallback((pos: Position) => {
-    if (ignoreNextClick.current) {
-      ignoreNextClick.current = false;
+      const direction = getSwipeDirection(dx, dy);
+      submitInput({ kind: 'swipe', position: { row, col }, ...direction });
       return;
     }
-    onCellClick(pos);
-  }, [onCellClick]);
+
+    submitInput({ kind: 'tap', position: { row, col } });
+  }, [inputEnabled, submitInput]);
+
+  const handleCellActivate = useCallback((pos: Position) => {
+    if (!inputEnabled) return;
+    submitInput({ kind: 'tap', position: pos });
+  }, [inputEnabled, submitInput]);
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent) => {
+    if (touchStart.current?.pointerId === e.pointerId) touchStart.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (inputEnabled) return;
+    // A new cascade changes which token occupies a coordinate. Do not replay
+    // an intent captured against the previous board, and do not let an active
+    // finger gesture survive a locked phase.
+    touchStart.current = null;
+    bufferedInput.current = null;
+  }, [inputEnabled]);
+
+  useEffect(() => {
+    if (!interactive || !bufferedInput.current) return;
+    const pendingInput = bufferedInput.current;
+    const frame = window.requestAnimationFrame(() => {
+      if (bufferedInput.current !== pendingInput) return;
+      bufferedInput.current = null;
+      executeInput(pendingInput);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [executeInput, interactive]);
 
   useEffect(() => {
     const delay = phase === 'match_hold' && animData.createdSpecial
@@ -250,6 +325,7 @@ export function GameBoard({
     <div
       className="match3-board w-full max-w-md mx-auto p-1"
       data-phase={phase}
+      data-input-mode={interactive ? 'ready' : canBufferInput ? 'buffered' : 'locked'}
       data-match-size={animData.matchSize ?? undefined}
     >
       <div className="match3-board-shell game-panel rounded-2xl p-1">
@@ -261,94 +337,99 @@ export function GameBoard({
           }}
         >
           <AnimatePresence initial={false} mode="popLayout">
-            {Array.from({ length: rows }, (_, r) =>
-              Array.from({ length: cols }, (_, c) => {
-                const cell = grid[r]?.[c];
-                if (!cell) return <div key={`${r}-${c}`} className="aspect-square" />;
+            {Array.from({ length: rows * cols }, (_, index) => {
+              const r = Math.floor(index / cols);
+              const c = index % cols;
+              const cell = grid[r]?.[c];
+              if (!cell) return <div key={`empty-${r}-${c}`} className="aspect-square" />;
 
-                const isSelected = selectedCell?.row === r && selectedCell?.col === c;
-                const isMatched = matchedSet.has(`${r},${c}`);
-                const isHinted = hintedSet.has(`${r},${c}`);
-                const tutorialRole = tutorialStep?.kind === 'swap'
-                  ? tutorialStep.from.row === r && tutorialStep.from.col === c
-                    ? 'from'
-                    : tutorialStep.to.row === r && tutorialStep.to.col === c
-                      ? 'to'
-                      : undefined
-                  : tutorialStep?.kind === 'special'
-                    && tutorialStep.target.row === r
-                    && tutorialStep.target.col === c
-                    ? 'target'
-                    : undefined;
-                const isCreatingSpecial = phase === 'score'
-                  && Boolean(cell.special)
-                  && animData.specialCreation?.position.row === r
-                  && animData.specialCreation.position.col === c;
+              const isSelected = selectedCell?.row === r && selectedCell?.col === c;
+              const isMatched = matchedSet.has(`${r},${c}`);
+              const isHinted = hintedSet.has(`${r},${c}`);
+              const tutorialRole = tutorialStep?.kind === 'swap'
+                ? tutorialStep.from.row === r && tutorialStep.from.col === c
+                  ? 'from'
+                  : tutorialStep.to.row === r && tutorialStep.to.col === c
+                    ? 'to'
+                    : undefined
+                : tutorialStep?.kind === 'special'
+                  && tutorialStep.target.row === r
+                  && tutorialStep.target.col === c
+                  ? 'target'
+                  : undefined;
+              const isCreatingSpecial = phase === 'score'
+                && Boolean(cell.special)
+                && animData.specialCreation?.position.row === r
+                && animData.specialCreation.position.col === c;
 
-                return (
-                  <motion.div
-                    key={cell.id}
-                    className={`relative ${tutorialStep
-                      ? tutorialRole
-                        ? 'match3-tile--tutorial-focus'
-                        : 'match3-tile--tutorial-dim'
-                      : ''}`}
-                    layout={animateTilePosition ? 'position' : false}
-                    initial={isCreatingSpecial
-                      ? { scale: 0.2, opacity: 0, rotate: -12 }
-                      : { scale: 0, opacity: 0 }}
-                    animate={isCreatingSpecial
-                      ? {
-                          scale: [0.2, 1.18, 0.96, 1],
-                          opacity: [0, 1, 1, 1],
-                          rotate: [-12, 5, -2, 0],
-                        }
-                      : { scale: 1, opacity: 1, rotate: 0 }}
-                    exit={{ scale: 0, opacity: 0 }}
-                    transition={isCreatingSpecial
-                      ? {
-                          duration: 0.86,
-                          times: [0, 0.46, 0.76, 1],
-                          ease: [0.22, 1, 0.36, 1],
-                        }
-                      : {
-                          layout: phase === 'swap' || phase === 'swap_back'
-                            ? { duration: 0.22, ease: [0.22, 1, 0.36, 1] }
-                            : { type: 'spring', stiffness: 420, damping: 30, mass: 0.75 },
-                          scale: { duration: 0.18 },
-                          opacity: { duration: 0.15 },
-                        }}
-                    data-row={r}
-                    data-col={c}
-                    data-token-id={cell.id}
-                    data-special={cell.special}
-                    data-special-creating={isCreatingSpecial || undefined}
-                    data-tutorial-role={tutorialRole}
-                  >
-                    <GemComponent
-                      type={cell.type}
-                      special={cell.special}
-                      row={r}
-                      col={c}
-                      selected={isSelected}
-                      matchState={isMatched ? matchState : undefined}
-                      hinted={isHinted}
-                      isCreatingSpecial={isCreatingSpecial}
-                      onActivate={handleCellActivate}
-                      onPointerDown={(e) => handlePointerDown(e, r, c)}
-                      onPointerUp={handlePointerUp}
-                      onPointerCancel={() => {
-                        touchStart.current = null;
-                        ignoreNextClick.current = false;
+              return (
+                <motion.div
+                  key={cell.id}
+                  className={`relative ${tutorialStep
+                    ? tutorialRole
+                      ? 'match3-tile--tutorial-focus'
+                      : 'match3-tile--tutorial-dim'
+                    : ''}`}
+                  // Keep layout tracking alive before the grid changes. Turning
+                  // it on only in the swap render loses the previous position
+                  // and makes the token jump straight to its destination.
+                  layout="position"
+                  layoutDependency={index}
+                  initial={isCreatingSpecial
+                    ? { scale: 0.2, opacity: 0, rotate: -12 }
+                    : { scale: 0, opacity: 0 }}
+                  animate={isCreatingSpecial
+                    ? {
+                        scale: [0.2, 1.18, 0.96, 1],
+                        opacity: [0, 1, 1, 1],
+                        rotate: [-12, 5, -2, 0],
+                      }
+                    : { scale: 1, opacity: 1, rotate: 0 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  transition={isCreatingSpecial
+                    ? {
+                        duration: 0.34,
+                        times: [0, 0.46, 0.76, 1],
+                        ease: [0.22, 1, 0.36, 1],
+                      }
+                    : {
+                        layout: phase === 'swap'
+                          ? { duration: 0.16, ease: [0.22, 1, 0.36, 1] }
+                          : phase === 'swap_back'
+                            ? { duration: 0.12, ease: [0.22, 1, 0.36, 1] }
+                            : { duration: 0.19, ease: [0.2, 0.8, 0.2, 1] },
+                        scale: { duration: 0.08 },
+                        opacity: { duration: 0.08 },
                       }}
-                    />
-                    {isMatched && matchState === 'remove' && (
-                      <MatchBurst color={TOKEN_COLORS[cell.type]} />
-                    )}
-                  </motion.div>
-                );
-              })
-            )}
+                  data-row={r}
+                  data-col={c}
+                  data-token-id={cell.id}
+                  data-special={cell.special}
+                  data-special-creating={isCreatingSpecial || undefined}
+                  data-tutorial-role={tutorialRole}
+                >
+                  <GemComponent
+                    type={cell.type}
+                    special={cell.special}
+                    row={r}
+                    col={c}
+                    selected={isSelected}
+                    matchState={isMatched ? matchState : undefined}
+                    hinted={isHinted}
+                    isCreatingSpecial={isCreatingSpecial}
+                    interactive={inputEnabled}
+                    onActivate={handleCellActivate}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                  />
+                  {isMatched && matchState === 'remove' && (
+                    <MatchBurst color={TOKEN_COLORS[cell.type]} />
+                  )}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
           {tutorialStep && (
             <TutorialGesture step={tutorialStep} rows={rows} cols={cols} />

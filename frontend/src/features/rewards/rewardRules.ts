@@ -2,6 +2,16 @@ import type { RewardClaim } from '@/types/game';
 
 export const FREE_HOUR_PRICE = 50;
 export const FREE_HOUR_VALID_DAYS = 7;
+export const FREE_HOUR_SHOP_PATH = '/shop?focus=ticket-free';
+
+export function getFreeHourCoinGoal(currency: number) {
+  const safeCurrency = Number.isFinite(currency) ? Math.max(0, Math.floor(currency)) : 0;
+  return {
+    currency: safeCurrency,
+    reached: safeCurrency >= FREE_HOUR_PRICE,
+    remaining: Math.max(0, FREE_HOUR_PRICE - safeCurrency),
+  };
+}
 
 export function activeFreeHourClaim(claims: readonly RewardClaim[], now = Date.now()): RewardClaim | null {
   return [...claims]

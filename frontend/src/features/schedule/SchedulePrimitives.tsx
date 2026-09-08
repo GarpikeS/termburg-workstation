@@ -1,4 +1,5 @@
 import { CalendarX2, Clock3, MapPin, TicketCheck } from 'lucide-react';
+import { schedulePrintKindLabel, type SchedulePrintKind } from './schedulePrintKinds';
 import type { ScheduleItem } from './types';
 import { isClosedScheduleItem } from './scheduleTime';
 
@@ -45,17 +46,20 @@ export function ScheduleEventRow({
   status,
   accessibilityLabel,
   compact = false,
+  printKinds = [],
 }: {
   item: ScheduleItem;
   highlighted?: boolean;
   status?: 'now' | 'next' | null;
   accessibilityLabel?: string;
   compact?: boolean;
+  printKinds?: SchedulePrintKind[];
 }) {
   const closed = isClosedScheduleItem(item);
+  const printKindClasses = printKinds.map(kind => `schedule-event--print-${kind}`).join(' ');
   return (
     <article
-      className={`schedule-event ${highlighted ? 'schedule-event--highlighted' : ''} ${closed ? 'schedule-event--closed' : ''} ${compact ? 'schedule-event--compact' : ''}`}
+      className={`schedule-event ${highlighted ? 'schedule-event--highlighted' : ''} ${closed ? 'schedule-event--closed' : ''} ${compact ? 'schedule-event--compact' : ''} ${printKindClasses}`}
       aria-label={accessibilityLabel}
     >
       <div className="schedule-event__time">
@@ -71,6 +75,15 @@ export function ScheduleEventRow({
           </span>
         )}
         <h3>{item.title}</h3>
+        {printKinds.length > 0 && (
+          <div className="schedule-event__print-kinds" aria-label={`Категории: ${printKinds.map(schedulePrintKindLabel).join(', ')}`}>
+            {printKinds.map(kind => (
+              <span className={`schedule-print-kind schedule-print-kind--${kind}`} key={kind}>
+                <i aria-hidden="true" />{schedulePrintKindLabel(kind)}
+              </span>
+            ))}
+          </div>
+        )}
         {item.venue && <p className="schedule-event__venue"><MapPin size={compact ? 12 : 14} aria-hidden="true" />{item.venue}</p>}
         {!compact && item.details && <p className="schedule-event__details">{item.details}</p>}
         {!closed && <PriceBadge item={item} compact={compact} />}

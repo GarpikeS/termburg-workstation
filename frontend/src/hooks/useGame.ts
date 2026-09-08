@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type {
   GameState, LevelConfig, Position, AnimationPhase,
   Objective, Grid, MatchGroup,
@@ -73,12 +73,17 @@ function initState(config: LevelConfig): GameState {
 export function useGame(initialConfig: LevelConfig): UseGameReturn {
   const [state, setState] = useState<GameState>(() => initState(initialConfig));
   const [animData, setAnimData] = useState<AnimationData>({});
+  const stateRef = useRef(state);
   const pendingGrid = useRef<Grid | null>(null);
   const pendingPowerUpPosition = useRef<Position | null>(null);
   const lastSwapGrid = useRef<Grid | null>(null);
   const lastSwapSource = useRef<Position | null>(null);
   const lastSwapTarget = useRef<Position | null>(null);
   const earlyCascadeLimit = useRef<3 | 4>(3);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const getMatchAnimationData = useCallback((
     grid: Grid,
@@ -143,10 +148,10 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
   }, []);
 
   const startSwap = useCallback((from: Position, to: Position) => {
-    lastSwapSource.current = from;
-    lastSwapTarget.current = to;
     setState(prev => {
       if (prev.phase !== 'idle' || prev.isWon || prev.isLost) return prev;
+      lastSwapSource.current = from;
+      lastSwapTarget.current = to;
       lastSwapGrid.current = prev.grid;
 
       const newGrid = cloneGrid(prev.grid);
@@ -209,40 +214,38 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
   }, [getPowerUpAnimationData]);
 
   const handleCellClick = useCallback((pos: Position) => {
-    setState(prev => {
-      if (prev.phase !== 'idle' || prev.isWon || prev.isLost) return prev;
+    const current = stateRef.current;
+    if (current.phase !== 'idle' || current.isWon || current.isLost) return;
 
-      if (prev.grid[pos.row]?.[pos.col]?.special) {
-        setTimeout(() => activatePowerUp(pos), 0);
-        return { ...prev, selectedCell: null };
-      }
+    if (current.grid[pos.row]?.[pos.col]?.special) {
+      activatePowerUp(pos);
+      return;
+    }
 
-      if (!prev.selectedCell) {
-        return { ...prev, selectedCell: pos };
-      }
+    const selected = current.selectedCell;
+    if (selected && areAdjacent(selected, pos)) {
+      startSwap(selected, pos);
+      return;
+    }
 
-      if (prev.selectedCell.row === pos.row && prev.selectedCell.col === pos.col) {
-        return { ...prev, selectedCell: null };
-      }
-
-      if (areAdjacent(prev.selectedCell, pos)) {
-        // Schedule swap (will be called outside setState)
-        setTimeout(() => startSwap(prev.selectedCell!, pos), 0);
-        return prev;
-      }
-
-      return { ...prev, selectedCell: pos };
-    });
+    const nextSelection = selected
+      && selected.row === pos.row
+      && selected.col === pos.col
+      ? null
+      : pos;
+    setState(prev => (
+      prev.phase === 'idle' && !prev.isWon && !prev.isLost
+        ? { ...prev, selectedCell: nextSelection }
+        : prev
+    ));
   }, [activatePowerUp, startSwap]);
 
   const handleSwipe = useCallback((pos: Position, dx: number, dy: number) => {
     const to: Position = { row: pos.row + dy, col: pos.col + dx };
-    setState(prev => {
-      if (prev.phase !== 'idle' || prev.isWon || prev.isLost) return prev;
-      if (to.row < 0 || to.row >= prev.levelConfig.rows || to.col < 0 || to.col >= prev.levelConfig.cols) return prev;
-      setTimeout(() => startSwap(pos, to), 0);
-      return prev;
-    });
+    const current = stateRef.current;
+    if (current.phase !== 'idle' || current.isWon || current.isLost) return;
+    if (to.row < 0 || to.row >= current.levelConfig.rows || to.col < 0 || to.col >= current.levelConfig.cols) return;
+    startSwap(pos, to);
   }, [startSwap]);
 
   const setPhase = useCallback((phase: AnimationPhase) => {
@@ -281,7 +284,11 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
         score: prev.score + 50,
         selectedCell: null,
         combo: 0,
-        phase: matchData ? 'match_hold' as AnimationPhase : 'idle' as AnimationPhase,
+        phase: matchData
+          ? matchData.createdSpecial
+            ? 'match_hold' as AnimationPhase
+            : 'match' as AnimationPhase
+          : 'idle' as AnimationPhase,
         isWon,
         isLost,
       };
@@ -356,8 +363,7 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
           }
         }
 
-        // The moved gems are now in place. Hold the completed line before removal.
-        setAnimData(getMatchAnimationData(
+        const matchAnimationData = getMatchAnimationData(
           prev.grid,
           prev.combo,
           lastSwapTarget.current ?? undefined,
@@ -365,10 +371,15 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
             ? [lastSwapSource.current, lastSwapTarget.current]
             : undefined,
           lastSwapGrid.current ?? undefined,
-        ));
+        );
+        setAnimData(matchAnimationData);
         return {
           ...prev,
-          phase: 'match_hold' as AnimationPhase,
+          // Ordinary triples flow straight into removal. Keep the short hold
+          // only when the move creates a special piece worth celebrating.
+          phase: matchAnimationData.createdSpecial
+            ? 'match_hold' as AnimationPhase
+            : 'match' as AnimationPhase,
           movesLeft: prev.movesLeft - 1,
         };
       }
@@ -407,6 +418,7 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
         }));
         removeMatched(grid, affectedPositions);
         const scoreGained = clearedCount * 50;
+        const fallMoves = applyGravity(grid);
         pendingPowerUpPosition.current = null;
         lastSwapGrid.current = null;
         lastSwapSource.current = null;
@@ -416,6 +428,7 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
           combo: prev.combo,
           matchedCount: clearedCount,
           activatedSpecial: animData.activatedSpecial,
+          fallMoves,
         });
 
         return {
@@ -424,7 +437,7 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
           objectives,
           score: prev.score + scoreGained,
           combo: prev.combo + 1,
-          phase: 'score' as AnimationPhase,
+          phase: 'fall' as AnimationPhase,
         };
       }
 
@@ -457,7 +470,7 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
         lastSwapSource.current = null;
         lastSwapTarget.current = null;
 
-        setAnimData({
+        const nextAnimationData: AnimationData = {
           scoreGained,
           combo,
           matchedCount: matched.length,
@@ -466,14 +479,21 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
           isIntersection: animData.isIntersection,
           specialCreation,
           createdSpecial: specialCreation?.special,
-        });
+        };
+
+        if (!specialCreation) {
+          nextAnimationData.fallMoves = applyGravity(grid);
+        }
+        setAnimData(nextAnimationData);
         return {
           ...prev,
           grid,
           score: prev.score + scoreGained,
           objectives,
           combo: combo + 1,
-          phase: 'score' as AnimationPhase,
+          // Score particles are visual-only. Ordinary matches begin falling
+          // immediately; special creation retains its brief reveal phase.
+          phase: specialCreation ? 'score' as AnimationPhase : 'fall' as AnimationPhase,
         };
       }
 
@@ -505,8 +525,14 @@ export function useGame(initialConfig: LevelConfig): UseGameReturn {
         // Check for cascading matches
         const matches = findMatches(prev.grid);
         if (matches.length > 0) {
-          setAnimData(getMatchAnimationData(prev.grid, prev.combo));
-          return { ...prev, phase: 'match_hold' as AnimationPhase };
+          const matchAnimationData = getMatchAnimationData(prev.grid, prev.combo);
+          setAnimData(matchAnimationData);
+          return {
+            ...prev,
+            phase: matchAnimationData.createdSpecial
+              ? 'match_hold' as AnimationPhase
+              : 'match' as AnimationPhase,
+          };
         }
 
         // No more cascades — check for possible moves

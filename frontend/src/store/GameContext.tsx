@@ -15,18 +15,22 @@ import { awardDailyGameReward } from '@/data/economy';
 import { syncTermlinUnlocks } from '@/data/termliny';
 import { useAuth } from '@/features/account/AuthContext';
 import {
-  addFourGameCompletion,
-  getFourGameChallengeCount,
   mergeFourGameChallengeProgress,
   normalizeFourGameChallengeProgress,
+  setFourGameStageCount,
 } from '@/features/rewards/fourGameChallenge';
-import { GAME_LEVEL_TOTAL } from '@/data/gameProgression';
+import { GAME_LEVEL_TOTAL, SLAVICH_LEVEL_TOTAL } from '@/data/gameProgression';
+import {
+  applyPetCompanionWin,
+  type PetCompanionRewardResult,
+  type PetCompanionSession,
+} from '@/engine/engine-pet/petCompanion';
 
 interface GameContextValue {
   progress: PlayerProgress;
   completeLevelAction: (levelId: number, stars: number, score: number, reward: number) => number;
   awardGameCurrency: (source: GameRewardSource, amount: number) => number;
-  recordFourGameCompletion: (source: GameRewardSource) => void;
+  recordFourGameCompletion: (source: GameRewardSource, completedStages?: number) => void;
   spendLife: () => void;
   buyLife: () => void;
   buyWithCoins: (productId: string, price: number) => void;
@@ -39,6 +43,7 @@ interface GameContextValue {
   update2048Score: (score: number) => void;
   complete2048Level: (levelId: number) => void;
   completeBubbleLevel: (levelId: number) => void;
+  rewardPetCompanionWin: (session: PetCompanionSession) => PetCompanionRewardResult;
   updatePet: (pet: PetState | null) => void;
   departPet: (departure: PetDeparture) => void;
   unlockCharacter: (id: string) => void;
@@ -151,8 +156,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ...authSession.progress,
           fourGameChallenge: mergedChallenge,
         }));
-        const shouldSyncGuestChallenge = getFourGameChallengeCount(hydrated.fourGameChallenge)
-          > getFourGameChallengeCount(serverChallenge);
+        const shouldSyncGuestChallenge = JSON.stringify(mergedChallenge) !== JSON.stringify(serverChallenge);
         accountIdRef.current = authSession.account.id;
         storedOwnerRef.current = nextOwner;
         progressRef.current = hydrated;
@@ -210,7 +214,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         currentLevel: Math.min(GAME_LEVEL_TOTAL + 1, Math.max(prev.currentLevel, levelId + 1)),
         currency: prev.currency + earnedReward,
         dailyGameRewards: dailyReward.rewards,
-        fourGameChallenge: addFourGameCompletion(prev.fourGameChallenge, 'match3'),
+        fourGameChallenge: setFourGameStageCount(prev.fourGameChallenge, 'match3', levelId),
         levels: {
           ...prev.levels,
           [levelId]: { stars: newStars, bestScore: newBest, completed: true },
@@ -235,13 +239,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return earnedReward;
   }, [update]);
 
-  const recordFourGameCompletion = useCallback((source: GameRewardSource) => {
+  const recordFourGameCompletion = useCallback((source: GameRewardSource, completedStages = 1) => {
     update(prev => {
       const current = normalizeFourGameChallengeProgress(prev.fourGameChallenge);
-      if (current.completedGames.includes(source)) return prev;
+      const safeCompletedStages = Number.isFinite(completedStages)
+        ? Math.max(0, Math.floor(completedStages))
+        : 0;
+      if (current.stageCounts[source] >= safeCompletedStages) return prev;
       return {
         ...prev,
-        fourGameChallenge: addFourGameCompletion(current, source),
+        fourGameChallenge: setFourGameStageCount(current, source, safeCompletedStages),
       };
     });
   }, [update]);
@@ -349,13 +356,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const complete2048Level = useCallback((levelId: number) => {
     update(prev => {
-      if (prev.game2048LevelsCompleted >= GAME_LEVEL_TOTAL) return prev;
+      if (prev.game2048LevelsCompleted >= SLAVICH_LEVEL_TOTAL) return prev;
       const currentUnlockedLevel = prev.game2048LevelsCompleted + 1;
       if (levelId !== currentUnlockedLevel) return prev;
       return {
         ...prev,
         game2048LevelsCompleted: levelId,
-        fourGameChallenge: addFourGameCompletion(prev.fourGameChallenge, 'game2048'),
+        fourGameChallenge: setFourGameStageCount(prev.fourGameChallenge, 'game2048', levelId),
       };
     });
   }, [update]);
@@ -365,8 +372,22 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (prev.bubbleLevelsCompleted >= GAME_LEVEL_TOTAL) return prev;
       const currentUnlockedLevel = prev.bubbleLevelsCompleted + 1;
       if (levelId !== currentUnlockedLevel) return prev;
-      return { ...prev, bubbleLevelsCompleted: levelId };
+      return {
+        ...prev,
+        bubbleLevelsCompleted: levelId,
+        fourGameChallenge: setFourGameStageCount(prev.fourGameChallenge, 'bubbles', levelId),
+      };
     });
+  }, [update]);
+
+  const rewardPetCompanionWin = useCallback((session: PetCompanionSession) => {
+    let result: PetCompanionRewardResult | null = null;
+    const now = Date.now();
+    update(prev => {
+      result = applyPetCompanionWin(prev.pet, session, now);
+      return result.awarded ? { ...prev, pet: result.pet } : prev;
+    });
+    return result ?? applyPetCompanionWin(progressRef.current.pet, session, now);
   }, [update]);
 
   const updatePet = useCallback((pet: PetState | null) => {
@@ -477,6 +498,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       update2048Score,
       complete2048Level,
       completeBubbleLevel,
+      rewardPetCompanionWin,
       updatePet,
       departPet,
       unlockCharacter,

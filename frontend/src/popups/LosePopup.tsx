@@ -64,7 +64,7 @@ export function LosePopup({
         )}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="secondary" onClick={onMap} className="flex-1">Карта</Button>
+          <Button variant="secondary" onClick={onMap} className="flex-1">К домикам</Button>
           <Button onClick={onRetry} disabled={!hasLives} className="flex-1">Заново</Button>
         </div>
       </div>

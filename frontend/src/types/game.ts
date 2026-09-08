@@ -162,6 +162,8 @@ export interface PetState {
   cooldowns: Record<string, number>;
   activityCooldowns: Record<string, number>;
   experience: number;
+  companionExperience?: number;
+  companionRewardSessionIds?: string[];
   bond: number;
   careStreak: number;
   lastCareDate: string | null;
@@ -178,6 +180,7 @@ export interface PetDeparture {
   depletedStat: PetStatKey;
   departedAt: number;
   experience?: number;
+  companionExperience?: number;
 }
 
 export interface PetDailyState {
@@ -200,6 +203,7 @@ export type GameRewardSource = 'match3' | 'game2048' | 'bubbles' | 'pet';
 export interface FourGameChallengeProgress {
   version: 1;
   completedGames: GameRewardSource[];
+  stageCounts: Record<GameRewardSource, number>;
 }
 
 export interface DailyGameRewards {
@@ -219,6 +223,7 @@ export interface PlayerProgress {
   tutorialCompleted: boolean;
   tutorialFlags: string[];
   best2048Score: number;
+  game2048ProgressVersion: 2;
   game2048LevelsCompleted: number;
   bubbleLevelsCompleted: number;
   pet: PetState | null;

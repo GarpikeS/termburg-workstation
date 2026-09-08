@@ -1,4 +1,4 @@
-import type { Objective } from '@/types/game';
+import type { Objective, PetState } from '@/types/game';
 import { TOKEN_COLORS } from '@/types/game';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Pause, Sparkles } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Match3Coach } from './Match3Coach';
 import type { Match3TutorialStep } from './Match3Coach';
 import { GameStatusBar } from './GameStatusBar';
 import { GAME_NAMES } from '@/data/gameNames';
+import { PetCompanionChip } from './PetCompanion';
 import type { CSSProperties } from 'react';
 
 interface GameHUDProps {
@@ -24,9 +25,10 @@ interface GameHUDProps {
   onAbility?: () => void;
   highlightAbility?: boolean;
   abilityTutorial?: Extract<Match3TutorialStep, { kind: 'ability' }> | null;
+  companionPet?: PetState | null;
 }
 
-export function GameHUD({ level, levelName, score, movesLeft, currency, objectives, onPause, character, abilityReady, onAbility, highlightAbility, abilityTutorial }: GameHUDProps) {
+export function GameHUD({ level, levelName, score, movesLeft, currency, objectives, onPause, character, abilityReady, onAbility, highlightAbility, abilityTutorial, companionPet }: GameHUDProps) {
   return (
     <div className="game-hud game-hud--match3 text-white px-4 pb-3">
       {/* Top row */}
@@ -41,7 +43,10 @@ export function GameHUD({ level, levelName, score, movesLeft, currency, objectiv
             <Pause size={20} />
           </button>
         </div>
-        <h3 title={levelName}>{GAME_NAMES.match3}</h3>
+        <h3 title={levelName} className="flex items-center justify-center gap-2">
+          <span>{GAME_NAMES.match3}</span>
+          {companionPet && <PetCompanionChip pet={companionPet} className="normal-case tracking-normal" />}
+        </h3>
         <div className="game-hud__side game-hud__side--right">
           {character ? (
             abilityReady && onAbility ? (

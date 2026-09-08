@@ -16,6 +16,9 @@ import { GameStatusBar } from '@/components/game/GameStatusBar';
 import { triggerHaptic } from '@/utils/haptics';
 import { LivesDisplay } from '@/components/ui/LivesDisplay';
 import { DAILY_GAME_REWARD_LIMIT, STANDARD_WIN_REWARD, normalizeDailyGameRewards } from '@/data/economy';
+import { Modal } from '@/components/ui/Modal';
+import { PetCompanionChip, PetCompanionRewardSummary } from '@/components/game/PetCompanion';
+import { usePetCompanion } from '@/hooks/usePetCompanion';
 
 const MAX_FIELD_WIDTH = 336;
 const FIELD_SIDE_GUTTER = 32;
@@ -120,6 +123,7 @@ export function BubbleShooterScreen() {
   const fieldWidthRef = useRef(fieldWidth);
   const fieldHeight = fieldWidth * 1.4;
   const { state, earnedReward, aimAngle, setAimAngle, shoot, flying, flightTrail, bursts, nextLevel, restart, resizeField } = useBubbles(fieldWidth);
+  const petCompanion = usePetCompanion('bubbles', state.isWon);
   const fieldAreaRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLDivElement>(null);
   const [fieldScale, setFieldScale] = useState(1);
@@ -318,18 +322,20 @@ export function BubbleShooterScreen() {
   }, [abilityUsed]);
 
   const handleRestart = useCallback(() => {
+    if (state.isWon && petCompanion.session) navigate('/games/bubbles', { replace: true });
     cancelAim();
     setShowTrajectory(false);
     setAbilityUsed(false);
     restart();
-  }, [cancelAim, restart]);
+  }, [cancelAim, navigate, petCompanion.session, restart, state.isWon]);
 
   const handleNextLevel = useCallback(() => {
+    if (petCompanion.session) navigate('/games/bubbles', { replace: true });
     cancelAim();
     setShowTrajectory(false);
     setAbilityUsed(false);
     nextLevel();
-  }, [cancelAim, nextLevel]);
+  }, [cancelAim, navigate, nextLevel, petCompanion.session]);
 
   const hasActiveAbility = !abilityUsed && (
     progress.selectedCharacter === 'kazimir' ||
@@ -352,12 +358,13 @@ export function BubbleShooterScreen() {
       {/* Header */}
       <div className="bubble-game-screen__header screen-safe-header pb-2 px-4 bg-black/50 backdrop-blur-sm">
         <div className="grid grid-cols-[44px_1fr_auto] items-center">
-          <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/80 hover:text-primary transition-colors">
+          <button type="button" aria-label={petCompanion.pet ? `Назад к ${petCompanion.pet.name}` : 'Назад к играм'} onClick={() => navigate(petCompanion.exitPath ?? '/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/80 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div className="text-center">
-            <h2 className="font-heading text-sm font-bold text-primary tracking-wider">
-              Бирюльки
+            <h2 className="flex min-w-0 items-center justify-center gap-1.5 overflow-hidden font-heading text-sm font-bold text-primary tracking-wider">
+              <span className="min-w-0 truncate">Бирюльки</span>
+              {petCompanion.pet && <PetCompanionChip pet={petCompanion.pet} className="font-sans normal-case tracking-normal" />}
             </h2>
             <p className="text-white/40 text-[10px]">{state.levelName}</p>
           </div>
@@ -552,30 +559,6 @@ export function BubbleShooterScreen() {
 
           {/* Win/Lose */}
           <AnimatePresence>
-            {state.isWon && (
-              <motion.div
-                className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-10"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              >
-                <Trophy size={40} className="text-primary mb-3" />
-                <p className="text-primary font-bold text-lg mb-1">Победа!</p>
-                <p className="text-white/70 text-xs mb-1">{state.levelName}</p>
-                <p className="text-white/50 text-sm mb-4">Очки: {displayScore}</p>
-                <p className="text-primary text-xs font-bold mb-4">
-                  {earnedReward === null
-                    ? 'Считаем награду…'
-                    : earnedReward > 0
-                      ? `+${earnedReward} термокоинов`
-                      : 'Лимит Бирюлек на сегодня достигнут'}
-                </p>
-                <div className="space-y-2">
-                  {state.level < totalLevels && (
-                    <Button onClick={handleNextLevel} size="sm">Следующий уровень</Button>
-                  )}
-                  <button type="button" onClick={handleRestart} className="min-h-11 px-4 block text-white/60 text-xs mx-auto hover:text-white">Заново</button>
-                </div>
-              </motion.div>
-            )}
             {state.isLost && (
               <motion.div
                 className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-10"
@@ -590,6 +573,41 @@ export function BubbleShooterScreen() {
           </div>
         </div>
       </div>
+
+      <Modal open={state.isWon} ariaLabelledBy="bubbles-win-title">
+        <div className="text-center" data-bubbles-win>
+          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full border border-primary/30 bg-primary/20">
+            <Trophy size={32} className="text-primary" />
+          </div>
+          <h2 id="bubbles-win-title" className="font-heading text-xl font-bold text-primary">Победа!</h2>
+          <p className="mt-1 text-xs text-white/65">Уровень {state.level} из {totalLevels} · {state.levelName}</p>
+          <p className="mt-2 text-sm text-white/50">Очки: {displayScore}</p>
+          <p className="mt-2 text-sm font-bold text-primary">
+            {earnedReward === null
+              ? 'Считаем награду…'
+              : earnedReward > 0
+                ? `${petCompanion.pet ? 'Вам: ' : ''}+${earnedReward} термокоинов`
+                : petCompanion.pet
+                  ? 'Вам: термокоины не начислены — дневной лимит достигнут'
+                  : 'Лимит Бирюлек на сегодня достигнут'}
+          </p>
+          {petCompanion.pet && <div className="mt-3"><PetCompanionRewardSummary pet={petCompanion.pet} reward={petCompanion.reward} /></div>}
+          <div className="mt-5 space-y-2">
+            {state.level < totalLevels && <Button onClick={handleNextLevel} className="w-full">Следующий уровень</Button>}
+            {petCompanion.pet && (
+              <Button
+                variant="secondary"
+                onClick={() => navigate('/games/pet')}
+                aria-label={`Вернуться к питомцу ${petCompanion.pet.name}`}
+                className="w-full"
+              >
+                К питомцу
+              </Button>
+            )}
+            <button type="button" onClick={handleRestart} className="mx-auto block min-h-11 px-4 text-xs text-white/60 hover:text-white">Начать уровень заново</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Character ability bar */}
       <CharacterAbilityBar game="bubbles" />

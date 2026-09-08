@@ -35,8 +35,24 @@ test('старое сохранение получает новые поля б�
   assert.equal(migrated.hunger, 54);
   assert.equal(migrated.name, 'Яромир');
   assert.equal(migrated.experience, 0);
+  assert.equal(migrated.companionExperience, 0);
+  assert.deepEqual(migrated.companionRewardSessionIds, []);
   assert.equal(migrated.daily.giftClaimed, false);
   assert.deepEqual(migrated.activityCooldowns, {});
+});
+
+test('реестр совместных побед очищается, ограничивается и не завышает отдельный опыт', () => {
+  const ids = Array.from({ length: 300 }, (_, index) => `session-${String(index).padStart(3, '0')}`);
+  const normalized = normalizePetState({
+    ...createPet('yaromir', START, 10),
+    companionExperience: 999,
+    companionRewardSessionIds: [...ids, 'session-299', '', 42],
+  }, START);
+
+  assert.equal(normalized.companionExperience, 10);
+  assert.equal(normalized.companionRewardSessionIds.length, 256);
+  assert.equal(normalized.companionRewardSessionIds[0], 'session-044');
+  assert.equal(normalized.companionRewardSessionIds.at(-1), 'session-299');
 });
 
 test('гостинец выдаётся один раз в день и обновляет ежедневное дело', () => {
@@ -100,14 +116,29 @@ test('занятия открываются по уровню и взросле�
 });
 
 test('новый термлин сохраняет общий уровень, а этап считается только при его повышении', () => {
-  const previous = createPet('yaromir', START, 4_899);
-  const adopted = createPet('valkiriya', START + 1_000, previous.experience);
+  const previous = createPet('yaromir', START, 4_899, undefined, 24);
+  const adopted = createPet('valkiriya', START + 1_000, previous.experience, undefined, previous.companionExperience);
   assert.equal(getPetLevel(adopted), 49);
+  assert.equal(adopted.companionExperience, 24);
   assert.equal(adopted.stage, 'adult');
   assert.equal(hasPetAdvancedLevel(previous, adopted), false);
   assert.equal(hasPetAdvancedLevel(adopted, { ...adopted, experience: 4_900 }), true);
-  const maxLevelPet = { ...adopted, experience: 4_900 };
+  const maxLevelPet = { ...adopted, experience: 4_924 };
   assert.equal(qualifiesPetLevelCompletion(maxLevelPet, maxLevelPet), true);
+});
+
+test('совместный опыт не подменяет уровень ухода в испытании четырёх игр', () => {
+  const companionOnly = createPet('yaromir', START, 96, undefined, 96);
+  assert.equal(qualifiesPetLevelCompletion(
+    companionOnly,
+    { ...companionOnly, experience: 101 },
+  ), false);
+
+  const careNearLevel = createPet('yaromir', START, 107, undefined, 12);
+  assert.equal(qualifiesPetLevelCompletion(
+    careNearLevel,
+    { ...careNearLevel, experience: 112 },
+  ), true);
 });
 
 test('имя очищается, ограничивается и попадает в дневник', () => {

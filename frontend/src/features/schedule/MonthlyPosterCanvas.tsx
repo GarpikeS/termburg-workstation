@@ -1,19 +1,21 @@
 import { MapPin } from 'lucide-react';
+import type { Ref } from 'react';
 import { TermburgScheduleMark } from './SchedulePrimitives';
 import { formatPosterEventDate, formatPosterMonth, getPosterProgramLines } from './monthlyPoster';
 import type { MonthlyPoster, ScheduleLocation } from './types';
 
-export function MonthlyPosterCanvas({ poster, location, preview = false }: {
+export function MonthlyPosterCanvas({ poster, location, preview = false, elementRef }: {
   poster: MonthlyPoster;
   location: ScheduleLocation;
   preview?: boolean;
+  elementRef?: Ref<HTMLElement>;
 }) {
   const events = [...poster.events]
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 5);
 
   return (
-    <article className="monthly-poster" aria-label={`Афиша праздников на ${formatPosterMonth(poster.month)}`}>
+    <article className="monthly-poster" ref={elementRef} aria-label={`Афиша праздников на ${formatPosterMonth(poster.month)}`}>
       <header className="monthly-poster__header">
         <div className="monthly-poster__brand">
           <TermburgScheduleMark />

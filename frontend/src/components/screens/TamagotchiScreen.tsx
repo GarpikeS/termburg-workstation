@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { Modal } from '@/components/ui/Modal';
 import { GameCoach, type GameCoachStep } from '@/components/game/GameCoach';
 import { GameStatusBar } from '@/components/game/GameStatusBar';
 import { usePet } from '@/hooks/usePet';
@@ -45,6 +46,15 @@ import { cn } from '@/utils/cn';
 import { triggerHaptic } from '@/utils/haptics';
 import type { PetStatKey } from '@/types/game';
 import { DAILY_GAME_REWARD_LIMIT, normalizeDailyGameRewards } from '@/data/economy';
+import {
+  PET_COMPANION_BOND,
+  PET_COMPANION_EXPERIENCE,
+  PET_COMPANION_GAME_LABELS,
+  createPetCompanionRouteState,
+  createPetCompanionSession,
+  getPetCompanionGameRoute,
+  type PetCompanionGame,
+} from '@/engine/engine-pet/petCompanion';
 
 type CareStat = 'hunger' | 'happiness' | 'energy' | 'cleanliness';
 type PetCoachStep = 'choose' | 'care' | null;
@@ -52,6 +62,16 @@ type PetTab = 'care' | 'activities' | 'diary';
 
 const CHOOSE_TUTORIAL_ID = 'pet-choose';
 const CARE_TUTORIAL_ID = 'pet-care';
+
+const companionGames: Array<{
+  id: PetCompanionGame;
+  description: string;
+  background: string;
+}> = [
+  { id: 'game2048', description: 'Складывайте числа', background: '/images/ui/game-2048-bg.webp' },
+  { id: 'bubbles', description: 'Сбивайте бирюльки', background: '/images/ui/game-bubbles-bg.webp' },
+  { id: 'match3', description: 'Собирайте три в ряд', background: '/images/ui/game-match3-bg-v2.webp' },
+];
 
 const DEPARTURE_REASONS: Record<PetStatKey, string> = {
   hunger: 'Сытость опустилась до нуля',
@@ -167,6 +187,7 @@ export function TamagotchiScreen() {
   const [satisfactionId, setSatisfactionId] = useState(0);
   const [isSatisfied, setIsSatisfied] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [playChooserOpen, setPlayChooserOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const petDepartureAt = progress.petDeparture?.departedAt;
   const [coachStep, setCoachStep] = useState<PetCoachStep>(() => {
@@ -243,6 +264,16 @@ export function TamagotchiScreen() {
     const result = changeName(nameDraft);
     showResult(result);
     if (result?.ok) setRenameOpen(false);
+  }
+
+  function handleStartCompanionGame(game: PetCompanionGame) {
+    if (!pet) return;
+    const session = createPetCompanionSession(pet.adoptionId, game);
+    triggerHaptic('selection');
+    setPlayChooserOpen(false);
+    navigate(getPetCompanionGameRoute(game, progress.currentLevel), {
+      state: createPetCompanionRouteState(session),
+    });
   }
 
   if (!pet) {
@@ -474,6 +505,25 @@ export function TamagotchiScreen() {
               </div>
             </div>
           </section>
+
+          <motion.button
+            type="button"
+            onClick={() => { triggerHaptic('selection'); setPlayChooserOpen(true); }}
+            whileTap={{ scale: 0.98 }}
+            aria-haspopup="dialog"
+            aria-expanded={playChooserOpen}
+            className="mt-3 flex min-h-14 w-full items-center gap-3 rounded-2xl border border-primary/35 bg-gradient-to-r from-primary/25 via-primary/15 to-[#5DB879]/15 px-4 py-3 text-left shadow-[0_0_22px_rgba(186,155,79,0.12)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            data-pet-companion-open
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-[#1E1A2E] shadow-lg">
+              <Gamepad2 size={21} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <strong className="block truncate text-sm text-white">Поиграть вместе с {pet.name}</strong>
+              <span className="mt-0.5 block text-[11px] text-white/55">Победа принесёт опыт и укрепит дружбу</span>
+            </span>
+            <span className="text-lg text-primary" aria-hidden="true">›</span>
+          </motion.button>
         </div>
 
         <nav className="sticky top-0 z-20 px-4 py-2 bg-[#171323]/95 backdrop-blur-md border-y border-white/5" aria-label="Разделы Пестуна">
@@ -720,6 +770,58 @@ export function TamagotchiScreen() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={playChooserOpen}
+        onClose={() => setPlayChooserOpen(false)}
+        ariaLabelledBy="pet-companion-title"
+        ariaDescribedBy="pet-companion-description"
+        className="p-4"
+      >
+        <section
+          data-pet-companion-chooser
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-primary/70">Совместная игра</p>
+              <h2 id="pet-companion-title" className="mt-1 break-words font-heading text-lg text-white">Куда пойдём с {pet.name}?</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPlayChooserOpen(false)}
+              aria-label="Закрыть выбор игры"
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-white/55 hover:bg-white/5 hover:text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <p id="pet-companion-description" className="mb-4 text-xs leading-relaxed text-white/55">
+            После победы {pet.name} получит +{PET_COMPANION_EXPERIENCE} опыта и +{PET_COMPANION_BOND} к привязанности. Выйти можно в любой момент — за выход награды нет.
+          </p>
+
+          <div className="space-y-2">
+            {companionGames.map((game, index) => (
+              <button
+                key={game.id}
+                type="button"
+                autoFocus={index === 0}
+                onClick={() => handleStartCompanionGame(game.id)}
+                className="group relative flex min-h-16 w-full items-center overflow-hidden rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-left transition-colors hover:border-primary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                data-pet-companion-game={game.id}
+              >
+                <span className="absolute inset-0 bg-cover bg-center opacity-20 transition-opacity group-hover:opacity-30" style={{ backgroundImage: `url(${game.background})` }} aria-hidden="true" />
+                <span className="absolute inset-0 bg-gradient-to-r from-[#171323] via-[#171323]/90 to-[#171323]/45" aria-hidden="true" />
+                <span className="relative min-w-0 flex-1">
+                  <strong className="block font-heading text-base text-white">{PET_COMPANION_GAME_LABELS[game.id]}</strong>
+                  <span className="mt-0.5 block text-[11px] text-white/50">{game.description}</span>
+                </span>
+                <Gamepad2 size={19} className="relative shrink-0 text-primary" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
+      </Modal>
 
       <AnimatePresence>
         {renameOpen && (

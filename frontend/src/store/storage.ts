@@ -7,7 +7,12 @@ import {
   backfillFourGameChallengeProgress,
   createFourGameChallengeProgress,
 } from '@/features/rewards/fourGameChallenge';
-import { GAME_LEVEL_TOTAL } from '@/data/gameProgression';
+import {
+  GAME_LEVEL_TOTAL,
+  SLAVICH_LEVEL_TOTAL,
+  SLAVICH_PROGRESS_VERSION,
+  migrateLegacySlavichCompletedLevels,
+} from '@/data/gameProgression';
 
 const STORAGE_KEY = 'termliny-progress';
 const STORAGE_OWNER_KEY = 'termliny-progress-owner';
@@ -36,6 +41,7 @@ const DEFAULT_PROGRESS: PlayerProgress = {
   tutorialCompleted: false,
   tutorialFlags: [],
   best2048Score: 0,
+  game2048ProgressVersion: SLAVICH_PROGRESS_VERSION,
   game2048LevelsCompleted: 0,
   bubbleLevelsCompleted: 0,
   pet: null,
@@ -76,7 +82,17 @@ export function normalizeProgress(
     : {};
   const parsed = { ...DEFAULT_PROGRESS, ...source } as PlayerProgress;
   parsed.currentLevel = Math.max(1, Math.min(GAME_LEVEL_TOTAL + 1, Math.floor(Number(parsed.currentLevel) || 1)));
-  parsed.game2048LevelsCompleted = Math.max(0, Math.min(GAME_LEVEL_TOTAL, Math.floor(Number(parsed.game2048LevelsCompleted) || 0)));
+  parsed.best2048Score = Math.max(0, Math.floor(Number(parsed.best2048Score) || 0));
+  const storedSlavichVersion = Number(source.game2048ProgressVersion);
+  const storedSlavichLevels = Math.max(
+    0,
+    Math.min(GAME_LEVEL_TOTAL, Math.floor(Number(source.game2048LevelsCompleted) || 0)),
+  );
+  const hasCurrentSlavichProgress = storedSlavichVersion === SLAVICH_PROGRESS_VERSION;
+  parsed.game2048LevelsCompleted = hasCurrentSlavichProgress
+    ? Math.min(SLAVICH_LEVEL_TOTAL, storedSlavichLevels)
+    : migrateLegacySlavichCompletedLevels(storedSlavichLevels, parsed.best2048Score);
+  parsed.game2048ProgressVersion = SLAVICH_PROGRESS_VERSION;
   parsed.bubbleLevelsCompleted = Math.max(0, Math.min(GAME_LEVEL_TOTAL, Math.floor(Number(parsed.bubbleLevelsCompleted) || 0)));
   const storedLevels = parsed.levels && typeof parsed.levels === 'object' && !Array.isArray(parsed.levels)
     ? parsed.levels
@@ -102,13 +118,27 @@ export function normalizeProgress(
       experience: Number.isFinite(parsed.petDeparture.experience)
         ? Math.max(0, Math.floor(parsed.petDeparture.experience ?? 0))
         : 0,
+      companionExperience: Number.isFinite(parsed.petDeparture.companionExperience)
+        ? Math.min(
+            Math.max(0, Math.floor(parsed.petDeparture.experience ?? 0)),
+            Math.max(0, Math.floor(parsed.petDeparture.companionExperience ?? 0)),
+          )
+        : 0,
     };
   }
   if (parsed.pet) parsed.pet = normalizePetState(parsed.pet);
   if (!preserveDailyGameRewards) {
     parsed.dailyGameRewards = normalizeDailyGameRewards(parsed.dailyGameRewards);
   }
-  parsed.fourGameChallenge = backfillFourGameChallengeProgress(parsed.fourGameChallenge, parsed);
+  parsed.fourGameChallenge = backfillFourGameChallengeProgress(parsed.fourGameChallenge, {
+    ...parsed,
+    // A completed legacy micro-level keeps one campaign credit, but cannot
+    // unlock all four credits merely because the old counter was large.
+    game2048LevelsCompleted: Math.max(
+      parsed.game2048LevelsCompleted,
+      !hasCurrentSlavichProgress && storedSlavichLevels > 0 ? 1 : 0,
+    ),
+  });
   return syncLifeProgress(parsed);
 }
 

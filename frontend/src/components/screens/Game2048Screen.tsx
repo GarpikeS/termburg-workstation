@@ -17,6 +17,9 @@ import { Button } from '@/components/ui/Button';
 import { LivesDisplay } from '@/components/ui/LivesDisplay';
 import { DAILY_GAME_REWARD_LIMIT, normalizeDailyGameRewards } from '@/data/economy';
 import { useVisualViewportSize } from '@/hooks/useVisualViewportSize';
+import { usePetCompanion } from '@/hooks/usePetCompanion';
+import { PetCompanionChip } from '@/components/game/PetCompanion';
+import { SLAVICH_LEVEL_TOTAL } from '@/data/gameProgression';
 
 const GRID_SIZE = 4;
 const GAP = 6;
@@ -30,6 +33,7 @@ export function Game2048Screen() {
   const scoreMultiplier = progress.selectedCharacter === 'pereslav' ? 1.15
     : progress.selectedCharacter === 'yaromir' ? 1.10 : 1.0;
   const { state, earnedReward, move, continueGame, undo, restart } = useGame2048(scoreMultiplier);
+  const petCompanion = usePetCompanion('game2048', state.isWon);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
   const boardAreaRef = useRef<HTMLDivElement>(null);
   const previousMoveCount = useRef(state.moveCount);
@@ -188,17 +192,19 @@ export function Game2048Screen() {
   }, [abilityUsed, progress.selectedCharacter]);
 
   const handleRestart = useCallback(() => {
+    if (state.isWon && petCompanion.session) navigate('/games/2048', { replace: true });
     setAbilityUsed(false);
     setShowRestartConfirm(false);
     lifeSpentForLoss.current = false;
     restart();
-  }, [restart]);
+  }, [navigate, petCompanion.session, restart, state.isWon]);
 
   const handleContinue = useCallback(() => {
+    if (petCompanion.session) navigate('/games/2048', { replace: true });
     setAbilityUsed(false);
     lifeSpentForLoss.current = false;
     continueGame();
-  }, [continueGame]);
+  }, [continueGame, navigate, petCompanion.session]);
 
   const handleUndo = useCallback(() => {
     if (!state.canUndo) return;
@@ -222,10 +228,13 @@ export function Game2048Screen() {
       {/* Header */}
       <div className="game-2048-screen__header screen-safe-header pb-2 px-4 bg-black/50 backdrop-blur-sm">
         <div className="grid grid-cols-[44px_1fr_auto] items-center">
-          <button type="button" aria-label="Назад к играм" onClick={() => navigate('/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/80 hover:text-primary transition-colors">
+          <button type="button" aria-label={petCompanion.pet ? `Назад к ${petCompanion.pet.name}` : 'Назад к играм'} onClick={() => navigate(petCompanion.exitPath ?? '/games')} className="min-w-11 min-h-11 flex items-center justify-center text-white/80 hover:text-primary transition-colors">
             <ArrowLeft size={20} />
           </button>
-          <h2 className="text-center font-heading text-base font-bold text-primary tracking-wider">Славич</h2>
+          <h2 className="flex min-w-0 items-center justify-center gap-1.5 overflow-hidden text-center font-heading text-base font-bold text-primary tracking-wider">
+            <span className="min-w-0 truncate">Славич</span>
+            {petCompanion.pet && <PetCompanionChip pet={petCompanion.pet} className="font-sans normal-case tracking-normal" />}
+          </h2>
           <div className="flex items-center justify-end gap-1">
             <button
               type="button"
@@ -289,9 +298,10 @@ export function Game2048Screen() {
 
       <GameStatusBar
         level={state.level}
+        totalLevels={SLAVICH_LEVEL_TOTAL}
         metricLabel="Счёт игры"
         metricValue={displayScore}
-        detailLabel="Цель"
+        detailLabel="Цель по счёту"
         detailValue={state.targetScore}
         currency={progress.currency}
         className="game-2048-screen__status bg-black/40 px-4 pb-2"
@@ -375,6 +385,9 @@ export function Game2048Screen() {
         level={state.level}
         score={displayScore}
         earnedReward={earnedReward}
+        companionPet={petCompanion.pet}
+        companionReward={petCompanion.reward}
+        onCompanionExit={petCompanion.pet ? () => navigate('/games/pet') : undefined}
         onContinue={handleContinue}
         onRestart={handleRestart}
       />

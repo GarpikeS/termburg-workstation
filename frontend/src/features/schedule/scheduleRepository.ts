@@ -4,6 +4,10 @@ import { loadOfficialSchedule } from './officialSchedule';
 const STORAGE_KEY = 'termburg:schedule:v1';
 const SEED_URL = '/data/default-schedule.json';
 const DEFAULT_API_URL = '/api/schedule';
+const REQUIRED_LOCATION_TIMEZONES: Record<string, string> = {
+  '1': 'Europe/Moscow',
+  '2': 'Asia/Krasnoyarsk',
+};
 
 function isScheduleData(value: unknown): value is ScheduleData {
   if (!value || typeof value !== 'object') return false;
@@ -17,6 +21,10 @@ function isScheduleData(value: unknown): value is ScheduleData {
 function normalizeScheduleData(value: ScheduleData): ScheduleData {
   return {
     ...value,
+    locations: value.locations.map(location => ({
+      ...location,
+      timezone: REQUIRED_LOCATION_TIMEZONES[location.id] ?? location.timezone,
+    })),
     monthlyPosters: Array.isArray(value.monthlyPosters) ? value.monthlyPosters : [],
   };
 }

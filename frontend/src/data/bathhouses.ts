@@ -22,3 +22,21 @@ export function getBathhouseById(id: number): Bathhouse | undefined {
 export function getBathhouseForLevel(levelId: number): Bathhouse | undefined {
   return bathhouses.find(b => levelId >= b.levelsRange[0] && levelId <= b.levelsRange[1]);
 }
+
+/**
+ * Returns the level opened by a bathhouse on the single campaign map.
+ * The current bathhouse continues from the player's next level, while a
+ * completed bathhouse replays the final level in its five-level chapter.
+ */
+export function getBathhouseEntryLevel(
+  bathhouse: Bathhouse,
+  currentLevel: number,
+): number | null {
+  const [firstLevel, lastLevel] = bathhouse.levelsRange;
+  const safeCurrentLevel = Number.isFinite(currentLevel)
+    ? Math.max(1, Math.floor(currentLevel))
+    : 1;
+
+  if (safeCurrentLevel < firstLevel) return null;
+  return Math.min(safeCurrentLevel, lastLevel);
+}

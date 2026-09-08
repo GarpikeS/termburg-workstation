@@ -59,7 +59,7 @@ try {
     '/d',
     '/s',
     '/c',
-    'electron-builder --config workstation/electron-builder.update.json --win --x64',
+    'npm exec -- electron-builder --config workstation/electron-builder.update.json --win --x64',
   ]);
   runNodeScript('scripts/test-workstation-packaged.mjs', [
     `--unpacked-directory=${unpackedDirectory}`,

@@ -71,6 +71,7 @@ function progressSeed() {
       'match3-ability-yaromir',
     ],
     best2048Score: 128,
+    game2048ProgressVersion: 2,
     game2048LevelsCompleted: 0,
     bubbleLevelsCompleted: 0,
     pet: {
@@ -137,6 +138,11 @@ async function newPage(browser, viewport, currency = 37, progressOverrides = {},
       body: JSON.stringify({ error: 'Войдите в профиль.' }),
     });
   });
+  await context.route('**/api/rewards/free-hour*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ available: true }),
+  }));
   await context.addInitScript(progress => {
     if (!localStorage.getItem('termliny-progress')) {
       localStorage.setItem('termliny-progress', JSON.stringify(progress));
@@ -374,10 +380,23 @@ async function assertGameShell(page, route, viewport, surfaceSelector, gameTitle
   await page.evaluate(() => document.fonts?.ready);
   await assertBottomNavLayout(page, route, 'Игры');
   assert.equal((await page.locator('[data-global-wallet]').textContent())?.trim(), '37');
+  const shopTab = page.locator('.bottom-nav__item').nth(2);
+  assert.equal((await shopTab.locator('[data-bottom-nav-label]').textContent())?.trim(), 'Магазин');
+  assert.match(await shopTab.getAttribute('aria-label') ?? '', /^Магазин\. Баланс: 37 термокоинов$/);
   assert.equal((await page.locator('[data-game-wallet-balance]').textContent())?.trim(), '37');
   assert.equal((await page.locator('[data-game-level-current]').textContent())?.trim(), '1');
-  assert.equal((await page.locator('[data-game-level-total]').textContent())?.trim(), '50');
-  assert.match((await page.locator('[data-game-level]').textContent()) ?? '', /Уровень\s*1 из 50/);
+  const expectedLevelTotal = route === '/games/2048' ? 4 : 50;
+  assert.equal((await page.locator('[data-game-level-total]').textContent())?.trim(), String(expectedLevelTotal));
+  assert.match((await page.locator('[data-game-level]').textContent()) ?? '', new RegExp(`Уровень\\s*1 из ${expectedLevelTotal}`));
+
+  const freeHourGoal = page.locator('[data-free-hour-goal]');
+  await freeHourGoal.waitFor();
+  assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-state'), 'earning');
+  assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-kind'), 'gift-progress');
+  assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-price'), '0');
+  assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-remaining'), '4');
+  assert.match((await freeHourGoal.textContent()) ?? '', /4 ур\./);
+  assert.match((await freeHourGoal.textContent()) ?? '', /К играм/);
 
   const geometry = await page.evaluate(selector => {
     const navElement = document.querySelector('.bottom-nav');
@@ -429,6 +448,21 @@ async function assertGameShell(page, route, viewport, surfaceSelector, gameTitle
     return { width: rect.width, height: rect.height };
   });
   assert.ok(walletTarget.width >= 44 && walletTarget.height >= 44, `${route}: wallet target must be at least 44×44px`);
+  const goalTarget = await freeHourGoal.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const navRect = element.closest('.bottom-nav')?.getBoundingClientRect();
+    return {
+      width: rect.width,
+      height: rect.height,
+      top: rect.top,
+      bottom: rect.bottom,
+      navTop: navRect?.top,
+      navBottom: navRect?.bottom,
+    };
+  });
+  assert.ok(goalTarget.width >= 44 && goalTarget.height >= 44, `${route}: free-hour goal target must be at least 44×44px`);
+  assert.ok(goalTarget.navTop !== undefined && goalTarget.top >= goalTarget.navTop - 1, `${route}: free-hour goal must stay inside bottom nav`);
+  assert.ok(goalTarget.navBottom !== undefined && goalTarget.bottom <= goalTarget.navBottom + 1, `${route}: free-hour goal must stay inside bottom nav`);
   await assertNoHorizontalOverflow(page);
 }
 
@@ -470,8 +504,16 @@ try {
         fullPage: true,
       });
       assert.deepEqual(runtimeErrors, [], `${scenario.route}: runtime errors`);
-      await page.locator('[data-game-wallet]').click();
-      await page.waitForURL('**/shop');
+      await page.getByRole('button', { name: /^Магазин\. Баланс:/ }).click();
+      await page.waitForURL('**/shop?focus=ticket-free');
+      const focusedReward = page.locator('[data-shop-product="ticket-free"]');
+      await focusedReward.waitFor();
+      assert.equal(await focusedReward.getAttribute('data-shop-product-focused'), 'true');
+      assert.equal((await focusedReward.locator('[data-termcoin-price="50"]').textContent())?.trim(), '50 термокоинов');
+      await page.waitForFunction(() => {
+        const card = document.querySelector('[data-shop-product="ticket-free"]');
+        return Boolean(card?.querySelector('[data-shop-action]') === document.activeElement);
+      });
       await context.close();
     }
   }
@@ -499,35 +541,60 @@ try {
     await page.locator('[data-termburg-app-ready]').waitFor({ state: 'attached' });
     const bathhouseButtons = page.locator('.scene-canvas button[aria-label]');
     assert.equal(await bathhouseButtons.count(), 10, 'Хоровод: карта должна содержать десять глав по 5 уровней');
+    await page.locator('[data-match3-map-progress]').getByText('Уровень 1 из 50', { exact: true }).waitFor();
+    const firstBathhouse = page.getByRole('button', { name: 'Русская баня. Играть: уровень 1 из 50', exact: true });
+    const secondBathhouse = page.getByRole('button', { name: 'Финская сауна, закрыто. Открывается на уровне 6 из 50', exact: true });
+    assert.equal(await secondBathhouse.isDisabled(), true, 'Хоровод: будущий домик должен оставаться закрытым');
     await bathhouseButtons.last().waitFor({ state: 'visible' });
     await page.waitForTimeout(900);
     await page.screenshot({
       path: path.join(outputRoot, 'horovod-bathhouse-map-390x844.png'),
       fullPage: true,
     });
+    await firstBathhouse.click();
+    await page.waitForURL('**/games/match3/play/1');
+    const firstLevelPopup = page.getByRole('heading', { name: 'Первый пар', exact: true }).locator('..');
+    await firstLevelPopup.getByText('Уровень 1 из 50', { exact: true }).waitFor();
     await page.goto(`${baseUrl}/games/match3/levels/10`, { waitUntil: 'domcontentloaded' });
-    const finalBathhouseLevels = page.locator('.scene-canvas button[aria-label^="Уровень "]');
-    await page.getByRole('button', { name: /^Уровень 46:/ }).waitFor();
-    assert.equal(await finalBathhouseLevels.count(), 5, 'Хоровод: в десятой главе должны быть уровни 46–50');
-    await page.getByRole('button', { name: /^Уровень 50:/ }).waitFor();
+    await page.waitForURL('**/games/match3');
+    await page.locator('[data-match3-map-progress]').waitFor();
+    await page.goto(`${baseUrl}/games/match3/play/50`, { waitUntil: 'domcontentloaded' });
+    await page.waitForURL('**/games/match3');
     await page.goto(`${baseUrl}/games/match3/play/51`, { waitUntil: 'domcontentloaded' });
-    await page.getByText('Уровень не найден', { exact: true }).waitFor();
-    assert.deepEqual(runtimeErrors, [], 'Хоровод: карта и граница 50-го уровня');
+    await page.waitForURL('**/games/match3');
+    assert.deepEqual(runtimeErrors, [], 'Хоровод: прямой вход, старый маршрут и закрытые уровни');
+    await context.close();
+  }
+
+  {
+    const { context, page, runtimeErrors } = await newPage(
+      browser,
+      { width: 390, height: 844 },
+      37,
+      { currentLevel: 7 },
+    );
+    await page.goto(`${baseUrl}/games/match3`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[data-match3-map-progress]').getByText('Уровень 7 из 50', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Финская сауна. Играть: уровень 7 из 50', exact: true }).click();
+    await page.waitForURL('**/games/match3/play/7');
+    const savedLevelPopup = page.getByRole('heading', { name: 'Кедровый аромат', exact: true }).locator('..');
+    await savedLevelPopup.getByText('Уровень 7 из 50', { exact: true }).waitFor();
+    assert.deepEqual(runtimeErrors, [], 'Хоровод: домик должен продолжать сохранённый уровень');
     await context.close();
   }
 
   {
     const { context, page, runtimeErrors } = await newPage(browser, { width: 390, height: 844 });
     await page.goto(`${baseUrl}/games/2048`, { waitUntil: 'domcontentloaded' });
-    const completedHeading = page.getByRole('heading', { name: 'Уровень 1 из 50 пройден!', exact: true });
+    const completedHeading = page.getByRole('heading', { name: 'Уровень 1 из 4 пройден!', exact: true });
     const directions = ['ArrowLeft', 'ArrowDown', 'ArrowRight', 'ArrowUp'];
-    for (let move = 0; move < 160 && !(await completedHeading.isVisible()); move += 1) {
+    for (let move = 0; move < 500 && !(await completedHeading.isVisible()); move += 1) {
       await page.keyboard.press(directions[move % directions.length]);
     }
     await completedHeading.waitFor();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('termliny-progress') ?? '{}').game2048LevelsCompleted === 1);
     const scoreBeforeNextLevel = Number((await page.locator('[data-game-current-metric]').textContent())?.replace(/\D/g, ''));
-    assert.ok(scoreBeforeNextLevel >= 64, 'Славич: completed level must have a real score');
+    assert.ok(scoreBeforeNextLevel >= 800, 'Славич: первый из четырёх крупных уровней должен требовать 800 очков');
     await page.getByRole('button', { name: 'Продолжить — уровень 2', exact: true }).click();
     await page.locator('[data-game-level-current]').getByText('2', { exact: true }).waitFor();
     const scoreAfterNextLevel = Number((await page.locator('[data-game-current-metric]').textContent())?.replace(/\D/g, ''));
@@ -586,8 +653,13 @@ try {
     await wallet.waitFor();
     assert.equal(await wallet.getAttribute('data-wallet-goal-reached'), 'true');
     assert.match(await wallet.getAttribute('aria-label') ?? '', /Накоплено достаточно для цели 50/);
+    const freeHourGoal = page.locator('[data-free-hour-goal]');
+    assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-state'), 'earning');
+    assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-kind'), 'gift-progress');
+    assert.equal(await freeHourGoal.getAttribute('data-free-hour-goal-remaining'), '4');
     await wallet.click();
-    await page.waitForURL('**/shop');
+    await page.waitForURL('**/shop?focus=ticket-free');
+    await page.locator('[data-shop-product="ticket-free"][data-shop-product-focused="true"]').waitFor();
     assert.deepEqual(runtimeErrors, []);
     await context.close();
   }
@@ -599,6 +671,7 @@ try {
       viewport,
       1_000_000,
       {
+        game2048ProgressVersion: 1,
         game2048LevelsCompleted: 99,
         best2048Score: 100_000_000,
         currentLevel: 117,
@@ -610,7 +683,7 @@ try {
       },
     );
     await page.goto(`${baseUrl}/games/2048`, { waitUntil: 'domcontentloaded' });
-    await page.locator('[data-game-level-current]').getByText('50', { exact: true }).waitFor();
+    await page.locator('[data-game-level-current]').getByText('4', { exact: true }).waitFor();
     const statusValuesFit = await page.evaluate(() => {
       const wallet = document.querySelector('[data-game-wallet-balance]');
       const level = document.querySelector('[data-game-level] strong');
@@ -622,7 +695,7 @@ try {
     });
     assert.equal(Number(statusValuesFit.walletText.replace(/\D/g, '')), 1_000_000);
     assert.ok(statusValuesFit.walletFits, 'large wallet balance must remain fully visible');
-    assert.ok(statusValuesFit.levelFits, 'level 50 of 50 must remain fully visible');
+    assert.ok(statusValuesFit.levelFits, 'level 4 of 4 must remain fully visible');
     const storedMatch3LevelIds = await page.evaluate(() => (
       Object.keys(JSON.parse(localStorage.getItem('termliny-progress') ?? '{}').levels ?? {}).map(Number)
     ));
@@ -634,7 +707,7 @@ try {
     );
     await assertNoHorizontalOverflow(page);
     await page.screenshot({
-      path: path.join(outputRoot, 'slavich-level-50-large-wallet-320x568.png'),
+      path: path.join(outputRoot, 'slavich-level-4-large-wallet-320x568.png'),
       fullPage: true,
     });
     assert.deepEqual(runtimeErrors, [], 'max level and large wallet errors');
@@ -684,7 +757,7 @@ try {
     assert.equal(Number((await page.locator('[data-game-wallet-balance]').textContent())?.replace(/\D/g, '')), 321);
     const hydratedProgress = await page.evaluate(() => JSON.parse(localStorage.getItem('termliny-progress') ?? '{}'));
     assert.equal(hydratedProgress.currentLevel, 51);
-    assert.equal(hydratedProgress.game2048LevelsCompleted, 50);
+    assert.equal(hydratedProgress.game2048LevelsCompleted, 4);
     assert.equal(hydratedProgress.bubbleLevelsCompleted, 50);
     assert.deepEqual(Object.keys(hydratedProgress.levels ?? {}).map(Number), [50]);
     assert.deepEqual(hydratedProgress.dailyGameRewards, serverProgress.dailyGameRewards);

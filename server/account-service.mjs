@@ -24,6 +24,14 @@ const FOUR_GAME_CHALLENGE_SOURCES = ['game2048', 'bubbles', 'pet', 'match3'];
 const DAILY_GAME_REWARD_LIMIT = 30;
 const DAILY_TOTAL_REWARD_LIMIT = 120;
 const GAME_LEVEL_TOTAL = 50;
+const SLAVICH_LEVEL_TOTAL = 4;
+const SLAVICH_PROGRESS_VERSION = 2;
+const SLAVICH_LEVEL_TARGETS = [800, 1600, 2400, 3200];
+const LEGACY_SLAVICH_LEVEL_SCORE_STEP = 64;
+const MAX_PET_EXPERIENCE = 100_000_000;
+const PET_COMPANION_EXPERIENCE = 12;
+const MAX_COMPANION_REWARD_SESSIONS = 256;
+const MAX_COMPANION_REWARD_SESSION_ID_LENGTH = 72;
 const DEFAULT_CITY = 'Москва';
 const DEFAULT_TIME_ZONE = 'Europe/Moscow';
 const CITY_TIMEZONES = {
@@ -47,13 +55,18 @@ const DEFAULT_PROGRESS = Object.freeze({
   levels: {},
   currency: 0,
   dailyGameRewards: null,
-  fourGameChallenge: { version: 1, completedGames: [] },
+  fourGameChallenge: {
+    version: 1,
+    completedGames: [],
+    stageCounts: { game2048: 0, bubbles: 0, pet: 0, match3: 0 },
+  },
   lives: 5,
   nextLifeAt: null,
   selectedCharacter: 'yaromir',
   tutorialCompleted: false,
   tutorialFlags: [],
   best2048Score: 0,
+  game2048ProgressVersion: SLAVICH_PROGRESS_VERSION,
   game2048LevelsCompleted: 0,
   bubbleLevelsCompleted: 0,
   pet: null,
@@ -231,6 +244,64 @@ function uniqueStrings(value, maxItems, maxLength) {
   return [...new Set(value.map(item => cleanText(item, maxLength)).filter(Boolean))].slice(0, maxItems);
 }
 
+function normalizeCompanionRewardSessionIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .map(item => cleanText(item, MAX_COMPANION_REWARD_SESSION_ID_LENGTH))
+    .filter(Boolean))]
+    .slice(-MAX_COMPANION_REWARD_SESSIONS);
+}
+
+function mergeCompanionRewardSessionIds(previousValue, incomingValue) {
+  return [...new Set([
+    ...normalizeCompanionRewardSessionIds(previousValue),
+    ...normalizeCompanionRewardSessionIds(incomingValue),
+  ])].slice(-MAX_COMPANION_REWARD_SESSIONS);
+}
+
+function getCompanionRewardEvidenceIds(value, companionExperience) {
+  const ids = normalizeCompanionRewardSessionIds(value);
+  const supportedCount = Math.floor(companionExperience / PET_COMPANION_EXPERIENCE);
+  return ids.length <= supportedCount ? ids : [];
+}
+
+function mergePetCompanionExperience(
+  previousExperience,
+  previousSessionIds,
+  incomingExperience,
+  incomingSessionIds,
+) {
+  const previousEvidence = getCompanionRewardEvidenceIds(previousSessionIds, previousExperience);
+  const incomingEvidence = getCompanionRewardEvidenceIds(incomingSessionIds, incomingExperience);
+  const unionCount = new Set([...previousEvidence, ...incomingEvidence]).size;
+  const previousBaseline = Math.max(
+    0,
+    previousExperience - previousEvidence.length * PET_COMPANION_EXPERIENCE,
+  );
+  const incomingBaseline = Math.max(
+    0,
+    incomingExperience - incomingEvidence.length * PET_COMPANION_EXPERIENCE,
+  );
+  const unionExperience = Math.min(
+    MAX_PET_EXPERIENCE,
+    Math.min(previousBaseline, incomingBaseline) + unionCount * PET_COMPANION_EXPERIENCE,
+  );
+  return Math.max(previousExperience, incomingExperience, unionExperience);
+}
+
+function getPetExperience(value) {
+  return safeInteger(plainObject(value).experience, 0, MAX_PET_EXPERIENCE, 0);
+}
+
+function getPetCompanionExperience(value, experience = getPetExperience(value)) {
+  return safeInteger(plainObject(value).companionExperience, 0, experience, 0);
+}
+
+function getPetChallengeExperience(value) {
+  const experience = getPetExperience(value);
+  return Math.max(0, experience - getPetCompanionExperience(value, experience));
+}
+
 function normalizeDailyRewards(value, now, timeZone) {
   const currentDate = localDateKey(now, timeZone);
   const source = plainObject(value);
@@ -255,32 +326,76 @@ function normalizeDailyRewards(value, now, timeZone) {
 function normalizeFourGameChallenge(value, previousValue = null) {
   const incoming = plainObject(value);
   const previous = plainObject(previousValue);
-  const completed = new Set([
-    ...(Array.isArray(previous.completedGames) ? previous.completedGames : []),
-    ...(Array.isArray(incoming.completedGames) ? incoming.completedGames : []),
-  ]);
+  const incomingCompleted = new Set(Array.isArray(incoming.completedGames) ? incoming.completedGames : []);
+  const previousCompleted = new Set(Array.isArray(previous.completedGames) ? previous.completedGames : []);
+  const incomingCounts = plainObject(incoming.stageCounts);
+  const previousCounts = plainObject(previous.stageCounts);
+  const stageCounts = {};
+  for (const source of FOUR_GAME_CHALLENGE_SOURCES) {
+    stageCounts[source] = Math.max(
+      safeInteger(previousCounts[source], 0, FOUR_GAME_CHALLENGE_SOURCES.length, 0),
+      safeInteger(incomingCounts[source], 0, FOUR_GAME_CHALLENGE_SOURCES.length, 0),
+      previousCompleted.has(source) ? 1 : 0,
+      incomingCompleted.has(source) ? 1 : 0,
+    );
+  }
   return {
     version: 1,
-    completedGames: FOUR_GAME_CHALLENGE_SOURCES.filter(source => completed.has(source)),
+    completedGames: FOUR_GAME_CHALLENGE_SOURCES.filter(source => stageCounts[source] > 0),
+    stageCounts,
   };
 }
 
 function backfillFourGameChallenge(progress) {
-  const completed = new Set(normalizeFourGameChallenge(progress.fourGameChallenge).completedGames);
+  const normalized = normalizeFourGameChallenge(progress.fourGameChallenge);
+  const stageCounts = { ...normalized.stageCounts };
   const levels = plainObject(progress.levels);
   const currentLevel = safeInteger(progress.currentLevel, 1, GAME_LEVEL_TOTAL + 1, 1);
   const pet = plainObject(progress.pet);
   const petDeparture = plainObject(progress.petDeparture);
 
-  if (safeInteger(progress.game2048LevelsCompleted, 0, GAME_LEVEL_TOTAL, 0) > 0) completed.add('game2048');
-  if (safeInteger(progress.bubbleLevelsCompleted, 0, GAME_LEVEL_TOTAL, 0) > 0) completed.add('bubbles');
-  if (currentLevel > 1 || Object.values(levels).some(level => plainObject(level).completed === true)) completed.add('match3');
-  if (
-    safeInteger(pet.experience, 0, 100_000_000, 0) >= 100
-    || safeInteger(petDeparture.experience, 0, 100_000_000, 0) >= 100
-  ) completed.add('pet');
+  stageCounts.game2048 = Math.max(
+    stageCounts.game2048,
+    safeInteger(progress.game2048LevelsCompleted, 0, SLAVICH_LEVEL_TOTAL, 0),
+  );
+  stageCounts.bubbles = Math.max(
+    stageCounts.bubbles,
+    safeInteger(progress.bubbleLevelsCompleted, 0, FOUR_GAME_CHALLENGE_SOURCES.length, 0),
+  );
+  const completedMatch3Levels = Object.values(levels)
+    .filter(level => plainObject(level).completed === true)
+    .length;
+  stageCounts.match3 = Math.max(
+    stageCounts.match3,
+    Math.min(FOUR_GAME_CHALLENGE_SOURCES.length, Math.max(currentLevel - 1, completedMatch3Levels)),
+  );
+  stageCounts.pet = Math.max(
+    stageCounts.pet,
+    Math.min(
+      FOUR_GAME_CHALLENGE_SOURCES.length,
+      Math.floor(Math.max(getPetChallengeExperience(pet), getPetChallengeExperience(petDeparture)) / 100),
+    ),
+  );
 
-  return normalizeFourGameChallenge({ completedGames: [...completed] });
+  return normalizeFourGameChallenge({ stageCounts }, normalized);
+}
+
+function normalizeSlavichCompletedLevels(value) {
+  const source = plainObject(value);
+  const storedLevels = safeInteger(source.game2048LevelsCompleted, 0, GAME_LEVEL_TOTAL, 0);
+  if (Number(source.game2048ProgressVersion) === SLAVICH_PROGRESS_VERSION) {
+    return Math.min(SLAVICH_LEVEL_TOTAL, storedLevels);
+  }
+  const bestScore = safeInteger(source.best2048Score, 0, 1_000_000_000, 0);
+  const scoreEvidence = Math.max(bestScore, storedLevels * LEGACY_SLAVICH_LEVEL_SCORE_STEP);
+  const completedMilestones = SLAVICH_LEVEL_TARGETS.filter(target => target <= scoreEvidence).length;
+  return storedLevels > 0 ? Math.max(1, completedMilestones) : completedMilestones;
+}
+
+function hasLegacySlavichCompletion(value) {
+  const source = plainObject(value);
+  return Number(source.game2048ProgressVersion) !== SLAVICH_PROGRESS_VERSION
+    && safeInteger(source.game2048LevelsCompleted, 0, GAME_LEVEL_TOTAL, 0) > 0;
 }
 
 function normalizePetDeparture(value) {
@@ -291,13 +406,15 @@ function normalizePetDeparture(value) {
   const depletedStat = cleanText(source.depletedStat, 20);
   const departedAt = safeTimestamp(source.departedAt, null);
   if (!CHARACTER_IDS.has(characterId) || !name || !PET_DEPLETED_STATS.has(depletedStat) || !departedAt) return null;
+  const experience = getPetExperience(source);
   return {
     ...(adoptionId ? { adoptionId } : {}),
     characterId,
     name,
     depletedStat,
     departedAt,
-    experience: safeInteger(source.experience, 0, 100_000_000, 0),
+    experience,
+    companionExperience: getPetCompanionExperience(source, experience),
   };
 }
 
@@ -430,7 +547,13 @@ function sanitizeProgress(inputValue, options) {
     dailyGain += Math.max(0, merged - previousDaily.earned[source]);
   }
   const dailyGameRewards = { date: incomingDaily.date, earned: mergedEarned };
-  const fourGameChallenge = normalizeFourGameChallenge(input.fourGameChallenge, before.fourGameChallenge);
+  let fourGameChallenge = normalizeFourGameChallenge(input.fourGameChallenge, before.fourGameChallenge);
+  if (hasLegacySlavichCompletion(input) || hasLegacySlavichCompletion(before)) {
+    fourGameChallenge = normalizeFourGameChallenge(
+      { completedGames: ['game2048'] },
+      fourGameChallenge,
+    );
+  }
 
   const previousCurrency = safeInteger(before.currency, 0, 1_000_000, 0);
   const requestedCurrency = safeInteger(input.currency, 0, 1_000_000, 0);
@@ -457,6 +580,16 @@ function sanitizeProgress(inputValue, options) {
   const incomingPetDeparture = normalizePetDeparture(input.petDeparture);
   const hasPreviousPet = Object.keys(previousPet).length > 0;
   const hasIncomingPet = Object.keys(incomingPet).length > 0;
+  const previousPetExperience = getPetExperience(previousPet);
+  const incomingPetExperience = getPetExperience(incomingPet);
+  const previousPetCompanionExperience = getPetCompanionExperience(previousPet, previousPetExperience);
+  const incomingPetCompanionExperience = getPetCompanionExperience(incomingPet, incomingPetExperience);
+  const previousPetCompanionRewardSessionIds = normalizeCompanionRewardSessionIds(
+    previousPet.companionRewardSessionIds,
+  );
+  const incomingPetCompanionRewardSessionIds = normalizeCompanionRewardSessionIds(
+    incomingPet.companionRewardSessionIds,
+  );
   const previousPetAdoptionId = getPetAdoptionId(previousPet);
   const incomingPetAdoptionId = getPetAdoptionId(incomingPet);
   const incomingPetIsCurrent = hasPreviousPet && isSamePetInstance(
@@ -517,22 +650,81 @@ function sanitizeProgress(inputValue, options) {
     && incomingPetDeparture.departedAt >= previousPetEventAt
     && (incomingDepartureMatchesCurrent || incomingDepartureUpdatesPrevious || incomingDepartureIsInitial);
   const preservedPetExperience = Math.max(
-    safeInteger(previousPet.experience, 0, 100_000_000, 0),
+    previousPetExperience,
     previousPetDeparture?.experience ?? 0,
     incomingPetReplacesDeparted ? (incomingPetDeparture?.experience ?? 0) : 0,
   );
+  const preservedPetCompanionExperience = Math.max(
+    previousPetCompanionExperience,
+    previousPetDeparture?.companionExperience ?? 0,
+    incomingPetReplacesDeparted ? (incomingPetDeparture?.companionExperience ?? 0) : 0,
+  );
+  const mergedPetCompanionRewardSessionIds = incomingPetIsCurrent
+    ? mergeCompanionRewardSessionIds(
+        previousPetCompanionRewardSessionIds,
+        incomingPetCompanionRewardSessionIds,
+      )
+    : incomingPetCompanionRewardSessionIds;
+  const mergedSamePetCompanionExperience = incomingPetIsCurrent
+    ? mergePetCompanionExperience(
+        previousPetCompanionExperience,
+        previousPetCompanionRewardSessionIds,
+        incomingPetCompanionExperience,
+        incomingPetCompanionRewardSessionIds,
+      )
+    : Math.max(previousPetCompanionExperience, incomingPetCompanionExperience);
+  const mergedPetCompanionExperienceBeforeClamp = Math.max(
+    preservedPetCompanionExperience,
+    mergedSamePetCompanionExperience,
+  );
+  const additionalConcurrentCompanionExperience = incomingPetIsCurrent
+    ? Math.max(
+        0,
+        mergedPetCompanionExperienceBeforeClamp
+          - Math.max(preservedPetCompanionExperience, incomingPetCompanionExperience),
+      )
+    : 0;
+  const acceptsCompanionOnlyMerge = incomingPetIsCurrent && !acceptsIncomingPet;
+  const mergedPetExperience = Math.min(
+    MAX_PET_EXPERIENCE,
+    acceptsCompanionOnlyMerge
+      ? preservedPetExperience + Math.max(
+          0,
+          mergedPetCompanionExperienceBeforeClamp - preservedPetCompanionExperience,
+        )
+      : Math.max(preservedPetExperience, incomingPetExperience)
+        + additionalConcurrentCompanionExperience,
+  );
+  const mergedPetCompanionExperience = Math.min(
+    mergedPetExperience,
+    mergedPetCompanionExperienceBeforeClamp,
+  );
+  const normalizedPreviousPet = hasPreviousPet
+    ? {
+        ...previousPet,
+        experience: previousPetExperience,
+        companionExperience: previousPetCompanionExperience,
+        companionRewardSessionIds: previousPetCompanionRewardSessionIds,
+      }
+    : null;
   const pet = acceptsIncomingDeparture
     ? null
     : acceptsIncomingPet
       ? {
           ...incomingPet,
           ...(incomingPetAdoptionId ? { adoptionId: incomingPetAdoptionId } : {}),
-          experience: Math.max(
-            preservedPetExperience,
-            safeInteger(incomingPet.experience, 0, 100_000_000, 0),
-          ),
+          experience: mergedPetExperience,
+          companionExperience: mergedPetCompanionExperience,
+          companionRewardSessionIds: mergedPetCompanionRewardSessionIds,
         }
-      : (Object.keys(previousPet).length > 0 ? previousPet : null);
+      : acceptsCompanionOnlyMerge
+        ? {
+            ...normalizedPreviousPet,
+            experience: mergedPetExperience,
+            companionExperience: mergedPetCompanionExperience,
+            companionRewardSessionIds: mergedPetCompanionRewardSessionIds,
+          }
+      : normalizedPreviousPet;
   const petDeparture = acceptsIncomingDeparture
     ? {
         ...incomingPetDeparture,
@@ -540,6 +732,10 @@ function sanitizeProgress(inputValue, options) {
           ? { adoptionId: incomingPetDeparture.adoptionId || previousPetAdoptionId }
           : {}),
         experience: Math.max(preservedPetExperience, incomingPetDeparture.experience),
+        companionExperience: Math.min(
+          Math.max(preservedPetExperience, incomingPetDeparture.experience),
+          Math.max(preservedPetCompanionExperience, incomingPetDeparture.companionExperience),
+        ),
       }
     : acceptsIncomingPet
       ? null
@@ -560,9 +756,10 @@ function sanitizeProgress(inputValue, options) {
     tutorialCompleted: before.tutorialCompleted === true || input.tutorialCompleted === true,
     tutorialFlags,
     best2048Score: Math.max(safeInteger(before.best2048Score, 0, 1_000_000_000, 0), safeInteger(input.best2048Score, 0, 1_000_000_000, 0)),
+    game2048ProgressVersion: SLAVICH_PROGRESS_VERSION,
     game2048LevelsCompleted: Math.max(
-      safeInteger(before.game2048LevelsCompleted, 0, GAME_LEVEL_TOTAL, 0),
-      safeInteger(input.game2048LevelsCompleted, 0, GAME_LEVEL_TOTAL, 0),
+      normalizeSlavichCompletedLevels(before),
+      normalizeSlavichCompletedLevels(input),
     ),
     bubbleLevelsCompleted: Math.max(
       safeInteger(before.bubbleLevelsCompleted, 0, GAME_LEVEL_TOTAL, 0),
@@ -903,7 +1100,7 @@ export function createAccountService(options) {
       return {
         ok: false,
         status: 401,
-        error: 'Войдите в профиль, чтобы получить награду за четыре игры.',
+        error: 'Войдите в профиль, чтобы получить подарок за четыре уровня.',
         code: 'AUTH_REQUIRED',
       };
     }
@@ -1237,13 +1434,20 @@ export function createAccountService(options) {
       legacyCoinCap,
     });
     const completedGames = progress.fourGameChallenge.completedGames;
-    if (!FOUR_GAME_CHALLENGE_SOURCES.every(source => completedGames.includes(source))) {
+    const stageCounts = progress.fourGameChallenge.stageCounts;
+    const completedStages = FOUR_GAME_CHALLENGE_SOURCES.reduce(
+      (total, source) => total + stageCounts[source],
+      0,
+    );
+    if (completedStages < FOUR_GAME_CHALLENGE_SOURCES.length) {
       return {
         ok: false,
         status: 409,
-        error: 'Сначала пройдите по одному уровню в каждой из четырёх игр.',
+        error: 'Сначала пройдите любые четыре новых уровня в одной или нескольких играх.',
         code: 'CAMPAIGN_INCOMPLETE',
         completedGames,
+        stageCounts,
+        completedStages,
       };
     }
 
@@ -1251,6 +1455,8 @@ export function createAccountService(options) {
       ok: true,
       accountId: currentUser.id,
       completedGames,
+      stageCounts,
+      completedStages,
       matchesClaim: identity.matchesClaim,
     };
   }

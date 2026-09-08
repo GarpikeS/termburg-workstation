@@ -23,6 +23,7 @@ import {
   type PetInteractionResult,
   type PetMood,
 } from '@/engine/engine-pet/petEngine';
+import { getPetChallengeStageCount } from '@/features/rewards/fourGameChallenge';
 
 export function usePet() {
   const { progress, updatePet, departPet, awardGameCurrency, recordFourGameCompletion } = useGameContext();
@@ -46,6 +47,7 @@ export function usePet() {
         depletedStat,
         departedAt: Date.now(),
         experience: next.experience,
+        companionExperience: next.companionExperience ?? 0,
       });
       return false;
     }
@@ -98,10 +100,19 @@ export function usePet() {
     const retainedExperience = Number.isFinite(progress.petDeparture?.experience)
       ? Math.max(0, Math.floor(progress.petDeparture?.experience ?? 0))
       : 0;
-    const next = createPet(characterId, Date.now(), retainedExperience);
+    const retainedCompanionExperience = Number.isFinite(progress.petDeparture?.companionExperience)
+      ? Math.max(0, Math.floor(progress.petDeparture?.companionExperience ?? 0))
+      : 0;
+    const next = createPet(
+      characterId,
+      Date.now(),
+      retainedExperience,
+      undefined,
+      retainedCompanionExperience,
+    );
     petRef.current = next;
     updatePet(next);
-  }, [progress.petDeparture?.experience, updatePet]);
+  }, [progress.petDeparture?.companionExperience, progress.petDeparture?.experience, updatePet]);
 
   const commit = useCallback((result: PetInteractionResult): PetInteractionResult => {
     const previousPet = petRef.current;
@@ -112,7 +123,9 @@ export function usePet() {
     );
     const persistResult = (nextPet: NonNullable<typeof pet>) => {
       saveOrDepart(nextPet);
-      if (completedLevel) recordFourGameCompletion('pet');
+      if (completedLevel) {
+        recordFourGameCompletion('pet', getPetChallengeStageCount(nextPet));
+      }
     };
     if (!result.ok || result.coins <= 0) {
       persistResult(result.pet);

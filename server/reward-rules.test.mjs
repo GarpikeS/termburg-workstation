@@ -5,6 +5,7 @@ import {
   FREE_HOUR_PRICE,
   FREE_HOUR_VALID_DAYS,
   activeFreeHourClaim,
+  getFreeHourCoinGoal,
 } from '../frontend/src/features/rewards/rewardRules.ts';
 import { products } from '../frontend/src/data/shopData.ts';
 
@@ -40,4 +41,16 @@ test('active free hour remains locked until nextPurchaseAt', () => {
   };
   assert.equal(activeFreeHourClaim([claim], now)?.id, claim.id);
   assert.equal(activeFreeHourClaim([claim], claim.nextPurchaseAt), null);
+});
+
+test('free hour coin goal never exposes a negative remainder', () => {
+  assert.deepEqual(
+    [0, 49, 50, 75].map(currency => getFreeHourCoinGoal(currency)),
+    [
+      { currency: 0, reached: false, remaining: 50 },
+      { currency: 49, reached: false, remaining: 1 },
+      { currency: 50, reached: true, remaining: 0 },
+      { currency: 75, reached: true, remaining: 0 },
+    ],
+  );
 });

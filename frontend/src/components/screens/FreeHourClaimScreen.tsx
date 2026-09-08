@@ -125,7 +125,7 @@ export function FreeHourClaimScreen() {
     setFieldError(null);
 
     if (campaignMode && !challengeComplete) {
-      setMessage('Сначала пройдите первый этап во всех четырёх играх.');
+      setMessage('Сначала пройдите любые четыре новых уровня в одной или нескольких играх.');
       return;
     }
     if (!campaignMode && progress.currency < FREE_HOUR_PRICE) {
@@ -211,7 +211,7 @@ export function FreeHourClaimScreen() {
           <ArrowLeft size={22} />
         </button>
         <div>
-          <span>{campaignMode ? 'Приз за 4 игры' : 'Награда Термбурга'}</span>
+          <span>{campaignMode ? 'Подарок за 4 уровня' : 'Награда Термбурга'}</span>
           <h1>Бесплатный час</h1>
         </div>
         <CurrencyDisplay amount={progress.currency} />
@@ -221,16 +221,16 @@ export function FreeHourClaimScreen() {
         <section className="reward-rule-card" aria-labelledby="reward-rule-title">
           {campaignMode ? <Gift size={28} aria-hidden="true" /> : <CalendarClock size={28} aria-hidden="true" />}
           <div>
-            <h2 id="reward-rule-title">{campaignMode ? 'Подарок за первые 4 игры' : 'Обратите внимание'}</h2>
-            {campaignMode && <p>Завершите первый этап в каждой игре и получите час <strong>за 0 термокоинов</strong>.</p>}
+            <h2 id="reward-rule-title">{campaignMode ? 'Разовый подарок за 4 уровня' : 'Обратите внимание'}</h2>
+            {campaignMode && <p>Пройдите любые четыре новых уровня — в одной любимой игре или в нескольких — и получите <strong>бесплатный час</strong>. Термокоины не списываются.</p>}
             <p>Час действует только <strong>{FREE_HOUR_VALID_DAYS} дней с момента получения</strong>.</p>
-            <p>{campaignMode ? 'Акционный час за четыре игры выдаётся один раз.' : 'Новый бесплатный час можно получить только через неделю.'}</p>
+            <p>{campaignMode ? `Подарок выдаётся один раз. После него новый час можно получить за ${FREE_HOUR_PRICE} термокоинов — не чаще раза в 7 дней.` : 'Новый бесплатный час можно получить только через неделю.'}</p>
           </div>
         </section>
 
         {campaignMode && !challengeComplete ? (
           <section className="reward-status-card" aria-labelledby="challenge-required-title">
-            <h2 id="challenge-required-title" className="font-heading text-lg text-white">Пока не все 4 игры пройдены</h2>
+            <h2 id="challenge-required-title" className="font-heading text-lg text-white">Пока не все задания выполнены</h2>
             <p className="mt-2 text-sm leading-relaxed text-white/65">Вернитесь к играм: прогресс можно собирать постепенно и он не пропадёт.</p>
             <Button type="button" size="lg" className="mt-4 w-full" onClick={() => navigate('/games')}>Вернуться к играм</Button>
           </section>
@@ -281,7 +281,7 @@ export function FreeHourClaimScreen() {
                 ? <p>Акционный час уже был получен, но срок его кода закончился.</p>
                 : <p>Покажите его на кассе до <strong>{formatRewardDate(claim.expiresAt)}</strong>.</p>}
             {campaignMode
-              ? <p>Акционный час за четыре игры выдаётся один раз.</p>
+              ? <p>Акционный час за четыре уровня выдаётся один раз.</p>
               : <p>Следующий час будет доступен {formatRewardDate(claim.nextPurchaseAt)}.</p>}
             <Button type="button" className="w-full" onClick={() => navigate('/profile')}>Открыть профиль</Button>
           </section>
@@ -291,7 +291,7 @@ export function FreeHourClaimScreen() {
               <Ticket size={30} aria-hidden="true" />
               <div>
                 <span>{campaignMode ? 'Ваш приз' : 'Стоимость'}</span>
-                <strong>{campaignMode ? 'Бесплатно · 0 термокоинов' : `${FREE_HOUR_PRICE} термокоинов`}</strong>
+                <strong>{campaignMode ? 'Бесплатно · монеты не списываются' : `${FREE_HOUR_PRICE} термокоинов`}</strong>
               </div>
             </div>
 

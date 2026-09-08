@@ -84,7 +84,7 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
             <input type="month" value={month} onChange={event => setMonth(event.target.value || currentMonthValue())} />
           </label>
           <a className="schedule-admin-primary" href={`/schedule/poster/${location.id}?month=${month}`} target="_blank" rel="noreferrer">
-            Открыть для печати<ExternalLink size={16} />
+            Печать / скачать PNG<ExternalLink size={16} />
           </a>
         </div>
       </section>

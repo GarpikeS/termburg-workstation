@@ -1,9 +1,10 @@
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Download, Printer } from 'lucide-react';
 import '@/features/schedule/schedule.css';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { MonthlyPosterCanvas } from '@/features/schedule/MonthlyPosterCanvas';
 import { ScheduleError, ScheduleLoading } from '@/features/schedule/SchedulePrimitives';
+import { downloadScheduleImage } from '@/features/schedule/downloadScheduleImage';
 import { formatPosterMonth } from '@/features/schedule/monthlyPoster';
 import { useSchedule } from '@/features/schedule/useSchedule';
 
@@ -18,6 +19,9 @@ export function SchedulePosterScreen() {
   const { locationId = '1' } = useParams();
   const { data, error } = useSchedule(30000);
   const [month, setMonth] = useState(initialMonthValue);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const posterRef = useRef<HTMLElement>(null);
   const location = data?.locations.find(item => item.id === locationId);
   const poster = useMemo(
     () => data?.monthlyPosters.find(item => item.locationId === locationId && item.month === month),
@@ -28,16 +32,35 @@ export function SchedulePosterScreen() {
   if (!data) return <ScheduleLoading />;
   if (!location) return <ScheduleError message="Комплекс не найден." />;
 
+  const downloadPng = async () => {
+    if (!poster || !posterRef.current || downloading) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await downloadScheduleImage(posterRef.current, {
+        fileName: `termburg-${location.shortName.toLocaleLowerCase('ru-RU')}-afisha-${month}.png`,
+        targetWidth: 4096,
+        backgroundColor: '#f8f2e6',
+      });
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Не удалось сохранить PNG.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="schedule-poster-page">
       <header className="schedule-poster-page__controls">
         <a href="/schedule/admin"><ArrowLeft size={18} />В редактор</a>
         <label><span>Месяц</span><input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label>
-        <button type="button" onClick={() => window.print()} disabled={!poster}><Printer size={18} />Печать 1 × 1 м / PDF</button>
+        <button type="button" className="schedule-poster-page__download" onClick={() => void downloadPng()} disabled={!poster || downloading}><Download size={18} />{downloading ? 'Сохраняю…' : 'Скачать PNG'}</button>
+        <button type="button" className="schedule-poster-page__print" onClick={() => window.print()} disabled={!poster}><Printer size={18} />Печать 1 × 1 м / PDF</button>
+        {downloadError && <p className="schedule-poster-page__error" role="alert">{downloadError}</p>}
       </header>
       <main className="schedule-poster-page__preview">
         {poster
-          ? <MonthlyPosterCanvas poster={poster} location={location} />
+          ? <MonthlyPosterCanvas poster={poster} location={location} elementRef={posterRef} />
           : <section className="schedule-poster-page__empty"><h1>Афиша на {formatPosterMonth(month)} пока не заполнена</h1><p>Откройте раздел «Афиша месяца» в редакторе и добавьте от 2 до 5 крупных праздников.</p><a href="/schedule/admin">Перейти в редактор</a></section>}
       </main>
     </div>

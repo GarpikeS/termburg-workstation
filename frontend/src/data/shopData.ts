@@ -1,4 +1,5 @@
 import { GAME_NAMES } from './gameNames.ts';
+import { FREE_HOUR_PRICE } from '../features/rewards/rewardRules.ts';
 
 export interface Product {
   id: string;
@@ -20,7 +21,7 @@ export const products: Product[] = [
     category: 'tickets',
     name: 'Бесплатный час',
     description: 'Один час свободного посещения Термбурга',
-    price: 50,
+    price: FREE_HOUR_PRICE,
     currency: 'coins',
     badge: '7 дней',
     image: '/images/shop/ticket-free.svg',

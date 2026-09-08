@@ -25,7 +25,13 @@ import {
   accountProgressOwner,
   loadProgressOwner,
 } from '@/store/storage';
-import { GAME_LEVEL_TOTAL, clampGameLevel, getNextPlayableLevel } from '@/data/gameProgression';
+import {
+  GAME_LEVEL_TOTAL,
+  SLAVICH_LEVEL_TOTAL,
+  clampGameLevel,
+  getNextPlayableLevel,
+  getNextPlayableSlavichLevel,
+} from '@/data/gameProgression';
 
 const achievements = [
   { name: 'Новичок', desc: 'Пройти 1 уровень', icon: Trophy, color: '#6AABDA', check: (p: Stat) => p.completedLevels >= 1 },
@@ -96,7 +102,7 @@ export function ProfileScreen() {
   const totalStars = match3Progress.reduce((sum, l) => sum + l.stars, 0);
   const threeStarLevels = match3Progress.filter(l => l.stars >= 3).length;
   const match3Level = clampGameLevel(progress.currentLevel);
-  const slavichLevel = getNextPlayableLevel(progress.game2048LevelsCompleted);
+  const slavichLevel = getNextPlayableSlavichLevel(progress.game2048LevelsCompleted);
   const bubblesLevel = getNextPlayableLevel(progress.bubbleLevelsCompleted);
   const petLevel = getPetLevel({
     experience: progress.pet?.experience ?? progress.petDeparture?.experience ?? 0,
@@ -266,7 +272,7 @@ export function ProfileScreen() {
             {[
               { value: completedLevels, label: 'Уровни', icon: Target },
               { value: totalStars, label: 'Звёзды', icon: Star },
-              { value: `${slavichLevel}/${GAME_LEVEL_TOTAL}`, label: GAME_NAMES.game2048, icon: Grid3x3 },
+              { value: `${slavichLevel}/${SLAVICH_LEVEL_TOTAL}`, label: GAME_NAMES.game2048, icon: Grid3x3 },
               { value: earnedCount, label: 'Ачивки', icon: Trophy },
             ].map((s, i) => (
               <motion.div
@@ -435,9 +441,9 @@ export function ProfileScreen() {
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
                     <p className="text-white/90 text-sm font-medium">{GAME_NAMES.game2048}</p>
-                    <p className="text-white/40 text-xs">Уровень {slavichLevel} из {GAME_LEVEL_TOTAL}</p>
+                    <p className="text-white/40 text-xs">Уровень {slavichLevel} из {SLAVICH_LEVEL_TOTAL}</p>
                   </div>
-                  <ProgressBar current={slavichLevel} max={GAME_LEVEL_TOTAL} color="#6AABDA" className="mt-1.5" />
+                  <ProgressBar current={slavichLevel} max={SLAVICH_LEVEL_TOTAL} color="#6AABDA" className="mt-1.5" />
                   <p className="mt-1 text-[10px] text-white/30">Рекорд: {progress.best2048Score}</p>
                 </div>
               </div>

@@ -56,31 +56,47 @@ export function getPosterProgramLines(program: string) {
     .slice(0, 4);
 }
 
+const SUPPORTED_POSTER_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const SUPPORTED_POSTER_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+function isSupportedPosterImage(file: File) {
+  const extension = file.name.split('.').pop()?.toLocaleLowerCase('ru-RU') ?? '';
+  return SUPPORTED_POSTER_IMAGE_TYPES.has(file.type.toLocaleLowerCase('ru-RU'))
+    || SUPPORTED_POSTER_IMAGE_EXTENSIONS.has(extension);
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('Не удалось прочитать изображение.'));
+    reader.onerror = () => reject(new Error('Не удалось прочитать изображение.'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export async function compressPosterImage(file: File) {
-  if (!file.type.startsWith('image/')) throw new Error('Выберите файл изображения.');
+  if (!isSupportedPosterImage(file)) throw new Error('Выберите изображение PNG, JPG или WebP.');
   if (file.size > 15 * 1024 * 1024) throw new Error('Исходное изображение больше 15 МБ.');
 
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const element = new Image();
-      element.onload = () => resolve(element);
-      element.onerror = () => reject(new Error('Не удалось прочитать изображение.'));
-      element.src = objectUrl;
-    });
-    const maxWidth = 900;
-    const maxHeight = 620;
-    const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
-    const width = Math.max(1, Math.round(image.naturalWidth * scale));
-    const height = Math.max(1, Math.round(image.naturalHeight * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Не удалось подготовить изображение.');
-    context.drawImage(image, 0, 0, width, height);
-    return canvas.toDataURL('image/webp', 0.76);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+  const sourceDataUrl = await readFileAsDataUrl(file);
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error('Не удалось прочитать изображение.'));
+    element.src = sourceDataUrl;
+  });
+  const maxWidth = 900;
+  const maxHeight = 620;
+  const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Не удалось подготовить изображение.');
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL('image/webp', 0.76);
 }

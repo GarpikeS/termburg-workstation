@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Navigate, useParams, useNavigate } from 'react-router-dom';
 import { Bomb, Lightbulb, Shuffle } from 'lucide-react';
 import { getLevelConfig } from '@/data/levels';
-import { getBathhouseForLevel } from '@/data/bathhouses';
+import { GAME_LEVEL_TOTAL, clampGameLevel } from '@/data/gameProgression';
 import { getTermlinById } from '@/data/termliny';
 import { useGame } from '@/hooks/useGame';
 import { useGameContext } from '@/store/GameContext';
@@ -18,6 +18,7 @@ import { LosePopup } from '@/popups/LosePopup';
 import { PausePopup } from '@/popups/PausePopup';
 import { LevelStartPopup } from '@/popups/LevelStartPopup';
 import { useSound } from '@/hooks/useSound';
+import { usePetCompanion } from '@/hooks/usePetCompanion';
 import { triggerHaptic } from '@/utils/haptics';
 import { getHint } from '@/engine/hints';
 import { SpecialType } from '@/types/game';
@@ -37,6 +38,27 @@ const isSamePosition = (a: Position, b: Position) => (
   a.row === b.row && a.col === b.col
 );
 
+const areAdjacentPositions = (a: Position, b: Position) => (
+  Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1
+);
+
+export function Match3GameRoute() {
+  const { id } = useParams<{ id: string }>();
+  const { progress } = useGameContext();
+  const requestedLevel = Number(id);
+  const unlockedThrough = clampGameLevel(progress.currentLevel);
+  const validLevel = Number.isInteger(requestedLevel)
+    && requestedLevel >= 1
+    && requestedLevel <= GAME_LEVEL_TOTAL
+    && getLevelConfig(requestedLevel) !== undefined;
+
+  if (!validLevel || requestedLevel > unlockedThrough) {
+    return <Navigate to="/games/match3" replace />;
+  }
+
+  return <GameScreen />;
+}
+
 export function GameScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -51,7 +73,6 @@ export function GameScreen() {
   } = useGameContext();
   const levelId = Number(id) || 1;
   const config = getLevelConfig(levelId);
-  const bathhouse = getBathhouseForLevel(levelId);
   const character = getTermlinById(progress.selectedCharacter);
   const match3Background = '/images/ui/game-match3-bg-v2.webp';
 
@@ -98,6 +119,7 @@ export function GameScreen() {
     destroyCell, activateBoosterBomb, shuffleBoard, addMoves,
   } = game;
   const { play, toggle: toggleSound, enabled: soundEnabled } = useSound();
+  const petCompanion = usePetCompanion('match3', state.isWon);
   const lastSoundPhase = useRef(state.phase);
 
   useEffect(() => {
@@ -295,6 +317,7 @@ export function GameScreen() {
   }, [abilityUsed, addMoves, finishTutorialStep, progress.selectedCharacter, state.grid, state.isLost, state.isWon, state.phase, tutorialStep]);
 
   const handleGameCellClick = useCallback((position: Position) => {
+    if (state.phase !== 'idle' || state.isWon || state.isLost) return;
     if (tutorialStep?.kind === 'ability') return;
 
     if (tutorialStep?.kind === 'special') {
@@ -320,13 +343,17 @@ export function GameScreen() {
       }
     }
 
-    play('tap');
+    const startsSwap = Boolean(
+      state.selectedCell
+      && areAdjacentPositions(state.selectedCell, position)
+    );
+    const activatesPowerUp = Boolean(state.grid[position.row]?.[position.col]?.special);
+    if (!startsSwap && !activatesPowerUp && !boosterBombTargeting) play('tap');
     clearMoveHint();
     if (boosterBombTargeting) {
       activateBoosterBomb(position);
       consumeInventoryItem('booster-bomb');
       setBoosterBombTargeting(false);
-      triggerHaptic('powerup');
       return;
     }
     if (abilityTargeting) {
@@ -346,11 +373,16 @@ export function GameScreen() {
     finishTutorialStep,
     handleCellClick,
     play,
+    state.grid,
+    state.isLost,
+    state.isWon,
+    state.phase,
     state.selectedCell,
     tutorialStep,
   ]);
 
   const handleGameSwipe = useCallback((position: Position, dx: number, dy: number) => {
+    if (state.phase !== 'idle' || state.isWon || state.isLost) return;
     if (abilityTargeting || boosterBombTargeting) return;
 
     if (tutorialStep?.kind === 'ability' || tutorialStep?.kind === 'special') return;
@@ -367,10 +399,9 @@ export function GameScreen() {
       finishTutorialStep(tutorialStep.id);
     }
 
-    play('tap');
     clearMoveHint();
     handleSwipe(position, dx, dy);
-  }, [abilityTargeting, boosterBombTargeting, clearMoveHint, finishTutorialStep, handleSwipe, play, tutorialStep]);
+  }, [abilityTargeting, boosterBombTargeting, clearMoveHint, finishTutorialStep, handleSwipe, state.isLost, state.isWon, state.phase, tutorialStep]);
 
   const useHintBooster = useCallback(() => {
     if (state.phase !== 'idle' || tutorialStep || boosterBombTargeting) return;
@@ -448,6 +479,10 @@ export function GameScreen() {
   const handleNext = useCallback(() => {
     const nextConfig = getLevelConfig(levelId + 1);
     if (nextConfig) {
+      if (nextConfig.bathhouseId !== safeConfig.bathhouseId) {
+        navigate('/games/match3');
+        return;
+      }
       navigate(`/games/match3/play/${levelId + 1}`);
       completedLevelRef.current = null;
       setEarnedReward(null);
@@ -462,7 +497,7 @@ export function GameScreen() {
       setShowStart(true);
       resetGame(nextConfig);
     }
-  }, [clearMoveHint, levelId, navigate, resetGame]);
+  }, [clearMoveHint, levelId, navigate, resetGame, safeConfig.bathhouseId]);
 
   const handleStartPlay = useCallback(() => {
     if (progress.lives <= 0) return;
@@ -486,6 +521,11 @@ export function GameScreen() {
   }
 
   const isBoardTutorialVisible = tutorialStep !== null && tutorialStep.kind !== 'ability';
+  const showMatchCelebration = Boolean(animData.createdSpecial);
+  const nextLevelConfig = getLevelConfig(levelId + 1);
+  const opensNextBathhouse = nextLevelConfig !== undefined
+    && nextLevelConfig.bathhouseId !== safeConfig.bathhouseId;
+  const gameExitPath = petCompanion.exitPath ?? '/games/match3';
 
   return (
     <div
@@ -505,6 +545,7 @@ export function GameScreen() {
         onAbility={handleAbility}
         highlightAbility={tutorialStep?.kind === 'ability'}
         abilityTutorial={tutorialStep?.kind === 'ability' ? tutorialStep : null}
+        companionPet={petCompanion.pet}
       />
 
       {tutorialStep && tutorialStep.kind !== 'ability' && (
@@ -532,9 +573,9 @@ export function GameScreen() {
         />
         <ComboText
           combo={state.combo}
-          score={animData.scoreGained ?? 0}
+          score={animData.createdSpecial ? (animData.scoreGained ?? 0) : 0}
           phase={state.phase}
-          matchSize={animData.matchSize}
+          matchSize={showMatchCelebration ? animData.matchSize : 0}
           matchedCount={animData.matchedCount}
           sizeBonus={animData.sizeBonus}
           isIntersection={animData.isIntersection}
@@ -581,7 +622,7 @@ export function GameScreen() {
         nextLifeAt={progress.nextLifeAt}
         onStart={handleStartPlay}
         onBuyLife={buyLife}
-        onBack={() => navigate(bathhouse ? `/games/match3/levels/${bathhouse.id}` : '/games/match3')}
+        onBack={() => navigate(gameExitPath)}
       />
 
       <WinPopup
@@ -589,8 +630,12 @@ export function GameScreen() {
         score={state.score}
         levelConfig={state.levelConfig}
         earnedReward={earnedReward}
+        companionPet={petCompanion.pet}
+        companionReward={petCompanion.reward}
         onNext={handleNext}
-        onMap={() => navigate(bathhouse ? `/games/match3/levels/${bathhouse.id}` : '/games/match3')}
+        nextLabel={opensNextBathhouse ? 'Новый домик' : 'Дальше'}
+        mapLabel={petCompanion.pet ? `К ${petCompanion.pet.name}` : 'К домикам'}
+        onMap={() => navigate(gameExitPath)}
       />
 
       <LosePopup
@@ -600,7 +645,7 @@ export function GameScreen() {
         nextLifeAt={progress.nextLifeAt}
         onRetry={handleRestart}
         onBuyLife={buyLife}
-        onMap={() => navigate(bathhouse ? `/games/match3/levels/${bathhouse.id}` : '/games/match3')}
+        onMap={() => navigate(gameExitPath)}
       />
 
       <PausePopup
@@ -609,7 +654,7 @@ export function GameScreen() {
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
         onRestart={handleRestart}
-        onQuit={() => navigate(bathhouse ? `/games/match3/levels/${bathhouse.id}` : '/games/match3')}
+        onQuit={() => navigate(gameExitPath)}
       />
     </div>
   );

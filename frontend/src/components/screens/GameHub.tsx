@@ -9,7 +9,6 @@ import { PlayerStatusButton } from '@/components/ui/PlayerStatusButton';
 import { GAME_NAMES } from '@/data/gameNames';
 import {
   FOUR_GAME_CHALLENGE_ID,
-  FOUR_GAME_CHALLENGE_SOURCES,
   getFourGameChallengeCount,
   isFourGameChallengeComplete,
 } from '@/features/rewards/fourGameChallenge';
@@ -32,9 +31,6 @@ export function GameHub() {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const { progress, markTutorialSeen } = useGameContext();
-  const completedGames = FOUR_GAME_CHALLENGE_SOURCES.filter(source => (
-    progress.fourGameChallenge.completedGames.includes(source)
-  ));
   const completedCount = getFourGameChallengeCount(progress.fourGameChallenge);
   const challengeComplete = isFourGameChallengeComplete(progress.fourGameChallenge);
   const introSeen = progress.tutorialFlags.includes(CHALLENGE_INTRO_FLAG);
@@ -216,7 +212,7 @@ export function GameHub() {
 
       {challengeVisible && (
         <FourGamesChallengeCard
-          completedGames={completedGames}
+          stageCounts={progress.fourGameChallenge.stageCounts}
           count={completedCount}
           currency={progress.currency}
           complete={challengeComplete}

@@ -1,4 +1,5 @@
 import { Wallet } from 'lucide-react';
+import { TermcoinMark } from '@/components/ui/TermcoinMark';
 import { cn } from '@/utils/cn';
 
 interface CurrencyDisplayProps {
@@ -17,9 +18,7 @@ export function CurrencyDisplay({ amount, className, label }: CurrencyDisplayPro
       title={`${formattedAmount} термокоинов`}
     >
       {label && <Wallet size={16} className="shrink-0 text-primary" aria-hidden="true" />}
-      <span className="termcoin-mark" aria-hidden="true">
-        <img src="/images/brand/termburg-fish-96-v2.webp" alt="" width="48" height="48" />
-      </span>
+      <TermcoinMark />
       {label ? (
         <span className="grid min-w-0 leading-none text-left">
           <small className="text-[8px] font-semibold uppercase tracking-wide text-white/55">{label}</small>

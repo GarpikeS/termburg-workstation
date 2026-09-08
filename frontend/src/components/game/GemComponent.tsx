@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import type { PointerEventHandler } from 'react';
+import type { MouseEventHandler, PointerEvent as ReactPointerEvent, PointerEventHandler } from 'react';
 import { motion } from 'motion/react';
 import { SpecialType, TokenType, TOKEN_COLORS } from '@/types/game';
 import type { Position } from '@/types/game';
@@ -14,10 +14,12 @@ interface GemProps {
   matchState?: 'hold' | 'remove';
   hinted?: boolean;
   isCreatingSpecial?: boolean;
+  interactive?: boolean;
   onActivate?: (position: Position) => void;
-  onPointerDown?: PointerEventHandler<HTMLButtonElement>;
-  onPointerUp?: PointerEventHandler<HTMLButtonElement>;
-  onPointerCancel?: PointerEventHandler<HTMLButtonElement>;
+  onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>, position: Position) => void;
+  onPointerMove?: (event: ReactPointerEvent<HTMLButtonElement>, position: Position) => void;
+  onPointerUp?: (event: ReactPointerEvent<HTMLButtonElement>, position: Position) => void;
+  onPointerCancel?: (event: ReactPointerEvent<HTMLButtonElement>, position: Position) => void;
 }
 
 export const GemComponent = memo(function GemComponent({
@@ -29,8 +31,10 @@ export const GemComponent = memo(function GemComponent({
   matchState,
   hinted,
   isCreatingSpecial,
+  interactive = true,
   onActivate,
   onPointerDown,
+  onPointerMove,
   onPointerUp,
   onPointerCancel,
 }: GemProps) {
@@ -58,19 +62,41 @@ export const GemComponent = memo(function GemComponent({
           filter: ['brightness(1.1)', 'brightness(1.48)', 'brightness(1.2)'],
         }
       : {
-          scale: selected ? 0.95 : 1,
+          scale: selected ? 1.035 : 1,
           opacity: 1,
           filter: 'brightness(1)',
         };
 
   const transition = matchState === 'hold'
-    ? { duration: 0.32, times: [0, 0.45, 1], ease: 'easeOut' as const }
+    ? { duration: 0.08, times: [0, 0.45, 1], ease: 'easeOut' as const }
     : matchState === 'remove'
-      ? { duration: 0.22, times: [0, 0.38, 1], ease: 'easeIn' as const }
-      : { type: 'spring' as const, stiffness: 420, damping: 28, mass: 0.75 };
-  const handleClick = useCallback(
-    () => onActivate?.({ row, col }),
-    [col, onActivate, row]
+      ? { duration: 0.15, times: [0, 0.38, 1], ease: 'easeIn' as const }
+      : { type: 'spring' as const, stiffness: 320, damping: 26, mass: 0.72 };
+  const handleClick = useCallback<MouseEventHandler<HTMLButtonElement>>(
+    (event) => {
+      // Pointer input is handled synchronously on pointerup. A detail of zero
+      // preserves keyboard and assistive-technology activation without a
+      // delayed synthetic click firing the same move twice.
+      if (!interactive || event.detail !== 0) return;
+      onActivate?.({ row, col });
+    },
+    [col, interactive, onActivate, row]
+  );
+  const handlePointerDown = useCallback<PointerEventHandler<HTMLButtonElement>>(
+    (event) => onPointerDown?.(event, { row, col }),
+    [col, onPointerDown, row]
+  );
+  const handlePointerUp = useCallback<PointerEventHandler<HTMLButtonElement>>(
+    (event) => onPointerUp?.(event, { row, col }),
+    [col, onPointerUp, row]
+  );
+  const handlePointerMove = useCallback<PointerEventHandler<HTMLButtonElement>>(
+    (event) => onPointerMove?.(event, { row, col }),
+    [col, onPointerMove, row]
+  );
+  const handlePointerCancel = useCallback<PointerEventHandler<HTMLButtonElement>>(
+    (event) => onPointerCancel?.(event, { row, col }),
+    [col, onPointerCancel, row]
   );
 
   return (
@@ -83,15 +109,17 @@ export const GemComponent = memo(function GemComponent({
         boxShadow: 'inset 0 -3px 0 rgba(0,0,0,.2), 0 3px 7px rgba(0,0,0,.24)',
       }}
       onClick={handleClick}
-      onPointerDown={onPointerDown}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerCancel}
       data-match-state={matchState}
       aria-label={`${label}${selected ? ', выбрано' : ''}`}
       aria-pressed={selected}
+      aria-disabled={!interactive}
       initial={false}
       animate={animation}
-      whileTap={{ scale: 0.9 }}
+      whileTap={interactive ? { scale: 0.97 } : undefined}
       transition={transition}
     >
       {special ? (
@@ -135,7 +163,7 @@ export const GemComponent = memo(function GemComponent({
           style={{ borderColor: color, boxShadow: `inset 0 0 14px ${color}, 0 0 12px ${color}` }}
           initial={{ opacity: 0.95, scale: 0.58 }}
           animate={{ opacity: [0.95, 0.7, 0], scale: [0.58, 1.08, 1.32] }}
-          transition={{ duration: 0.86, times: [0, 0.55, 1], ease: 'easeOut' }}
+          transition={{ duration: 0.34, times: [0, 0.55, 1], ease: 'easeOut' }}
           aria-hidden="true"
         />
       )}
@@ -145,7 +173,7 @@ export const GemComponent = memo(function GemComponent({
           style={{ borderColor: '#fff1ad', boxShadow: `0 0 11px ${color}` }}
           initial={{ opacity: 0, scale: 0.84 }}
           animate={{ opacity: [0, 0.95, 0.4], scale: [0.84, 1.08, 1] }}
-          transition={{ duration: 0.32, times: [0, 0.55, 1] }}
+          transition={{ duration: 0.08, times: [0, 0.55, 1] }}
           aria-hidden="true"
         />
       )}

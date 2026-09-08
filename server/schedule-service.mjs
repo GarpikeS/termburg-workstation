@@ -23,6 +23,10 @@ const TEST_SCHEDULE_LOCATION = {
   address: 'Не публикуется на сайте',
   timezone: 'Europe/Moscow',
 };
+const REQUIRED_LOCATION_TIMEZONES = {
+  '1': 'Europe/Moscow',
+  '2': 'Asia/Krasnoyarsk',
+};
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -71,6 +75,17 @@ export function isScheduleData(value) {
       && Array.isArray(value.weeklyEvents)
       && Array.isArray(value.exceptions),
   );
+}
+
+export function normalizeScheduleLocationTimezones(schedule) {
+  if (!isScheduleData(schedule)) return schedule;
+  return {
+    ...schedule,
+    locations: schedule.locations.map(location => ({
+      ...location,
+      timezone: REQUIRED_LOCATION_TIMEZONES[location.id] || location.timezone,
+    })),
+  };
 }
 
 export function createScheduleService(options) {
@@ -126,17 +141,17 @@ export function createScheduleService(options) {
 
   async function readSchedule() {
     try {
-      return JSON.parse(await fs.readFile(resolvedDataFile, 'utf8'));
+      return normalizeScheduleLocationTimezones(JSON.parse(await fs.readFile(resolvedDataFile, 'utf8')));
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
-      return JSON.parse(await fs.readFile(resolvedSeedFile, 'utf8'));
+      return normalizeScheduleLocationTimezones(JSON.parse(await fs.readFile(resolvedSeedFile, 'utf8')));
     }
   }
 
   async function writeSchedule(schedule) {
     await fs.mkdir(path.dirname(resolvedDataFile), { recursive: true });
     const tempFile = `${resolvedDataFile}.${process.pid}.tmp`;
-    await fs.writeFile(tempFile, `${JSON.stringify(schedule, null, 2)}\n`, 'utf8');
+    await fs.writeFile(tempFile, `${JSON.stringify(normalizeScheduleLocationTimezones(schedule), null, 2)}\n`, 'utf8');
     await fs.rename(tempFile, resolvedDataFile);
   }
 

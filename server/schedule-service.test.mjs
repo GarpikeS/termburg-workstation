@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { startScheduleService } from './schedule-service.mjs';
+import { normalizeScheduleLocationTimezones, startScheduleService } from './schedule-service.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 
@@ -61,6 +61,9 @@ test('schedule service reads, writes and serves the SPA', async () => {
       ...schedule,
       revision: schedule.revision + 1,
       updatedAt: new Date().toISOString(),
+      locations: schedule.locations.map((location) => location.id === '2'
+        ? { ...location, timezone: 'Asia/Yekaterinburg' }
+        : location),
       monthlyPosters: [{
         id: 'poster-1-2026-09',
         locationId: '1',
@@ -89,6 +92,7 @@ test('schedule service reads, writes and serves the SPA', async () => {
     const saved = JSON.parse(await readFile(dataFile, 'utf8'));
     assert.equal(saved.revision, updated.revision);
     assert.equal(saved.monthlyPosters[0].events.length, 2);
+    assert.equal(saved.locations.find((location) => location.id === '2').timezone, 'Asia/Krasnoyarsk');
 
     const spaResponse = await fetch(`${origin}/schedule/admin`);
     assert.equal(spaResponse.status, 200);
@@ -99,6 +103,25 @@ test('schedule service reads, writes and serves the SPA', async () => {
     await service.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('normalizes the legacy Zelenogorsk timezone without changing other locations', () => {
+  const schedule = normalizeScheduleLocationTimezones({
+    schemaVersion: 1,
+    revision: 1,
+    updatedAt: '2026-09-08T00:00:00.000Z',
+    locations: [
+      { id: '1', timezone: 'Europe/Moscow' },
+      { id: '2', timezone: 'Asia/Yekaterinburg' },
+      { id: 'custom', timezone: 'Asia/Novosibirsk' },
+    ],
+    weeklyEvents: [],
+    exceptions: [],
+  });
+
+  assert.equal(schedule.locations[0].timezone, 'Europe/Moscow');
+  assert.equal(schedule.locations[1].timezone, 'Asia/Krasnoyarsk');
+  assert.equal(schedule.locations[2].timezone, 'Asia/Novosibirsk');
 });
 
 test('schedule service stores site credentials locally and publishes the full array', async () => {

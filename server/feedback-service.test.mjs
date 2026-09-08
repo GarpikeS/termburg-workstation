@@ -245,7 +245,8 @@ test('four-game campaign keeps codes private and grants one lifetime promotional
         progress: {
           fourGameChallenge: {
             version: 1,
-            completedGames: ['match3', 'game2048', 'bubbles'],
+            completedGames: ['game2048'],
+            stageCounts: { game2048: 3, bubbles: 0, pet: 0, match3: 0 },
           },
         },
       }),
@@ -282,7 +283,9 @@ test('four-game campaign keeps codes private and grants one lifetime promotional
     assert.equal(incomplete.status, 409);
     const incompleteBody = await incomplete.json();
     assert.equal(incompleteBody.code, 'CAMPAIGN_INCOMPLETE');
-    assert.deepEqual(incompleteBody.completedGames, ['game2048', 'bubbles', 'match3']);
+    assert.deepEqual(incompleteBody.completedGames, ['game2048']);
+    assert.deepEqual(incompleteBody.stageCounts, { game2048: 3, bubbles: 0, pet: 0, match3: 0 });
+    assert.equal(incompleteBody.completedStages, 3);
 
     const mismatchedPhone = await fetch(`${origin}/api/rewards/free-hour`, {
       method: 'POST',
@@ -294,7 +297,11 @@ test('four-game campaign keeps codes private and grants one lifetime promotional
 
     const completedProgress = {
       ...registered.progress,
-      fourGameChallenge: { version: 1, completedGames: ['pet'] },
+      fourGameChallenge: {
+        version: 1,
+        completedGames: ['game2048'],
+        stageCounts: { game2048: 4, bubbles: 0, pet: 0, match3: 0 },
+      },
     };
     const progressSync = await fetch(`${origin}/api/account/progress`, {
       method: 'PUT',
@@ -302,9 +309,9 @@ test('four-game campaign keeps codes private and grants one lifetime promotional
       body: JSON.stringify({ progress: completedProgress, expectedAccountId: registered.account.id }),
     });
     assert.equal(progressSync.status, 200);
-    assert.deepEqual((await progressSync.json()).progress.fourGameChallenge.completedGames, [
-      'game2048', 'bubbles', 'pet', 'match3',
-    ]);
+    const completedChallenge = (await progressSync.json()).progress.fourGameChallenge;
+    assert.deepEqual(completedChallenge.completedGames, ['game2048']);
+    assert.deepEqual(completedChallenge.stageCounts, { game2048: 4, bubbles: 0, pet: 0, match3: 0 });
 
     const concurrentClaims = await Promise.all([
       fetch(`${origin}/api/rewards/free-hour`, {

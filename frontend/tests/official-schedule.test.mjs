@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeOfficialScheduleItems } from '../src/features/schedule/officialSchedule.ts';
-import { getEventsForDate } from '../src/features/schedule/scheduleTime.ts';
+import { getEventsForDate, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
 
 function createSchedule({ weeklyEvents, exceptions }) {
   return {
@@ -87,4 +87,12 @@ test('isolates malformed WordPress rows and keeps valid siblings', () => {
   assert.deepEqual(normalized.weeklyEvents[0].daysOfWeek, [5]);
   assert.equal(normalized.weeklyEvents[0].venue, '');
   assert.deepEqual(normalized.exceptions, []);
+});
+
+test('uses Krasnoyarsk time for the Zelenogorsk screens', () => {
+  const clock = getZonedClock(new Date('2026-09-08T05:15:00.000Z'), 'Asia/Krasnoyarsk');
+
+  assert.equal(clock.dateKey, '2026-09-08');
+  assert.equal(clock.hour, 12);
+  assert.equal(clock.minute, 15);
 });

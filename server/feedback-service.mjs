@@ -627,6 +627,10 @@ export function createFeedbackService(options) {
           code: rewardIdentity.code,
           ...(rewardIdentity.field ? { field: rewardIdentity.field } : {}),
           ...(rewardIdentity.completedGames ? { completedGames: rewardIdentity.completedGames } : {}),
+          ...(rewardIdentity.stageCounts ? { stageCounts: rewardIdentity.stageCounts } : {}),
+          ...(Number.isFinite(rewardIdentity.completedStages)
+            ? { completedStages: rewardIdentity.completedStages }
+            : {}),
         });
         return;
       }
@@ -710,8 +714,8 @@ export function createFeedbackService(options) {
       const campaignDuplicate = result.duplicateKind === 'campaign';
       sendJson(response, 409, {
         error: campaignDuplicate
-          ? 'Награда за четыре игры уже получена.'
-          : 'Бесплатный час уже получен. Следующий будет доступен через неделю.',
+          ? `Разовый подарок уже получен. Новые часы можно получать за ${REWARD_PRICE} термокоинов — не чаще раза в 7 дней.`
+          : `Час уже получен. Новый час за ${REWARD_PRICE} термокоинов будет доступен через неделю.`,
         code: campaignDuplicate ? 'CAMPAIGN_ALREADY_CLAIMED' : 'REWARD_COOLDOWN',
         ...(!result.suppressDuplicateClaim ? {
           claim: publicClaim(result.duplicate, redeemedByCode.get(result.duplicate.code), now()),

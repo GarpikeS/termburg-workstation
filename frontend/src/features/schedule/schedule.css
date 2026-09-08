@@ -1393,8 +1393,21 @@
   line-height: 1.4;
 }
 
-.schedule-print-controls .schedule-admin-primary {
+.schedule-print-controls__actions {
+  display: grid;
+  gap: 0.65rem;
   margin-top: auto;
+}
+
+.schedule-print-controls__actions .schedule-admin-primary,
+.schedule-print-controls__actions .schedule-admin-secondary {
+  width: 100%;
+}
+
+.schedule-print-controls .schedule-print-controls__error {
+  margin: 0;
+  color: #ffd1d1;
+  font-weight: 700;
 }
 
 .schedule-print-preview {
@@ -3938,6 +3951,7 @@
   width: min(100%, 51.25rem);
   min-height: 3.8rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.7rem;
   margin: 0 auto 1rem;
@@ -3965,8 +3979,20 @@
   font-weight: 850;
 }
 
-.schedule-poster-page__controls button {
+.schedule-poster-page__controls .schedule-poster-page__download {
   margin-left: auto;
+}
+
+.schedule-poster-page__controls .schedule-poster-page__print {
+  margin-left: 0;
+}
+
+.schedule-poster-page__controls .schedule-poster-page__error {
+  width: 100%;
+  margin: 0;
+  color: #ffd1d1;
+  font-size: 0.7rem;
+  font-weight: 750;
 }
 
 .schedule-poster-page__controls button:disabled {
@@ -4122,8 +4148,180 @@
     grid-template-columns: 1fr;
   }
 
-  .schedule-poster-page__controls button {
+  .schedule-poster-page__controls .schedule-poster-page__download,
+  .schedule-poster-page__controls .schedule-poster-page__print {
     margin-left: 0;
+  }
+}
+
+/* Print category markers and social-export readability */
+.schedule-paper__headline p span {
+  font-weight: 800;
+}
+
+.schedule-paper__legend {
+  min-height: 8mm;
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+  margin: 0 8mm;
+  padding: 2mm 0;
+  color: #4b6277;
+  border-bottom: 0.5px solid var(--schedule-line);
+  font-size: 8.5pt;
+  font-weight: 700;
+}
+
+.schedule-paper__legend > span:last-child {
+  margin-left: auto;
+  color: var(--schedule-muted);
+}
+
+.schedule-print-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.2mm;
+  color: var(--schedule-ink);
+  font-size: 8pt;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.schedule-print-kind i {
+  width: 3.2mm;
+  height: 3.2mm;
+  flex: 0 0 3.2mm;
+  border-radius: 50%;
+}
+
+.schedule-print-kind--steam i {
+  border: 0.7mm double #b38224;
+  background: #fff7d6;
+}
+
+.schedule-print-kind--kids i {
+  border: 0.65mm dotted #187c88;
+  background: #e7f6f6;
+}
+
+.schedule-paper-events--day .schedule-event--print-steam,
+.schedule-paper-events--day .schedule-event--print-kids {
+  position: relative;
+  padding-left: 5mm;
+}
+
+.schedule-paper-events--day .schedule-event--print-steam {
+  box-shadow: inset 0.8mm 0 #b38224, inset 2.1mm 0 #fffefa, inset 2.9mm 0 #b38224;
+}
+
+.schedule-paper-events--day .schedule-event--print-kids::before {
+  content: '';
+  position: absolute;
+  top: 2mm;
+  bottom: 2mm;
+  left: 0.7mm;
+  width: 2.6mm;
+  background: radial-gradient(circle, #187c88 0 0.72mm, transparent 0.78mm) center top / 2.6mm 3.6mm repeat-y;
+}
+
+.schedule-paper-events--day .schedule-event__print-kinds {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5mm;
+  margin-top: 1mm;
+}
+
+.schedule-paper-events--day .schedule-event__print-kinds + .schedule-event__venue {
+  margin-top: 1.2mm;
+}
+
+.schedule-paper-events--day .schedule-price {
+  min-width: 24mm;
+  justify-content: center;
+  font-size: 11pt;
+}
+
+.schedule-week-summary-event--steam,
+.schedule-week-summary-event--kids {
+  position: relative;
+}
+
+.schedule-week-summary-event--steam {
+  box-shadow: inset 0.65mm 0 #b38224, inset 1.6mm 0 #fffefa, inset 2.25mm 0 #b38224;
+}
+
+.schedule-week-summary-event--kids::before {
+  content: '';
+  position: absolute;
+  top: 1.2mm;
+  bottom: 1.2mm;
+  left: 0.55mm;
+  width: 1.8mm;
+  background: radial-gradient(circle, #187c88 0 0.52mm, transparent 0.58mm) center top / 1.8mm 2.8mm repeat-y;
+}
+
+.schedule-week-summary-event__title {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 1.2mm;
+}
+
+.schedule-week-summary-event__title h3 {
+  flex: 1 1 auto;
+}
+
+.schedule-week-summary-event__kinds {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.7mm;
+}
+
+.schedule-week-kind {
+  width: 3mm;
+  height: 3mm;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.schedule-week-kind--steam {
+  border: 0.6mm double #b38224;
+  background: #fff7d6;
+}
+
+.schedule-week-kind--kids {
+  border: 0.55mm dotted #187c88;
+  background: #e7f6f6;
+}
+
+.schedule-week-summary-event__price {
+  min-width: 20mm;
+  padding: 0.8mm 1.4mm;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 8pt;
+  font-weight: 850;
+}
+
+.schedule-week-summary-event__price.is-free {
+  color: #176c72;
+  background: #e1f4f3;
+}
+
+.schedule-week-summary-event__price.is-paid {
+  color: #984a30;
+  background: #fff0e8;
+}
+
+@media print {
+  .schedule-paper__legend,
+  .schedule-print-kind,
+  .schedule-week-kind,
+  .schedule-week-summary-event__price {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
 

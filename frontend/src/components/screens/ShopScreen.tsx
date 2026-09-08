@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, CalendarClock, ShoppingBag, ShoppingCart, Sparkles, Ticket } from 'lucide-react';
 import { CurrencyDisplay } from '@/components/ui/CurrencyDisplay';
+import { TermcoinMark } from '@/components/ui/TermcoinMark';
 import { Button } from '@/components/ui/Button';
 import { useGameContext } from '@/store/GameContext';
-import { getProductsByCategory, type Product } from '@/data/shopData';
+import { getProductById, getProductsByCategory, type Product } from '@/data/shopData';
 import { activeFreeHourClaim, formatRewardDate, isRewardClaimRedeemed } from '@/features/rewards/rewardRules';
 import { getFreeHourStatus } from '@/features/rewards/rewardApi';
 import { cn } from '@/utils/cn';
@@ -17,14 +18,24 @@ const tabs = [
   { key: 'boosters' as const, label: GAME_NAMES.match3, icon: Sparkles },
 ];
 
-function coinPrice(price: number) {
-  return `${price.toLocaleString('ru-RU')} термокоинов`;
+function CoinPrice({ price }: { price: number }) {
+  const formattedPrice = price.toLocaleString('ru-RU');
+  return (
+    <span className="shop-coin-price" aria-label={`${formattedPrice} термокоинов`} data-termcoin-price={price}>
+      <TermcoinMark className="termcoin-mark--compact" />
+      <span>{formattedPrice} термокоинов</span>
+    </span>
+  );
 }
 
 export function ShopScreen() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { progress, addToCart, buyWithCoins, restoreRewardClaim } = useGameContext();
-  const [activeTab, setActiveTab] = useState<Product['category']>('tickets');
+  const requestedProduct = getProductById(searchParams.get('focus') ?? '');
+  const focusedProductId = requestedProduct?.id;
+  const focusedCategory = requestedProduct?.category;
+  const [activeTab, setActiveTab] = useState<Product['category']>(() => focusedCategory ?? 'tickets');
   const [notice, setNotice] = useState('');
   const [serverRewardBlock, setServerRewardBlock] = useState<{ blocked: boolean; until: number | null }>({
     blocked: false,
@@ -55,6 +66,22 @@ export function ShopScreen() {
       .catch(() => undefined);
     return () => controller.abort();
   }, [restoreRewardClaim]);
+
+  useEffect(() => {
+    if (!focusedProductId || activeTab !== focusedCategory) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const card = document.getElementById(`shop-product-${focusedProductId}`);
+      if (!card) return;
+
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      card.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' });
+      const action = card.querySelector<HTMLElement>('[data-shop-action]');
+      (action ?? card).focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeTab, focusedCategory, focusedProductId]);
 
   const handleBuy = (product: Product) => {
     setNotice('');
@@ -135,7 +162,7 @@ export function ShopScreen() {
                 <div>
                   <h2>{item.name}</h2>
                   <p>{item.description}</p>
-                  <strong>{coinPrice(item.price)}</strong>
+                  <strong><CoinPrice price={item.price} /></strong>
                   <Button size="sm" className="w-full mt-3" onClick={() => handleBuy(item)}>Купить</Button>
                   {(progress.inventory[item.id] ?? 0) > 0 && (
                     <p className="mt-2 text-xs text-success">В инвентаре: {progress.inventory[item.id]}</p>
@@ -148,8 +175,23 @@ export function ShopScreen() {
           <div className="space-y-3">
             {items.map((item, index) => {
               const isWeeklyReward = item.action === 'weekly-reward';
+              const isFocused = item.id === focusedProductId;
               return (
-                <motion.article key={item.id} className={cn('shop-product-card', isWeeklyReward && 'shop-product-card--featured')} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+                <motion.article
+                  key={item.id}
+                  id={`shop-product-${item.id}`}
+                  className={cn(
+                    'shop-product-card',
+                    isWeeklyReward && 'shop-product-card--featured',
+                    isFocused && 'shop-product-card--focused',
+                  )}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  tabIndex={isFocused ? -1 : undefined}
+                  data-shop-product={item.id}
+                  data-shop-product-focused={isFocused ? 'true' : 'false'}
+                >
                   <div className="shop-product-card__top">
                     <div className="shop-product-card__image"><img src={item.image} alt="" aria-hidden="true" /></div>
                     <div className="shop-product-card__copy">
@@ -169,7 +211,7 @@ export function ShopScreen() {
                   )}
 
                   {isWeeklyReward && activeReward ? (
-                    <button type="button" className="shop-reward-active" onClick={() => navigate('/shop/free-hour')}>
+                    <button type="button" className="shop-reward-active" onClick={() => navigate('/shop/free-hour')} data-shop-action={item.id}>
                       <span>Код {activeReward.code}</span>
                       <strong>{isRewardClaimRedeemed(activeReward)
                         ? `Использован · новый час после ${formatRewardDate(activeReward.nextPurchaseAt)}`
@@ -180,6 +222,7 @@ export function ShopScreen() {
                       type="button"
                       className="shop-reward-active"
                       onClick={() => navigate(activeCampaignCooldown ? '/profile' : '/shop/free-hour')}
+                      data-shop-action={item.id}
                     >
                       <span>{activeCampaignCooldown ? 'Бесплатный час уже получен' : 'Бесплатный час пока недоступен'}</span>
                       <strong>
@@ -189,8 +232,13 @@ export function ShopScreen() {
                     </button>
                   ) : (
                     <div className="shop-product-card__action">
-                      <strong>{item.currency === 'rub' ? `${item.price} ₽` : coinPrice(item.price)}</strong>
-                      <Button size="sm" onClick={() => handleBuy(item)}>
+                      <strong>{item.currency === 'rub' ? `${item.price} ₽` : <CoinPrice price={item.price} />}</strong>
+                      <Button
+                        size="sm"
+                        onClick={() => handleBuy(item)}
+                        aria-label={`${isWeeklyReward ? 'Получить' : 'Купить'} «${item.name}» за ${item.price.toLocaleString('ru-RU')} ${item.currency === 'rub' ? 'рублей' : 'термокоинов'}`}
+                        data-shop-action={item.id}
+                      >
                         {isWeeklyReward ? 'Получить' : 'Купить'}
                       </Button>
                     </div>

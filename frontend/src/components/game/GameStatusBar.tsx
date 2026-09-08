@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Wallet } from 'lucide-react';
-import { FREE_HOUR_PRICE } from '@/features/rewards/rewardRules';
+import { FREE_HOUR_PRICE, FREE_HOUR_SHOP_PATH, getFreeHourCoinGoal } from '@/features/rewards/rewardRules';
 import { GAME_LEVEL_TOTAL, clampGameLevel } from '@/data/gameProgression';
+import { TermcoinMark } from '@/components/ui/TermcoinMark';
 import { cn } from '@/utils/cn';
 
 interface GameStatusBarProps {
@@ -33,9 +33,7 @@ export function GameStatusBar({
 }: GameStatusBarProps) {
   const safeTotal = Number.isFinite(totalLevels) ? Math.max(1, Math.floor(totalLevels)) : GAME_LEVEL_TOTAL;
   const safeLevel = Math.min(safeTotal, clampGameLevel(level));
-  const safeCurrency = Number.isFinite(currency) ? Math.max(0, Math.floor(currency)) : 0;
-  const hasReachedGoal = safeCurrency >= FREE_HOUR_PRICE;
-  const remaining = Math.max(0, FREE_HOUR_PRICE - safeCurrency);
+  const { currency: safeCurrency, reached: hasReachedGoal, remaining } = getFreeHourCoinGoal(currency);
   const walletAria = hasReachedGoal
     ? `Кошелёк: ${safeCurrency.toLocaleString('ru-RU')} термокоинов. Накоплено достаточно для цели ${FREE_HOUR_PRICE}. Проверить доступность награды в магазине.`
     : `Кошелёк: ${safeCurrency.toLocaleString('ru-RU')} термокоинов. Цель — ${FREE_HOUR_PRICE} термокоинов за бесплатный час. Осталось накопить ${remaining}. Перейти в магазин.`;
@@ -87,7 +85,7 @@ export function GameStatusBar({
         </div>
 
         <Link
-          to="/shop"
+          to={FREE_HOUR_SHOP_PATH}
           aria-label={walletAria}
           title={walletAria}
           className={cn(
@@ -97,9 +95,9 @@ export function GameStatusBar({
           data-game-wallet
           data-wallet-goal-reached={hasReachedGoal ? 'true' : 'false'}
         >
-          <span className="text-[9px] font-semibold leading-tight text-white/65">Кошелёк</span>
+          <span className="text-[9px] font-semibold leading-tight text-white/65">Термокоины</span>
           <span className="mt-0.5 flex min-w-0 items-center justify-center gap-0.5">
-            <Wallet size={14} className="shrink-0 text-primary" aria-hidden="true" />
+            <TermcoinMark className="termcoin-mark--compact" />
             <strong className="max-w-full whitespace-nowrap text-[11px] font-bold tabular-nums text-primary min-[360px]:text-sm" data-game-wallet-balance>
               {safeCurrency.toLocaleString('ru-RU')}
             </strong>

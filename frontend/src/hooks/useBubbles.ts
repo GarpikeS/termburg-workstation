@@ -63,7 +63,6 @@ export function useBubbles(fieldWidth: number) {
     progress,
     completeBubbleLevel,
     awardGameCurrency,
-    recordFourGameCompletion,
     spendLife,
   } = useGameContext();
   const shotBonus = getBubbleShotBonus(progress.selectedCharacter);
@@ -236,7 +235,6 @@ export function useBubbles(fieldWidth: number) {
   useEffect(() => {
     if (state.isWon && currentLevel) {
       completeBubbleLevel(state.level);
-      recordFourGameCompletion('bubbles');
       const awarded = awardGameCurrency('bubbles', currentLevel.reward);
       queueMicrotask(() => setEarnedReward(awarded));
     }
