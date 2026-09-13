@@ -61,7 +61,7 @@ export function SchedulePosterScreen() {
       <main className="schedule-poster-page__preview">
         {poster
           ? <MonthlyPosterCanvas poster={poster} location={location} elementRef={posterRef} />
-          : <section className="schedule-poster-page__empty"><h1>Афиша на {formatPosterMonth(month)} пока не заполнена</h1><p>Откройте раздел «Афиша месяца» в редакторе и добавьте от 2 до 5 крупных праздников.</p><a href="/schedule/admin">Перейти в редактор</a></section>}
+          : <section className="schedule-poster-page__empty"><h1>Афиша на {formatPosterMonth(month)} пока не заполнена</h1><p>Откройте раздел «Афиша месяца» в редакторе и добавьте от 1 до 6 крупных праздников.</p><a href="/schedule/admin">Перейти в редактор</a></section>}
       </main>
     </div>
   );

@@ -48,6 +48,7 @@ function assertPng(buffer, label) {
 }
 
 const seed = JSON.parse(await readFile(path.join(frontendRoot, 'public', 'data', 'default-schedule.json'), 'utf8'));
+const posterFixtureImage = `data:image/png;base64,${(await readFile(path.join(projectRoot, 'desktop', 'assets', 'icon.png'))).toString('base64')}`;
 seed.weeklyEvents.push(
   { id: 'qa-steam', locationId: '2', daysOfWeek: [2], time: '12:00', endTime: '12:30', title: 'Коллективное парение', venue: 'Русская баня', priceKind: 'paid', price: 500, published: true },
   { id: 'qa-kids', locationId: '2', daysOfWeek: [2], time: '13:00', endTime: '13:30', title: 'Пенная дискотека', venue: 'Детский бассейн', priceKind: 'free', published: true },
@@ -57,8 +58,12 @@ seed.monthlyPosters = [{
   locationId: '2',
   month: '2026-09',
   events: [
-    { id: 'poster-event-1', date: '2026-09-05', title: 'Семейный праздник', program: '12:00 — Открытие\n13:00 — Игры' },
+    { id: 'poster-event-1', date: '2026-09-05', title: 'Семейный праздник', program: '12:00 — Открытие\n13:00 — Игры', imageDataUrl: posterFixtureImage },
     { id: 'poster-event-2', date: '2026-09-19', title: 'День воды', program: '14:00 — Аквашоу\n15:30 — Парение' },
+    { id: 'poster-event-3', date: '2026-09-21', title: 'День банных традиций', program: '13:00 — Встреча гостей\n14:00 — Чаепитие' },
+    { id: 'poster-event-4', date: '2026-09-23', title: 'Осенний хоровод', program: '12:30 — Игровая программа\n15:00 — Мастер-класс' },
+    { id: 'poster-event-5', date: '2026-09-25', title: 'Праздник урожая', program: '13:30 — Семейная программа\n16:00 — Коллективное парение' },
+    { id: 'poster-event-6', date: '2026-09-27', title: 'Большой семейный праздник банных традиций', program: '12:00 — Торжественное открытие праздника\n13:15 — Семейная интерактивная программа\n14:30 — Творческая мастерская для детей\n16:00 — Коллективное ароматное парение' },
   ],
 }];
 
@@ -88,6 +93,17 @@ try {
 
   await page.goto(`${baseUrl}/schedule/admin`, { waitUntil: 'networkidle' });
   await page.getByRole('tab', { name: 'Афиша месяца' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Показывать 1 событие' }).click();
+  await page.locator('.monthly-poster__events[data-count="1"]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.monthly-poster-form__event').count(), 1, 'poster editor: one-card selection must be available');
+  if (inspectionRoot) {
+    await mkdir(inspectionRoot, { recursive: true });
+    await page.locator('.monthly-poster').screenshot({ path: path.join(inspectionRoot, 'monthly-poster-one-card.png') });
+  }
+  await page.getByRole('button', { name: 'Показывать 6 событий' }).click();
+  await page.locator('.monthly-poster__events[data-count="6"]').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.monthly-poster-form__event').count(), 6, 'poster editor: six-card selection must be available');
   await page.locator('input[type="file"]').first().setInputFiles(path.join(projectRoot, 'desktop', 'assets', 'icon.png'));
   await page.locator('.monthly-poster-form__image-field img').first().waitFor({ state: 'visible' });
 
@@ -117,6 +133,28 @@ try {
   }
 
   await page.goto(`${baseUrl}/schedule/poster/2?month=2026-09`, { waitUntil: 'networkidle' });
+  const posterCards = page.locator('.monthly-poster-event');
+  assert.equal(await posterCards.count(), 6, 'poster: all six editable days must be rendered');
+  const [firstCardBox, secondCardBox, thirdCardBox, firstContentBox, firstImageBox] = await Promise.all([
+    posterCards.nth(0).boundingBox(),
+    posterCards.nth(1).boundingBox(),
+    posterCards.nth(2).boundingBox(),
+    posterCards.nth(0).locator('.monthly-poster-event__content').boundingBox(),
+    posterCards.nth(0).locator('.monthly-poster-event__image').boundingBox(),
+  ]);
+  assert.ok(firstCardBox && secondCardBox && thirdCardBox && firstContentBox && firstImageBox, 'poster: card geometry is unavailable');
+  assert.ok(secondCardBox.x > firstCardBox.x, 'poster: cards must form two columns');
+  assert.ok(thirdCardBox.y > firstCardBox.y, 'poster: cards must form multiple rows');
+  assert.ok(firstImageBox.x > firstContentBox.x, 'poster: uploaded image must be placed to the right of the text');
+  const overflowingCards = await posterCards.evaluateAll(cards => cards.filter(card => {
+    const content = card.querySelector('.monthly-poster-event__content');
+    return content && (content.scrollHeight > content.clientHeight + 1 || content.scrollWidth > content.clientWidth + 1);
+  }).length);
+  assert.equal(overflowingCards, 0, 'poster: long card content must stay inside its card');
+  await page.locator('.monthly-poster__brand img[src="/images/brand/termburg-logo.svg"]').waitFor({ state: 'visible' });
+  if (inspectionRoot) {
+    await page.locator('.monthly-poster').screenshot({ path: path.join(inspectionRoot, 'monthly-poster.png') });
+  }
   const posterDownloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Скачать PNG' }).click();
   const posterDownload = await posterDownloadPromise;
@@ -125,7 +163,7 @@ try {
   assertPng(await readFile(posterPath), 'poster');
 
   assert.deepEqual(pageErrors, []);
-  console.log(JSON.stringify({ ok: true, tested: ['png-upload', 'schedule-png-download', 'poster-png-download'] }, null, 2));
+  console.log(JSON.stringify({ ok: true, tested: ['poster-count-picker-1-to-6', 'png-upload', 'schedule-png-download', 'poster-six-card-layout', 'poster-png-download'] }, null, 2));
   await context.close();
 } finally {
   if (browser) await browser.close();

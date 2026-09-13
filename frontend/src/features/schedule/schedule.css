@@ -3481,66 +3481,105 @@
 }
 
 .monthly-poster {
+  --poster-navy: #061a2d;
+  --poster-navy-soft: #0b2b44;
+  --poster-gold: #d9ad5b;
+  --poster-gold-bright: #f0cf83;
+  --poster-parchment: #f4e2bd;
+  --poster-ink: #1f2a35;
   position: relative;
   width: min(100%, 51.25rem);
   aspect-ratio: 1;
   display: grid;
-  grid-template-rows: 20% minmax(0, 1fr) 5%;
+  grid-template-rows: 26.5% minmax(0, 1fr) 3.5%;
   overflow: hidden;
-  color: #2c2420;
-  background: #fbf9f4;
-  border: 1px solid rgba(58, 42, 33, 0.12);
-  box-shadow: 0 28px 70px rgba(45, 34, 28, 0.2);
+  color: var(--poster-parchment);
+  background:
+    radial-gradient(circle at 10% 14%, rgba(88, 170, 194, 0.14), transparent 23%),
+    radial-gradient(circle at 88% 23%, rgba(217, 173, 91, 0.14), transparent 20%),
+    radial-gradient(circle at 8% 78%, rgba(217, 173, 91, 0.08) 0 0.18%, transparent 0.24%),
+    radial-gradient(circle at 78% 72%, rgba(127, 201, 215, 0.1) 0 0.16%, transparent 0.22%),
+    linear-gradient(145deg, var(--poster-navy-soft), var(--poster-navy) 50%, #041321);
+  background-size: auto, auto, 6.8% 6.8%, 8.2% 8.2%, auto;
+  border: 1px solid rgba(217, 173, 91, 0.58);
+  box-shadow: 0 28px 70px rgba(6, 20, 34, 0.28);
+  container-type: inline-size;
+  isolation: isolate;
+}
+
+.monthly-poster::before,
+.monthly-poster::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  left: -8%;
+  width: 116%;
+  height: 7%;
+  border: 0.35cqi solid rgba(90, 176, 202, 0.5);
+  border-right-color: transparent;
+  border-left-color: transparent;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.monthly-poster::before {
+  top: 4%;
+  transform: rotate(-3deg);
+}
+
+.monthly-poster::after {
+  bottom: 2.5%;
+  transform: rotate(2deg);
 }
 
 .monthly-poster__header {
   position: relative;
   display: grid;
-  grid-template-columns: 11rem minmax(0, 1fr);
-  align-items: center;
-  gap: 2.5rem;
+  grid-template-rows: auto auto auto;
+  place-content: center;
+  justify-items: center;
+  gap: 0.7cqi;
   overflow: hidden;
-  padding: 1.2rem 2rem;
-  color: #fffdf7;
-  background:
-    radial-gradient(circle at 91% 24%, rgba(212, 179, 102, 0.24), transparent 22%),
-    #211c2f;
+  padding: 1.7cqi 5cqi 1.15cqi;
+  text-align: center;
 }
 
+.monthly-poster__header::before,
 .monthly-poster__header::after {
   content: '';
   position: absolute;
-  right: -1rem;
-  bottom: -1.9rem;
-  width: 15rem;
-  height: 4.2rem;
-  background: repeating-radial-gradient(circle at 0 0, transparent 0 0.62rem, rgba(122, 175, 191, 0.7) 0.66rem 0.74rem, transparent 0.78rem 1.42rem);
-  opacity: 0.62;
-  transform: rotate(-3deg);
+  top: 9.2cqi;
+  width: 15cqi;
+  height: 3.2cqi;
+  border-top: 0.18cqi solid rgba(217, 173, 91, 0.88);
+  border-bottom: 0.12cqi solid rgba(90, 176, 202, 0.55);
+  border-radius: 50%;
+  opacity: 0.82;
+}
+
+.monthly-poster__header::before {
+  left: 3.8cqi;
+  transform: rotate(7deg);
+}
+
+.monthly-poster__header::after {
+  right: 3.8cqi;
+  transform: rotate(-7deg);
 }
 
 .monthly-poster__brand {
   position: relative;
   z-index: 2;
   display: grid;
-  gap: 0.8rem;
+  place-items: center;
 }
 
 .monthly-poster__brand .schedule-mark {
-  width: 9.5rem;
+  width: 16.5cqi;
 }
 
 .monthly-poster__brand .schedule-mark__logo {
   filter: brightness(0) invert(1);
-}
-
-.monthly-poster__brand > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: #e0c886;
-  font-size: 0.75rem;
-  font-weight: 800;
 }
 
 .monthly-poster__headline {
@@ -3549,95 +3588,172 @@
   min-width: 0;
 }
 
-.monthly-poster__headline > span {
-  color: #d4b366;
-  font-size: 0.68rem;
-  font-weight: 850;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
 .monthly-poster__headline h1 {
-  margin-top: 0.18rem;
-  color: #fffdf7;
+  color: var(--poster-gold-bright);
   font-family: 'Ikra Slab', Georgia, serif;
-  font-size: clamp(2.15rem, 5vw, 3.55rem);
-  line-height: 0.98;
+  font-size: 4.2cqi;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 0.25cqi 0 #694718, 0 0.45cqi 1.2cqi rgba(217, 173, 91, 0.18);
 }
 
 .monthly-poster__headline strong {
   display: block;
-  margin-top: 0.58rem;
-  color: #d4b366;
-  font-size: clamp(1rem, 2vw, 1.35rem);
-  font-weight: 850;
+  margin-top: 0.55cqi;
+  color: var(--poster-gold-bright);
+  font-family: 'Ikra Slab', Georgia, serif;
+  font-size: 6.5cqi;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  text-shadow: 0 0.28cqi 0 #694718;
 }
 
-.monthly-poster__sun {
+.monthly-poster__headline strong span {
+  white-space: nowrap;
+}
+
+.monthly-poster__city {
+  position: relative;
+  z-index: 2;
+  width: max-content;
+  min-width: 24cqi;
+  max-width: 48cqi;
+  display: grid;
+  place-items: center;
+  margin-top: 0.45cqi;
+  padding: 0.55cqi 4cqi 0.7cqi;
+  color: #fff7de;
+  background: linear-gradient(180deg, rgba(16, 48, 70, 0.96), rgba(6, 25, 43, 0.96));
+  border: 0.24cqi solid var(--poster-gold);
+  border-radius: 999px;
+  box-shadow: 0 0 0 0.18cqi rgba(88, 55, 18, 0.9), inset 0 0 1.2cqi rgba(217, 173, 91, 0.12);
+  font-family: 'Ikra Slab', Georgia, serif;
+  font-size: 2.8cqi;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.monthly-poster__city > span {
+  max-width: 39cqi;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monthly-poster__city::before,
+.monthly-poster__city::after {
+  content: '— ◆ —';
   position: absolute;
-  top: -3.8rem;
-  right: -3rem;
-  width: 10rem;
-  height: 10rem;
-  border: 1px solid rgba(212, 179, 102, 0.48);
-  border-radius: 50%;
+  top: 50%;
+  color: var(--poster-gold);
+  font-family: Georgia, serif;
+  font-size: 1.35cqi;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.monthly-poster__city::before {
+  right: calc(100% + 1.1cqi);
+}
+
+.monthly-poster__city::after {
+  left: calc(100% + 1.1cqi);
 }
 
 .monthly-poster__events {
+  position: relative;
+  z-index: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: repeat(var(--poster-event-count, 1), minmax(0, 1fr));
-  gap: 0.5rem;
-  padding: 0.75rem 1.45rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--poster-event-rows, 1), minmax(0, 1fr));
+  gap: 1.05cqi;
+  padding: 0 1.4cqi 1cqi;
 }
 
-.monthly-poster__events[data-count='2'] { --poster-event-count: 2; }
-.monthly-poster__events[data-count='3'] { --poster-event-count: 3; }
-.monthly-poster__events[data-count='4'] { --poster-event-count: 4; }
-.monthly-poster__events[data-count='5'] { --poster-event-count: 5; }
+.monthly-poster__events[data-count='1'] { --poster-event-rows: 1; }
+.monthly-poster__events[data-count='2'] { --poster-event-rows: 1; }
+.monthly-poster__events[data-count='3'],
+.monthly-poster__events[data-count='4'] { --poster-event-rows: 2; }
+.monthly-poster__events[data-count='5'],
+.monthly-poster__events[data-count='6'] { --poster-event-rows: 3; }
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event:last-child,
+.monthly-poster__events[data-count='3'] .monthly-poster-event:last-child,
+.monthly-poster__events[data-count='5'] .monthly-poster-event:last-child {
+  width: 68%;
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event:last-child {
+  width: 78%;
+  height: 86%;
+  align-self: center;
+}
 
 .monthly-poster-event {
+  position: relative;
   min-height: 0;
   display: grid;
-  grid-template-columns: 7.4rem 11.5rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 56%) minmax(0, 44%);
   overflow: hidden;
-  background: #fffefa;
-  border: 1px solid #ded4c3;
-  border-radius: 0.75rem;
+  color: var(--poster-ink);
+  background:
+    radial-gradient(circle at 22% 16%, rgba(255, 255, 255, 0.54), transparent 32%),
+    linear-gradient(145deg, #fff2d6, var(--poster-parchment));
+  border: 0.22cqi solid var(--poster-gold);
+  border-radius: 1.25cqi;
+  box-shadow:
+    inset 0 0 0 0.22cqi rgba(105, 68, 23, 0.72),
+    inset 0 0 0 0.48cqi rgba(255, 242, 210, 0.78),
+    0 0.35cqi 0.85cqi rgba(2, 12, 22, 0.3);
 }
 
-.monthly-poster-event:nth-child(even) {
-  background: #f6f0e4;
+.monthly-poster-event::after {
+  content: '';
+  position: absolute;
+  inset: 0.62cqi;
+  z-index: 3;
+  border: 0.1cqi solid rgba(136, 91, 32, 0.38);
+  border-radius: 0.72cqi;
+  pointer-events: none;
 }
 
 .monthly-poster-event__date {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  padding: 0.6rem;
-  color: #fffdf7;
-  background: #211c2f;
-  text-align: center;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75cqi;
+  color: #172939;
+  white-space: nowrap;
 }
 
 .monthly-poster-event__date strong {
-  color: #d4b366;
   font-family: 'Ikra Slab', Georgia, serif;
-  font-size: clamp(2.2rem, 5vw, 3.2rem);
-  line-height: 0.85;
+  font-size: 3.75cqi;
+  line-height: 0.9;
 }
 
 .monthly-poster-event__date span {
-  margin-top: 0.35rem;
-  font-size: 0.86rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Ikra Slab', Georgia, serif;
+  font-size: 2.05cqi;
   font-weight: 900;
   text-transform: uppercase;
 }
 
 .monthly-poster-event__date small {
-  margin-top: 0.2rem;
-  color: rgba(255, 255, 255, 0.62);
-  font-size: 0.62rem;
+  display: none;
+  color: #715d43;
+  font-size: 1.2cqi;
   font-weight: 700;
   text-transform: capitalize;
 }
@@ -3646,14 +3762,18 @@
   position: relative;
   min-width: 0;
   overflow: hidden;
-  background: #cabd9f;
+  margin: 0.7cqi 0.7cqi 0.7cqi 0;
+  background: #c7af82;
+  border-radius: 0 0.62cqi 0.62cqi 0;
 }
 
 .monthly-poster-event__image::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(33, 28, 47, 0.14), transparent 45%);
+  background:
+    linear-gradient(90deg, rgba(244, 226, 189, 0.66), transparent 30%),
+    linear-gradient(0deg, rgba(30, 22, 12, 0.14), transparent 42%);
   pointer-events: none;
 }
 
@@ -3668,22 +3788,23 @@
   display: grid;
   align-content: center;
   justify-items: center;
-  color: #625947;
+  color: #5e513e;
   background:
-    linear-gradient(145deg, rgba(212, 179, 102, 0.42), rgba(122, 175, 191, 0.24)),
-    #eee5d4;
+    radial-gradient(circle at 50% 42%, rgba(255, 246, 220, 0.86), transparent 32%),
+    linear-gradient(145deg, rgba(217, 173, 91, 0.5), rgba(74, 133, 153, 0.38)),
+    #e9d8b7;
 }
 
 .monthly-poster-event__image.is-empty > span {
-  color: #7aafbf;
+  color: #0f5469;
   font-family: Georgia, serif;
-  font-size: 3.4rem;
+  font-size: 5.3cqi;
   line-height: 0.75;
 }
 
 .monthly-poster-event__image.is-empty > small {
-  margin-top: 0.4rem;
-  font-size: 0.58rem;
+  margin-top: 0.55cqi;
+  font-size: 1.05cqi;
   font-weight: 850;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -3693,83 +3814,244 @@
   min-width: 0;
   display: grid;
   align-content: center;
-  padding: 0.75rem 1rem;
+  overflow: hidden;
+  padding: 1.35cqi 0.75cqi 1.2cqi 1.45cqi;
 }
 
-.monthly-poster-event__number {
-  color: #8b743c;
-  font-size: 0.55rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.monthly-poster-event__content > * {
+  min-width: 0;
 }
 
 .monthly-poster-event__content h2 {
-  margin-top: 0.22rem;
-  color: #2c2420;
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: 0.35cqi;
+  color: #172939;
   font-family: 'Ikra Slab', Georgia, serif;
-  font-size: clamp(1.1rem, 2.3vw, 1.55rem);
-  line-height: 1.05;
+  font-size: 2.75cqi;
+  line-height: 0.96;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.monthly-poster-event__content h2.is-long,
+.monthly-poster-event__content h2.is-extra-long {
+  font-size: 2.35cqi;
+  line-height: 1;
+  -webkit-line-clamp: 3;
+}
+
+.monthly-poster-event__content h2.is-extra-long {
+  font-size: 2.05cqi;
 }
 
 .monthly-poster-event__content ul {
   display: grid;
-  gap: 0.16rem;
-  margin-top: 0.45rem;
+  gap: 0.22cqi;
+  margin-top: 0.68cqi;
   padding: 0;
   list-style: none;
+  overflow: hidden;
 }
 
-.monthly-poster-event__content li,
+.monthly-poster-event__content li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1.45cqi 5.3cqi minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.3cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event,
+.monthly-poster__events[data-count='2'] .monthly-poster-event {
+  grid-template-columns: minmax(0, 52%) minmax(0, 48%);
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__date strong {
+  font-size: 5.2cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__date span {
+  font-size: 2.8cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content h2 {
+  font-size: 4.8cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content h2.is-long,
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content h2.is-extra-long {
+  font-size: 3.7cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content li > time,
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content li > span:not(.monthly-poster-event__program-mark),
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content p {
+  font-size: 1.9cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__content li {
+  grid-template-columns: 2.1cqi 7.8cqi minmax(0, 1fr);
+  gap: 0.5cqi;
+}
+
+.monthly-poster__events[data-count='1'] .monthly-poster-event__program-mark {
+  width: 2cqi;
+  height: 2cqi;
+  font-size: 0.82cqi;
+}
+
+.monthly-poster-event__content li > time,
+.monthly-poster-event__content li > span:not(.monthly-poster-event__program-mark),
 .monthly-poster-event__content p {
   overflow: hidden;
-  color: #5f554f;
-  font-size: clamp(0.7rem, 1.25vw, 0.88rem);
-  font-weight: 600;
-  line-height: 1.25;
+  color: #35424c;
+  font-size: 1.18cqi;
+  font-weight: 650;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.monthly-poster-event__content li::before {
-  content: '•';
-  margin-right: 0.42rem;
-  color: #7aafbf;
+.monthly-poster-event__content li > time {
+  color: #172939;
+  font-weight: 900;
 }
 
-.monthly-poster__events[data-count='5'] .monthly-poster-event__content h2 {
-  font-size: 1.05rem;
+.monthly-poster-event__program-mark {
+  width: 1.35cqi;
+  height: 1.35cqi;
+  display: grid;
+  place-items: center;
+  color: var(--poster-gold-bright);
+  background: #0a3049;
+  border-radius: 50%;
+  font-size: 0.55cqi;
+  line-height: 1;
 }
 
-.monthly-poster__events[data-count='5'] .monthly-poster-event__content {
-  padding-top: 0.55rem;
-  padding-bottom: 0.55rem;
+.monthly-poster-event__program-copy {
+  grid-column: 2 / -1;
 }
 
-.monthly-poster__events[data-count='5'] .monthly-poster-event__content li,
-.monthly-poster__events[data-count='5'] .monthly-poster-event__content p {
-  font-size: 0.68rem;
+.monthly-poster-event__content p {
+  margin-top: 0.72cqi;
 }
 
-.monthly-poster__events[data-count='5'] .monthly-poster-event__content li:nth-child(n+4) {
-  display: none;
+.monthly-poster__events[data-count='2'] .monthly-poster-event__date strong {
+  font-size: 4.7cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__date span {
+  font-size: 2.35cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content h2 {
+  font-size: 4cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content h2.is-long,
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content h2.is-extra-long {
+  font-size: 3.05cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content li > time,
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content li > span:not(.monthly-poster-event__program-mark),
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content p {
+  font-size: 1.6cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__content li {
+  grid-template-columns: 1.8cqi 6.8cqi minmax(0, 1fr);
+  gap: 0.45cqi;
+}
+
+.monthly-poster__events[data-count='2'] .monthly-poster-event__program-mark {
+  width: 1.7cqi;
+  height: 1.7cqi;
+  font-size: 0.7cqi;
+}
+
+.monthly-poster__events[data-count='3'] .monthly-poster-event__content h2,
+.monthly-poster__events[data-count='4'] .monthly-poster-event__content h2 {
+  font-size: 3.15cqi;
+}
+
+.monthly-poster__events[data-count='3'] .monthly-poster-event__content h2.is-long,
+.monthly-poster__events[data-count='3'] .monthly-poster-event__content h2.is-extra-long,
+.monthly-poster__events[data-count='4'] .monthly-poster-event__content h2.is-long,
+.monthly-poster__events[data-count='4'] .monthly-poster-event__content h2.is-extra-long {
+  font-size: 2.45cqi;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content {
+  padding-top: 1cqi;
+  padding-bottom: 0.9cqi;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content h2,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content h2 {
+  font-size: 2.45cqi;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content h2.is-long,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content h2.is-long {
+  font-size: 1.72cqi;
+  -webkit-line-clamp: 4;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content h2.is-extra-long,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content h2.is-extra-long {
+  font-size: 1.48cqi;
+  -webkit-line-clamp: 4;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__date strong,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__date strong {
+  font-size: 3.2cqi;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__date span,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__date span {
+  font-size: 1.65cqi;
+}
+
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content li > time,
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content li > span:not(.monthly-poster-event__program-mark),
+.monthly-poster__events[data-count='5'] .monthly-poster-event__content p,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content li > time,
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content li > span:not(.monthly-poster-event__program-mark),
+.monthly-poster__events[data-count='6'] .monthly-poster-event__content p {
+  font-size: 1.02cqi;
 }
 
 .monthly-poster__footer {
-  display: flex;
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0 2rem;
-  color: #fffdf7;
-  background: #211c2f;
-  font-size: 0.7rem;
-  font-weight: 750;
+  gap: 1.6cqi;
+  padding: 0 8cqi;
+  color: var(--poster-gold-bright);
 }
 
-.monthly-poster__footer strong {
-  color: #d4b366;
-  letter-spacing: 0.08em;
+.monthly-poster__footer::before,
+.monthly-poster__footer::after {
+  content: '';
+  height: 0.14cqi;
+  background: linear-gradient(90deg, transparent, var(--poster-gold));
+}
+
+.monthly-poster__footer::after {
+  transform: scaleX(-1);
+}
+
+.monthly-poster__footer span {
+  font-size: 1.7cqi;
 }
 
 .monthly-poster-form {
@@ -3983,6 +4265,71 @@
   margin-left: auto;
 }
 
+.monthly-poster-form__count-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  color: #2c2420;
+  background: #f7f1e5;
+  border: 1px solid #ded2ba;
+  border-radius: 0.85rem;
+}
+
+.monthly-poster-form__count-picker > div:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.monthly-poster-form__count-picker > div:first-child strong {
+  font-size: 0.82rem;
+}
+
+.monthly-poster-form__count-picker > div:first-child span {
+  color: #71655b;
+  font-size: 0.7rem;
+  font-weight: 550;
+}
+
+.monthly-poster-form__count-picker [role='group'] {
+  display: grid;
+  grid-template-columns: repeat(6, 2.65rem);
+  gap: 0.35rem;
+}
+
+.monthly-poster-form__count-picker button {
+  min-width: 2.65rem;
+  min-height: 2.65rem;
+  display: grid;
+  place-items: center;
+  color: #584b3f;
+  background: #fffdf8;
+  border: 1px solid #cfc2aa;
+  border-radius: 0.65rem;
+  font-size: 0.84rem;
+  font-weight: 850;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.monthly-poster-form__count-picker button:hover {
+  border-color: #9d7d37;
+  transform: translateY(-1px);
+}
+
+.monthly-poster-form__count-picker button:focus-visible {
+  outline: 3px solid rgba(35, 126, 136, 0.36);
+  outline-offset: 2px;
+}
+
+.monthly-poster-form__count-picker button.is-active {
+  color: #fff9e7;
+  background: #173a50;
+  border-color: #173a50;
+  box-shadow: inset 0 0 0 2px rgba(217, 173, 91, 0.55);
+}
+
 .schedule-poster-page__controls .schedule-poster-page__print {
   margin-left: 0;
 }
@@ -4077,71 +4424,21 @@
     grid-column: auto;
   }
 
-  .monthly-poster__header {
-    grid-template-columns: 1fr;
-    align-content: center;
-    gap: 0.5rem;
-    padding: 0.8rem 1rem;
+  .monthly-poster-form__count-picker {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .monthly-poster__brand > span,
-  .monthly-poster__headline > span {
-    display: none;
+  .monthly-poster-form__count-picker [role='group'] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
-  .monthly-poster__brand .schedule-mark {
-    width: 6rem;
+  .monthly-poster-form__count-picker button {
+    min-width: 0;
   }
 
-  .monthly-poster__headline h1 {
-    font-size: 1.55rem;
-  }
-
-  .monthly-poster__headline strong {
-    margin-top: 0.2rem;
-    font-size: 0.72rem;
-  }
-
-  .monthly-poster__events {
-    gap: 0.28rem;
-    padding: 0.45rem;
-  }
-
-  .monthly-poster-event {
-    grid-template-columns: 3rem 4.5rem minmax(0, 1fr);
-    border-radius: 0.35rem;
-  }
-
-  .monthly-poster-event__date strong {
-    font-size: 1.2rem;
-  }
-
-  .monthly-poster-event__date span {
-    margin-top: 0.1rem;
-    font-size: 0.5rem;
-  }
-
-  .monthly-poster-event__date small,
-  .monthly-poster-event__number,
-  .monthly-poster-event__content ul,
-  .monthly-poster-event__content p,
-  .monthly-poster-event__image.is-empty > small {
-    display: none;
-  }
-
-  .monthly-poster-event__content {
-    padding: 0.3rem 0.45rem;
-  }
-
-  .monthly-poster-event__content h2,
-  .monthly-poster__events[data-count='5'] .monthly-poster-event__content h2 {
-    margin: 0;
-    font-size: 0.68rem;
-  }
-
-  .monthly-poster__footer {
-    padding: 0 0.7rem;
-    font-size: 0.45rem;
+  .monthly-poster-studio__preview {
+    padding: 0.65rem;
   }
 
   .schedule-admin-tabs {

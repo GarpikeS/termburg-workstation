@@ -1,7 +1,7 @@
 import type { MonthlyPoster, MonthlyPosterEvent } from './types';
 
-export const MIN_POSTER_EVENTS = 2;
-export const MAX_POSTER_EVENTS = 5;
+export const MIN_POSTER_EVENTS = 1;
+export const MAX_POSTER_EVENTS = 6;
 
 function safeDay(month: string, day: number) {
   return `${month}-${String(day).padStart(2, '0')}`;
@@ -36,14 +36,24 @@ export function formatPosterMonth(month: string) {
     .replace(/^./, letter => letter.toUpperCase());
 }
 
+export function formatPosterMonthParts(month: string) {
+  const value = new Date(`${month}-01T12:00:00`);
+  if (Number.isNaN(value.getTime())) return { month: month.toLocaleUpperCase('ru-RU'), year: '' };
+  return {
+    month: new Intl.DateTimeFormat('ru-RU', { month: 'long' }).format(value).toLocaleUpperCase('ru-RU'),
+    year: new Intl.DateTimeFormat('ru-RU', { year: 'numeric' }).format(value),
+  };
+}
+
 export function formatPosterEventDate(date: string) {
   const value = new Date(`${date}T12:00:00`);
   if (Number.isNaN(value.getTime())) {
     return { day: '—', month: '', weekday: '' };
   }
+  const dateParts = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).formatToParts(value);
   return {
-    day: new Intl.DateTimeFormat('ru-RU', { day: '2-digit' }).format(value),
-    month: new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(value).replace('.', ''),
+    day: dateParts.find(part => part.type === 'day')?.value ?? '—',
+    month: dateParts.find(part => part.type === 'month')?.value ?? '',
     weekday: new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(value),
   };
 }

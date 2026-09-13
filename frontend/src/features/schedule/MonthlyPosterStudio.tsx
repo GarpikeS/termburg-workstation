@@ -23,6 +23,12 @@ function currentMonthValue() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function eventCountWord(count: number) {
+  if (count === 1) return 'событие';
+  if (count >= 2 && count <= 4) return 'события';
+  return 'событий';
+}
+
 export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: MonthlyPosterStudioProps) {
   const [month, setMonth] = useState(currentMonthValue);
   const storedPoster = useMemo(
@@ -49,8 +55,24 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
     if (poster.events.length >= MAX_POSTER_EVENTS) return;
     updatePoster({
       ...poster,
-      events: [...poster.events, createMonthlyPosterEvent(month, Math.min(28, 1 + poster.events.length * 7))],
+      events: [...poster.events, createMonthlyPosterEvent(month, Math.min(28, 1 + poster.events.length * 5))],
     });
+  };
+
+  const setEventCount = (nextCount: number) => {
+    const count = Math.max(MIN_POSTER_EVENTS, Math.min(MAX_POSTER_EVENTS, nextCount));
+    if (count === poster.events.length) return;
+    if (count < poster.events.length && !window.confirm(`Оставить в афише только первые ${count} ${eventCountWord(count)}? Остальные карточки будут удалены.`)) return;
+
+    const events = count < poster.events.length
+      ? poster.events.slice(0, count)
+      : [
+          ...poster.events,
+          ...Array.from({ length: count - poster.events.length }, (_, index) => (
+            createMonthlyPosterEvent(month, Math.min(28, 1 + (poster.events.length + index) * 5))
+          )),
+        ];
+    updatePoster({ ...poster, events });
   };
 
   const removeEvent = (eventId: string) => {
@@ -76,7 +98,7 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
         <div>
           <span>Квадратный макет 1 × 1 метр</span>
           <h2>Афиша на {formatPosterMonth(month)}</h2>
-          <p>Только крупные праздники месяца. Обычные занятия и ежедневное расписание сюда не добавляются.</p>
+          <p>Квадратная афиша: текст каждого дня будет слева, загруженная картинка — справа.</p>
         </div>
         <div className="monthly-poster-studio__actions">
           <label className="schedule-admin-field">
@@ -99,15 +121,36 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
           <div>
             <span>Праздничный календарь</span>
             <h2 id="monthly-poster-form-title">Праздники месяца</h2>
-            <p>Добавьте от 2 до 5 крупных праздников. Для каждого укажите только его собственную короткую программу.</p>
+            <p>Выберите от 1 до 6 крупных праздников. Дата, название, программа и картинка заполняются отдельно для каждого дня.</p>
           </div>
           <strong>{poster.events.length} из {MAX_POSTER_EVENTS}</strong>
         </header>
 
+        <div className="monthly-poster-form__count-picker">
+          <div>
+            <strong>Количество событий</strong>
+            <span>Макет сам перестроит карточки без наложений</span>
+          </div>
+          <div role="group" aria-label="Количество событий в афише">
+            {Array.from({ length: MAX_POSTER_EVENTS - MIN_POSTER_EVENTS + 1 }, (_, index) => index + MIN_POSTER_EVENTS).map(count => (
+              <button
+                type="button"
+                key={count}
+                className={poster.events.length === count ? 'is-active' : ''}
+                aria-label={`Показывать ${count} ${eventCountWord(count)}`}
+                aria-pressed={poster.events.length === count}
+                onClick={() => setEventCount(count)}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="monthly-poster-form__events">
           {poster.events.map((event, index) => (
             <fieldset className="monthly-poster-form__event" key={event.id}>
-              <legend>Праздник {index + 1}</legend>
+              <legend>Карточка дня {index + 1}</legend>
               <div className="monthly-poster-form__event-grid">
                 <label className="schedule-admin-field">
                   <span>Дата</span>
@@ -123,7 +166,7 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
                   <small>Не вставляйте расписание обычного дня. Оставьте 3–4 главных пункта именно этого праздника.</small>
                 </label>
                 <div className="monthly-poster-form__image-field">
-                  <span>Тематическая картинка</span>
+                  <span>Картинка справа</span>
                   <div className={event.imageDataUrl ? 'has-image' : ''}>
                     {event.imageDataUrl ? <img src={event.imageDataUrl} alt="Предпросмотр загруженной картинки" /> : <ImagePlus size={28} aria-hidden="true" />}
                     <label className="schedule-admin-secondary">
@@ -134,7 +177,7 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
                   </div>
                 </div>
               </div>
-              <button type="button" className="monthly-poster-form__remove-event" onClick={() => removeEvent(event.id)} disabled={poster.events.length <= MIN_POSTER_EVENTS} title={poster.events.length <= MIN_POSTER_EVENTS ? 'В афише должно быть минимум два события' : undefined}>
+              <button type="button" className="monthly-poster-form__remove-event" onClick={() => removeEvent(event.id)} disabled={poster.events.length <= MIN_POSTER_EVENTS} title={poster.events.length <= MIN_POSTER_EVENTS ? 'В афише должно быть минимум одно событие' : undefined}>
                 <Trash2 size={16} />Удалить праздник
               </button>
             </fieldset>
@@ -142,7 +185,7 @@ export function MonthlyPosterStudio({ location, posters, onChange, onNotice }: M
         </div>
 
         <footer className="monthly-poster-form__footer">
-          <p>{poster.events.length >= MAX_POSTER_EVENTS ? 'Достигнут максимум: 5 праздников в одном месяце.' : 'Квадратный формат 1 × 1 метр не меняется при добавлении праздников.'}</p>
+          <p>{poster.events.length >= MAX_POSTER_EVENTS ? 'Достигнут максимум: 6 праздников в одном месяце.' : 'Квадратный формат 1 × 1 метр не меняется при добавлении праздников.'}</p>
           <button type="button" className="schedule-admin-primary" onClick={addEvent} disabled={poster.events.length >= MAX_POSTER_EVENTS}><Plus size={18} />Добавить праздник</button>
         </footer>
       </section>
