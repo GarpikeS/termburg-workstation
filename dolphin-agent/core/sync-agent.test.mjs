@@ -179,6 +179,7 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
         guestTypes: '/api/v1/camp/guesttypes',
         services: '/api/v1/camp/services',
         accounts: '/api/v1/camp/accounts',
+        accountSales: '/api/v1/camp/accountsales',
       },
     },
   };
@@ -209,6 +210,18 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
               },
               services: { status: 'ok', probes: [], errors: [] },
               accounts: { status: 'ok', probes: [], errors: [] },
+              accountSales: {
+                status: 'ok',
+                probes: [{
+                  dateExchange: '2026-09-14',
+                  rowCount: 347,
+                  schemaHash: 'b'.repeat(64),
+                  schema: [{ path: 'SUMMA', types: ['number'], observed: 347, nulls: 0 }],
+                  rawRows: [{ COMPUTERNAME: 'CASHBOX-SECRET' }],
+                }],
+                errors: [],
+                apiKey: 'resource-secret-key',
+              },
             },
           };
         },
@@ -234,11 +247,20 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
     assert.equal(probeCount, 1);
     assert.equal(receivedConfigs[0].apiKey, 'local-api-key-for-test-only');
     assert.equal(receivedConfigs[0].initialDate, '2023-09-01');
+    assert.equal(receivedConfigs[0].endpoints.accountSales, '/api/v1/camp/accountsales');
     assert.equal(agent.status().campApi.status, 'diagnostic');
     assert.equal(heartbeats.length, 2);
     assert.equal(heartbeats[1].campApi.resources.guestTypes.probes[0].rowCount, 182);
+    assert.equal(heartbeats[1].campApi.resources.accountSales.probes[0].rowCount, 347);
+    assert.deepEqual(heartbeats[1].campApi.resources.accountSales.probes[0].schema[0], {
+      path: 'SUMMA',
+      types: ['number'],
+      observed: 347,
+      nulls: 0,
+    });
     assert.equal('apiKey' in heartbeats[1].campApi, false);
-    assert.doesNotMatch(JSON.stringify(heartbeats[1].campApi), /local-api-key/);
+    assert.ok(heartbeats.every(heartbeat => heartbeat.campApi.resources.accountSales));
+    assert.doesNotMatch(JSON.stringify(heartbeats), /local-api-key|resource-secret-key|CASHBOX-SECRET|rawRows/);
 
     now += 24 * 60 * 60 * 1000;
     await agent.runOnce();
@@ -276,6 +298,7 @@ test('does not hammer CAMP after a partial diagnostic result', async () => {
             guestTypes: { status: 'ok', probes: [], errors: [] },
             services: { status: 'error', probes: [], errors: ['CAMP API не ответил за 10 секунд.'] },
             accounts: { status: 'ok', probes: [], errors: [] },
+            accountSales: { status: 'ok', probes: [], errors: [] },
           },
         };
       },

@@ -26,6 +26,7 @@ const service = await startFeedbackService({
   dolphinCampGuestTypesPath: process.env.DOLPHIN_CAMP_GUESTTYPES_PATH || '/api/v1/camp/guesttypes',
   dolphinCampServicesPath: process.env.DOLPHIN_CAMP_SERVICES_PATH || '/api/v1/camp/services',
   dolphinCampAccountsPath: process.env.DOLPHIN_CAMP_ACCOUNTS_PATH || '/api/v1/camp/accounts',
+  dolphinCampAccountSalesPath: process.env.DOLPHIN_CAMP_ACCOUNTSALES_PATH || '/api/v1/camp/accountsales',
   dolphinSourceProfiles: {
     zelenogorsk: {
       apiKey: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_KEY || '',

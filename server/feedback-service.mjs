@@ -19,6 +19,36 @@ const REWARD_PRICE = 50;
 const REWARD_CONSENT_VERSION = 'reward-2026-08-12';
 const FOUR_GAME_CAMPAIGN_ID = 'four-games-v1';
 const CATEGORIES = new Set(['bug', 'idea', 'visual', 'other']);
+const CAMP_VALUE_TYPES = new Set([
+  'array', 'bigint', 'boolean', 'date', 'function', 'null', 'number', 'object', 'string', 'symbol', 'undefined',
+]);
+// Keep this transport allowlist aligned with dolphin-agent/core/camp-source-client.mjs.
+// Schema names outside the documented CAMP metadata contract are deliberately redacted.
+const CAMP_SCHEMA_FIELDS = new Set([
+  'ID', 'DATEBEGIN', 'DATEEND', 'NDOC', 'DAYCOUNT', 'ISVIP', 'ISSHAREDBALANCE', 'BALANCE',
+  'ISCAR', 'CARNUMBER', 'IDCARCARD', 'TENTCOUNT', 'DESCRIPTION', 'IDUSERCREATE', 'STATUS',
+  'RECORDCOLOR', 'RECORDFONT', 'IDOWNER', 'IDINOWNER', 'DATECHANGE', 'IDUSERCHANGE', 'DATEACTUAL',
+  'IDSTATION', 'IDUSERCLOSE', 'IDSTATIONCLOSE', 'KINDBENEFIT', 'BENEFITDESCRIPTION', 'ISBUS',
+  'IDCOMPANY', 'TIMESTART', 'IDVSTICKET', 'TIMEEND', 'ISGROUP', 'IDBENEFIT', 'IDADVSOURCE',
+  'IDACCOUNTBONUSCARD', 'ISBOOKING', 'ISGUESTINHOTEL', 'ISSTAFF', 'DATEEXCHANGE', 'NAME', 'PIC',
+  'TIMEBEGIN', 'TIMEUNTIL', 'ISVOUCHER', 'ISABONEMENT', 'IDGROUP', 'IDSTICKET', 'PRICE1', 'PRICE2',
+  'PRICEFORKIND', 'PRICEFORVALUE', 'IDCOACH', 'ISGROUPNULL', 'IDSHOWGROUP', 'ISPOOL', 'IDPIC',
+  'IDDEVISION', 'IDSUBJECT', 'KIND', 'IDGUESTTYPE', 'PRICE', 'IDTYPEDAY', 'PRICEFORKINDDOPLAT', 'PRICEDOPLAT',
+  'DAYOFWEEK', 'ISSERVICE', 'SERVICEPROC', 'ISTIMEPRICEDOPLAT1', 'ISTIMEPRICEDOPLAT2',
+  'PRICEDOPLAT1', 'PRICEDOPLAT2', 'TIMEPRICEDOPLAT1', 'TIMEPRICEDOPLAT2',
+  'IDACCOUNT', 'IDCARD', 'IDSERVICE', 'SUMMA', 'IDPOINTOFSALE', 'IDUSER', 'DATEDOC',
+  'IDTYPESALE', 'DAYNO', 'IDRSTACCOUNT', 'COMPUTERNAME', 'IDSALE', 'IDMAIN',
+  'IDHOTELACCOUNTPAYMENT', 'GUIDOPER', 'IDCARDFORSERVICE', 'QUANTITY', 'ISEXTRATIME',
+  'IDPARENTDOC', 'KINDCHECK', 'QUANTITYSUM',
+]);
+const CAMP_RESOURCE_NAMES = ['guestTypes', 'services', 'accounts', 'accountSales'];
+const SAFE_CAMP_ERRORS = new Set([
+  'CAMP API не ответил за 10 секунд.',
+  'Нет связи с CAMP API.',
+  'Ответ CAMP API слишком большой.',
+  'Диагностика CAMP API не настроена.',
+  'CAMP API не вернул диагностические данные.',
+]);
 const REWARD_CITIES = new Set(['Москва', 'Зеленогорск']);
 const REWARD_CITY_TIMEZONES = {
   Москва: 'Europe/Moscow',
@@ -194,11 +224,47 @@ function normalizeDolphinApiPath(value, fallback) {
 }
 
 function safeCampSchemaPath(value) {
-  return text(value, 120).replace(/[^\p{L}\p{N}_. $-]/gu, '');
+  const normalized = text(value, 120);
+  if (normalized === '$value') return normalized;
+  const segments = normalized.split('.');
+  return segments.length > 0
+    && segments.length <= 5
+    && segments.every(segment => segment === 'FIELD_REDACTED' || CAMP_SCHEMA_FIELDS.has(segment))
+    ? normalized
+    : '';
+}
+
+function sanitizeCampError(value) {
+  const message = text(value, 300);
+  if (SAFE_CAMP_ERRORS.has(message)) return message;
+  for (const resource of CAMP_RESOURCE_NAMES) {
+    if (message === `CAMP API отклонил ключ при запросе ${resource}.`
+      || message === `CAMP API не нашёл метод ${resource}.`
+      || message === `CAMP API попытался перенаправить запрос ${resource}; переход заблокирован.`
+      || message === `CAMP API вернул не JSON при запросе ${resource}.`
+      || message === `CAMP API недоступен при запросе ${resource}.`
+      || new RegExp(`^CAMP API ответил [1-5][0-9]{2} при запросе ${resource}\\.$`).test(message)) {
+      return message;
+    }
+  }
+  return message ? 'Ошибка CAMP API без безопасного описания.' : '';
+}
+
+function safeCampContainerPath(value) {
+  const normalized = text(value, 160);
+  const safeSegments = new Set([
+    'rows', 'data', 'items', 'result', 'guesttypes', 'guestTypes', 'guest_types', 'services', 'accounts',
+    'accountsales', 'accountSales', 'account_sales', 'Типы гостей', 'NODE_REDACTED',
+  ]);
+  const segments = normalized.split('.');
+  return segments[0] === '$'
+    && segments.length <= 6
+    && segments.slice(1).every(segment => safeSegments.has(segment))
+    ? normalized
+    : null;
 }
 
 function sanitizeCampSchema(value) {
-  const allowedTypes = new Set(['array', 'bigint', 'boolean', 'date', 'function', 'null', 'number', 'object', 'string', 'symbol', 'undefined']);
   return (Array.isArray(value) ? value : []).slice(0, 40).flatMap(field => {
     const fieldPath = safeCampSchemaPath(field?.path);
     if (!fieldPath) return [];
@@ -206,7 +272,7 @@ function sanitizeCampSchema(value) {
       path: fieldPath,
       types: (Array.isArray(field?.types) ? field.types : [])
         .map(type => text(type, 16))
-        .filter(type => allowedTypes.has(type))
+        .filter(type => CAMP_VALUE_TYPES.has(type))
         .slice(0, 8),
       observed: Math.min(100_000, Math.max(0, Number(field?.observed) || 0)),
       nulls: Math.min(100_000, Math.max(0, Number(field?.nulls) || 0)),
@@ -216,13 +282,11 @@ function sanitizeCampSchema(value) {
 
 function sanitizeCampProbe(value) {
   const probe = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const baseUrl = normalizeDolphinSourceUrls([probe.baseUrl])[0] || null;
   return {
     dateExchange: isIsoDate(probe.dateExchange) ? probe.dateExchange : null,
-    baseUrl,
     queryStyle: probe.queryStyle === 'legacy' ? 'legacy' : 'standard',
-    payloadType: text(probe.payloadType, 16) || null,
-    containerPath: safeCampSchemaPath(probe.containerPath) || null,
+    payloadType: CAMP_VALUE_TYPES.has(probe.payloadType) ? probe.payloadType : null,
+    containerPath: safeCampContainerPath(probe.containerPath),
     rowCount: Math.min(1_000_000, Math.max(0, Number(probe.rowCount) || 0)),
     profiledRows: Math.min(10_000, Math.max(0, Number(probe.profiledRows) || 0)),
     truncated: probe.truncated === true,
@@ -234,14 +298,14 @@ function sanitizeCampProbe(value) {
 
 function sanitizeCampResources(value) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  return Object.fromEntries(['guestTypes', 'services', 'accounts'].flatMap(resourceName => {
+  return Object.fromEntries(CAMP_RESOURCE_NAMES.flatMap(resourceName => {
     const resource = input[resourceName];
     if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return [];
     return [[resourceName, {
       status: ['ok', 'partial', 'error'].includes(resource.status) ? resource.status : 'error',
       probes: (Array.isArray(resource.probes) ? resource.probes : []).slice(0, 2).map(sanitizeCampProbe),
       errors: (Array.isArray(resource.errors) ? resource.errors : [])
-        .map(error => text(error, 300))
+        .map(sanitizeCampError)
         .filter(Boolean)
         .slice(0, 2),
     }]];
@@ -256,7 +320,7 @@ function sanitizeCampHeartbeat(value) {
       : 'waiting',
     lastAttemptAt: Number.isFinite(Number(source.lastAttemptAt)) ? Number(source.lastAttemptAt) : null,
     lastSuccessAt: Number.isFinite(Number(source.lastSuccessAt)) ? Number(source.lastSuccessAt) : null,
-    lastError: text(source.lastError, 500) || null,
+    lastError: sanitizeCampError(source.lastError) || null,
     initialDate: isIsoDate(source.initialDate) ? source.initialDate : null,
     currentDate: isIsoDate(source.currentDate) ? source.currentDate : null,
     resources: sanitizeCampResources(source.resources),
@@ -318,6 +382,7 @@ export function createFeedbackService(options) {
     dolphinCampGuestTypesPath = '/api/v1/camp/guesttypes',
     dolphinCampServicesPath = '/api/v1/camp/services',
     dolphinCampAccountsPath = '/api/v1/camp/accounts',
+    dolphinCampAccountSalesPath = '/api/v1/camp/accountsales',
     dolphinSourceProfiles = {},
     connectorRateLimit = DEFAULT_CONNECTOR_RATE_LIMIT,
     connectorRateWindowMs = DEFAULT_CONNECTOR_RATE_WINDOW_MS,
@@ -352,6 +417,7 @@ export function createFeedbackService(options) {
           guestTypes: normalizeDolphinApiPath(campEndpoints.guestTypes, '/api/v1/camp/guesttypes'),
           services: normalizeDolphinApiPath(campEndpoints.services, '/api/v1/camp/services'),
           accounts: normalizeDolphinApiPath(campEndpoints.accounts, '/api/v1/camp/accounts'),
+          accountSales: normalizeDolphinApiPath(campEndpoints.accountSales, '/api/v1/camp/accountsales'),
         },
       },
     };
@@ -368,6 +434,7 @@ export function createFeedbackService(options) {
       guestTypes: dolphinCampGuestTypesPath,
       services: dolphinCampServicesPath,
       accounts: dolphinCampAccountsPath,
+      accountSales: dolphinCampAccountSalesPath,
     },
   });
   const resolvedDolphinSourceProfiles = Object.fromEntries(Object.entries(dolphinSourceProfiles || {})

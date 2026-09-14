@@ -22,14 +22,20 @@ const KNOWN_CAMP_FIELDS = new Set([
   'IDDEVISION', 'IDSUBJECT', 'KIND', 'IDGUESTTYPE', 'PRICE', 'IDTYPEDAY', 'PRICEFORKINDDOPLAT', 'PRICEDOPLAT',
   'DAYOFWEEK', 'ISSERVICE', 'SERVICEPROC', 'ISTIMEPRICEDOPLAT1', 'ISTIMEPRICEDOPLAT2',
   'PRICEDOPLAT1', 'PRICEDOPLAT2', 'TIMEPRICEDOPLAT1', 'TIMEPRICEDOPLAT2',
+  'IDACCOUNT', 'IDCARD', 'IDSERVICE', 'SUMMA', 'IDPOINTOFSALE', 'IDUSER', 'DATEDOC',
+  'IDTYPESALE', 'DAYNO', 'IDRSTACCOUNT', 'COMPUTERNAME', 'IDSALE', 'IDMAIN',
+  'IDHOTELACCOUNTPAYMENT', 'GUIDOPER', 'IDCARDFORSERVICE', 'QUANTITY', 'ISEXTRATIME',
+  'IDPARENTDOC', 'KINDCHECK', 'QUANTITYSUM',
 ]);
 const KNOWN_CONTAINER_KEYS = new Set([
-  'rows', 'data', 'items', 'result', 'guesttypes', 'guest_types', 'services', 'accounts', 'типы гостей',
+  'rows', 'data', 'items', 'result', 'guesttypes', 'guest_types', 'services', 'accounts',
+  'accountsales', 'account_sales', 'типы гостей',
 ]);
 const DEFAULT_ENDPOINTS = Object.freeze({
   guestTypes: '/api/v1/camp/guesttypes',
   services: '/api/v1/camp/services',
   accounts: '/api/v1/camp/accounts',
+  accountSales: '/api/v1/camp/accountsales',
 });
 
 export class CampSourceApiError extends Error {
@@ -54,7 +60,7 @@ function normalizeApiPath(value, fallback) {
 
 export function normalizeCampSourceConfig(value = {}) {
   const urls = Array.isArray(value.baseUrls) ? value.baseUrls : [];
-  const baseUrls = [...new Set(urls.map(normalizeSourceBaseUrl).filter(Boolean))].slice(0, 8);
+  const baseUrls = [...new Set(urls.map(normalizeCampBaseUrl).filter(Boolean))].slice(0, 8);
   const apiKey = typeof value.apiKey === 'string' ? value.apiKey.trim().slice(0, 256) : '';
   const inputEndpoints = value.endpoints && typeof value.endpoints === 'object' ? value.endpoints : {};
   const initialDate = isIsoDate(value.initialDate) ? value.initialDate : DEFAULT_INITIAL_DATE;
@@ -67,6 +73,7 @@ export function normalizeCampSourceConfig(value = {}) {
       guestTypes: normalizeApiPath(inputEndpoints.guestTypes, DEFAULT_ENDPOINTS.guestTypes),
       services: normalizeApiPath(inputEndpoints.services, DEFAULT_ENDPOINTS.services),
       accounts: normalizeApiPath(inputEndpoints.accounts, DEFAULT_ENDPOINTS.accounts),
+      accountSales: normalizeApiPath(inputEndpoints.accountSales, DEFAULT_ENDPOINTS.accountSales),
     },
   };
 }
@@ -81,20 +88,53 @@ function timezoneDateKey(timestamp, timezoneOffset = '+03:00') {
   return `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}-${String(local.getUTCDate()).padStart(2, '0')}`;
 }
 
-function hashedSegment(prefix, value) {
-  return `${prefix}_${createHash('sha256').update(String(value), 'utf8').digest('hex').slice(0, 12)}`;
+function isPrivateIpv4(hostname) {
+  const parts = hostname.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  return parts[0] === 10
+    || parts[0] === 127
+    || (parts[0] === 192 && parts[1] === 168)
+    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
+}
+
+function normalizeCampBaseUrl(value) {
+  const normalized = normalizeSourceBaseUrl(value);
+  if (!normalized) return '';
+  const hostname = new URL(normalized).hostname.toLowerCase();
+  return hostname === 'localhost' || hostname === '::1' || hostname === '[::1]' || isPrivateIpv4(hostname)
+    ? normalized
+    : '';
 }
 
 function safeContainerSegment(value) {
   const normalized = String(value || '').trim();
   return KNOWN_CONTAINER_KEYS.has(normalized.toLocaleLowerCase('ru'))
     ? normalized
-    : hashedSegment('NODE', normalized);
+    : 'NODE_REDACTED';
 }
 
 function safeSchemaSegment(value) {
   const normalized = String(value || '').trim().toUpperCase();
-  return KNOWN_CAMP_FIELDS.has(normalized) ? normalized : hashedSegment('FIELD', value);
+  return KNOWN_CAMP_FIELDS.has(normalized) ? normalized : 'FIELD_REDACTED';
+}
+
+export function normalizeCampContainerPath(value) {
+  const normalized = String(value || '').trim().slice(0, 160);
+  const segments = normalized.split('.');
+  if (segments[0] !== '$' || segments.length > MAX_SCHEMA_DEPTH + 2) return '';
+  return segments.slice(1).every(segment => (
+    segment === 'NODE_REDACTED' || KNOWN_CONTAINER_KEYS.has(segment.toLocaleLowerCase('ru'))
+  )) ? normalized : '';
+}
+
+export function normalizeCampSchemaPath(value) {
+  const normalized = String(value || '').trim().slice(0, 120);
+  if (normalized === '$value') return normalized;
+  const segments = normalized.split('.');
+  if (segments.length === 0 || segments.length > MAX_SCHEMA_DEPTH + 1) return '';
+  return segments.every(segment => segment === 'FIELD_REDACTED' || KNOWN_CAMP_FIELDS.has(segment))
+    ? normalized
+    : '';
 }
 
 function findRows(value, depth = 0, containerPath = '$') {
@@ -102,7 +142,7 @@ function findRows(value, depth = 0, containerPath = '$') {
   if (!value || typeof value !== 'object' || depth > MAX_SCHEMA_DEPTH) return { rows: [], containerPath };
   const entries = Object.entries(value).slice(0, MAX_OBJECT_FIELDS);
   const directArrays = entries.filter(([, nested]) => Array.isArray(nested));
-  const preferred = directArrays.find(([key]) => /^(?:rows|data|items|guest_?types|services|accounts)$/i.test(key));
+  const preferred = directArrays.find(([key]) => /^(?:rows|data|items|guest_?types|services|accounts|account_?sales)$/i.test(key));
   if (preferred) {
     return { rows: preferred[1], containerPath: `${containerPath}.${safeContainerSegment(preferred[0])}` };
   }
@@ -325,6 +365,7 @@ export class CampSourceApiClient {
       ['guestTypes', this.config.endpoints.guestTypes, [this.config.initialDate]],
       ['services', this.config.endpoints.services, [this.config.initialDate]],
       ['accounts', this.config.endpoints.accounts, [...new Set([this.config.initialDate, currentDate])]],
+      ['accountSales', this.config.endpoints.accountSales, [...new Set([this.config.initialDate, currentDate])]],
     ];
     const resources = {};
     let successCount = 0;

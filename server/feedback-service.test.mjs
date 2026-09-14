@@ -677,6 +677,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     dolphinCampGuestTypesPath: '/api/v1/camp/guesttypes',
     dolphinCampServicesPath: '/api/v1/camp/services',
     dolphinCampAccountsPath: '/api/v1/camp/accounts',
+    dolphinCampAccountSalesPath: '/api/v1/camp/accountsales-custom',
     dolphinSourceProfiles: {
       zelenogorsk: {
         apiKey: 'zelenogorsk-source-api-key-for-test-only',
@@ -748,6 +749,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           guestTypes: '/api/v1/camp/guesttypes',
           services: '/api/v1/camp/services',
           accounts: '/api/v1/camp/accounts',
+          accountSales: '/api/v1/camp/accountsales',
         },
       },
     });
@@ -770,6 +772,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           guestTypes: '/api/v1/camp/guesttypes',
           services: '/api/v1/camp/services',
           accounts: '/api/v1/camp/accounts',
+          accountSales: '/api/v1/camp/accountsales-custom',
         },
       },
     });
@@ -791,6 +794,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           status: 'diagnostic',
           lastAttemptAt: 1789380000000,
           lastSuccessAt: 1789380001000,
+          lastError: 'Ошибка для клиента Иван Иванов, телефон +7 999 555-44-33',
           initialDate: '2023-09-01',
           currentDate: '2026-09-14',
           apiKey: 'must-not-be-persisted',
@@ -813,6 +817,29 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
               }],
               errors: [],
             },
+            accountSales: {
+              status: 'ok',
+              probes: [{
+                dateExchange: '2026-09-14',
+                baseUrl: 'http://10.10.0.250:60888',
+                queryStyle: 'standard',
+                payloadType: 'array',
+                containerPath: '$',
+                rowCount: 948,
+                profiledRows: 948,
+                truncated: false,
+                byteCount: 42000,
+                schemaHash: 'd'.repeat(64),
+                schema: [
+                  { path: 'IDACCOUNT', types: ['number'], observed: 948, nulls: 0, value: 'private-account-holder' },
+                  { path: 'PHONE_79995554433', types: ['string'], observed: 948, nulls: 0 },
+                  { path: 'Имя клиента', types: ['string'], observed: 948, nulls: 0 },
+                ],
+                rawRows: [{ IDACCOUNT: 'private-account-holder' }],
+                apiKey: 'must-not-be-persisted',
+              }],
+              errors: ['CAMP API вернул данные клиента Иван Иванов, телефон +7 999 555-44-33'],
+            },
           },
         },
       }),
@@ -821,8 +848,23 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     const heartbeatBody = await heartbeat.json();
     assert.equal(heartbeatBody.heartbeat.sourceApi.status, 'diagnostic');
     assert.equal(heartbeatBody.heartbeat.campApi.status, 'diagnostic');
+    assert.equal(heartbeatBody.heartbeat.campApi.lastError, 'Ошибка CAMP API без безопасного описания.');
     assert.equal(heartbeatBody.heartbeat.campApi.resources.guestTypes.probes[0].rowCount, 182);
     assert.equal('rawRows' in heartbeatBody.heartbeat.campApi.resources.guestTypes.probes[0], false);
+    assert.equal(heartbeatBody.heartbeat.campApi.resources.accountSales.probes[0].rowCount, 948);
+    assert.deepEqual(heartbeatBody.heartbeat.campApi.resources.accountSales.probes[0].schema, [{
+      path: 'IDACCOUNT',
+      types: ['number'],
+      observed: 948,
+      nulls: 0,
+    }]);
+    assert.equal('rawRows' in heartbeatBody.heartbeat.campApi.resources.accountSales.probes[0], false);
+    assert.equal('apiKey' in heartbeatBody.heartbeat.campApi.resources.accountSales.probes[0], false);
+    assert.equal('baseUrl' in heartbeatBody.heartbeat.campApi.resources.accountSales.probes[0], false);
+    assert.deepEqual(
+      heartbeatBody.heartbeat.campApi.resources.accountSales.errors,
+      ['Ошибка CAMP API без безопасного описания.'],
+    );
 
     const imported = await fetch(`${origin}/api/integrations/dolphin/redemptions`, {
       method: 'POST',
@@ -840,6 +882,11 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     assert.equal(stored.includes(enrollmentToken), false);
     assert.equal(stored.includes(deviceToken), false);
     assert.equal(stored.includes('must-not-be-persisted'), false);
+    assert.equal(stored.includes('private-account-holder'), false);
+    assert.equal(stored.includes('Имя клиента'), false);
+    assert.equal(stored.includes('PHONE_79995554433'), false);
+    assert.equal(stored.includes('79995554433'), false);
+    assert.equal(stored.includes('Иван Иванов'), false);
     assert.equal(stored.includes('dolphin-source-api-key-for-test-only'), false);
     assert.match(stored, /"appVersion": "1\.1\.0"/);
     assert.match(stored, new RegExp(sha256(deviceToken)));

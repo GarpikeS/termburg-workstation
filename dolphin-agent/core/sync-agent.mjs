@@ -11,6 +11,7 @@ import {
   UNKNOWN_RETRY_TTL_MS,
 } from './constants.mjs';
 import { extractRedemptions } from './redemption-extractor.mjs';
+import { sanitizeCampApiState } from './state-store.mjs';
 
 const MAX_FILES_PER_SCAN = 100;
 const MAX_BATCHES_PER_SCAN = 10;
@@ -463,7 +464,7 @@ export class DolphinSyncAgent {
               skippedWithoutEntryTime: this.state.sourceApi.skippedWithoutEntryTime,
               schemaKeys: this.state.sourceApi.schemaKeys,
             },
-            campApi: this.state.campApi,
+            campApi: sanitizeCampApiState(this.state.campApi),
           });
           this.state.lastSuccessAt = this.now();
         } catch (error) {

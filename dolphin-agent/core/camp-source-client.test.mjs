@@ -6,7 +6,7 @@ import {
   profileCampResponse,
 } from './camp-source-client.mjs';
 
-test('probes CAMP dictionaries from 2023-09-01 and accounts for the initial and current Moscow dates', async () => {
+test('probes CAMP dictionaries once and transactional resources for the initial and current Moscow dates', async () => {
   const requests = [];
   const client = new CampSourceApiClient({
     enabled: true,
@@ -17,6 +17,7 @@ test('probes CAMP dictionaries from 2023-09-01 and accounts for the initial and 
       guestTypes: '/api/v1/camp/guesttypes',
       services: '/api/v1/camp/services',
       accounts: '/api/v1/camp/accounts',
+      accountSales: '/api/v1/camp/accountsales',
     },
   }, {
     fetchImpl: async (url, options) => {
@@ -25,7 +26,9 @@ test('probes CAMP dictionaries from 2023-09-01 and accounts for the initial and 
         ? { 'Типы гостей': [{ ID: 1, NAME: 'Взрослый' }] }
         : url.includes('/services')
           ? { services: [{ ID: 2, NAME: 'Банный комплекс' }] }
-          : { accounts: [{ ID: 3, BALANCE: 1200, DESCRIPTION: 'Иван Иванов' }] };
+          : url.includes('/accountsales')
+            ? { accountSales: [{ ID: 4, IDACCOUNT: 3, IDSERVICE: 2, SUMMA: 444.25, COMPUTERNAME: 'CASHBOX-SECRET' }] }
+            : { accounts: [{ ID: 3, BALANCE: 1200, DESCRIPTION: 'Иван Иванов' }] };
       const json = JSON.stringify(body);
       return new Response(url.includes('/guesttypes') ? `\uFEFF${json}` : json, {
         status: 200,
@@ -44,14 +47,17 @@ test('probes CAMP dictionaries from 2023-09-01 and accounts for the initial and 
     'http://10.10.0.250:60888/api/v1/camp/services?dateexchange=2023-09-01',
     'http://10.10.0.250:60888/api/v1/camp/accounts?dateexchange=2023-09-01',
     'http://10.10.0.250:60888/api/v1/camp/accounts?dateexchange=2026-09-14',
+    'http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2023-09-01',
+    'http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2026-09-14',
   ]);
   assert.ok(requests.every(request => request.options.headers['X-API-Key'] === 'local-api-key-for-test-only'));
   assert.ok(requests.every(request => request.options.redirect === 'manual'));
   assert.equal(result.status, 'diagnostic');
   assert.equal(result.resources.guestTypes.probes[0].rowCount, 1);
   assert.equal(result.resources.accounts.probes.length, 2);
-  assert.match(JSON.stringify(result), /BALANCE/);
-  assert.doesNotMatch(JSON.stringify(result), /Взрослый|Банный комплекс|Иван Иванов|local-api-key/);
+  assert.equal(result.resources.accountSales.probes.length, 2);
+  assert.match(JSON.stringify(result), /BALANCE|SUMMA/);
+  assert.doesNotMatch(JSON.stringify(result), /Взрослый|Банный комплекс|Иван Иванов|CASHBOX-SECRET|444\.25|local-api-key/);
 });
 
 test('falls back to the legacy ampersand dateexchange URL only after a route-level 404', async () => {
@@ -105,13 +111,15 @@ test('negotiates standard and legacy query styles independently for each endpoin
   assert.ok(urls.includes('http://10.10.0.250:60888/api/v1/camp/guesttypes&dateexchange=2023-09-01'));
   assert.ok(urls.includes('http://10.10.0.250:60888/api/v1/camp/services?dateexchange=2023-09-01'));
   assert.ok(!urls.includes('http://10.10.0.250:60888/api/v1/camp/services&dateexchange=2023-09-01'));
+  assert.ok(urls.includes('http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2023-09-01'));
+  assert.ok(!urls.includes('http://10.10.0.250:60888/api/v1/camp/accountsales&dateexchange=2023-09-01'));
 });
 
-test('never sends an API key to the supplied public plain-HTTP address', async () => {
+test('never sends a CAMP API key outside the private network', async () => {
   let called = false;
   const config = normalizeCampSourceConfig({
     enabled: true,
-    baseUrls: ['http://85.202.234.197:60888'],
+    baseUrls: ['http://85.202.234.197:60888', 'https://public-api.example.test'],
     apiKey: 'must-never-leave-over-http',
     initialDate: '2023-09-01',
   });
@@ -124,6 +132,7 @@ test('never sends an API key to the supplied public plain-HTTP address', async (
 
   await assert.rejects(() => client.probe(), /не настроен/i);
   assert.equal(config.enabled, false);
+  assert.deepEqual(config.baseUrls, []);
   assert.equal(called, false);
 });
 
@@ -144,6 +153,25 @@ test('profiles field names and types without retaining source values', () => {
   assert.deepEqual(profile.schema.find(field => field.path === 'ID')?.types, ['number']);
   assert.deepEqual(profile.schema.find(field => field.path === 'DATEEND')?.types, ['null', 'string']);
   assert.doesNotMatch(JSON.stringify(profile), /Секретное имя|Другое имя|2026-09-14T10:00:00/);
+});
+
+test('recognizes every CAMP_ACCOUNTSALES metadata field without retaining row values', () => {
+  const metadataFields = [
+    'ID', 'IDACCOUNT', 'IDCARD', 'IDSERVICE', 'SUMMA', 'IDPOINTOFSALE', 'IDUSER', 'STATUS',
+    'RECORDCOLOR', 'RECORDFONT', 'IDOWNER', 'IDINOWNER', 'DATEDOC', 'IDTYPESALE', 'DAYNO',
+    'IDRSTACCOUNT', 'COMPUTERNAME', 'IDSALE', 'IDMAIN', 'IDHOTELACCOUNTPAYMENT', 'GUIDOPER',
+    'IDCARDFORSERVICE', 'QUANTITY', 'ISEXTRATIME', 'IDPARENTDOC', 'KINDCHECK', 'IDSUBJECT',
+    'QUANTITYSUM', 'DATEEXCHANGE',
+  ];
+  const row = Object.fromEntries(metadataFields.map((field, index) => [field, `secret-${index}-${field}`]));
+
+  const profile = profileCampResponse({ accountSales: [row] });
+
+  assert.equal(profile.containerPath, '$.accountSales');
+  assert.equal(profile.rowCount, 1);
+  assert.deepEqual(profile.schema.map(field => field.path).sort(), [...metadataFields].sort());
+  assert.doesNotMatch(JSON.stringify(profile), /secret-/);
+  assert.ok(profile.schema.every(field => !field.path.startsWith('FIELD_')));
 });
 
 test('keeps the schema hash stable when only row and null counts change', () => {
@@ -168,13 +196,13 @@ test('prefers the known data collection over an earlier empty errors array', () 
   assert.ok(profile.schema.some(field => field.path === 'BALANCE'));
 });
 
-test('hashes unknown container and field names so dynamic PII keys cannot leave the workstation', () => {
+test('redacts unknown container and field names so dynamic PII keys cannot leave the workstation', () => {
   const profile = profileCampResponse({
     'Иван Иванов': [{ ID: 41, 'Телефон клиента': '+7 999 000-00-00' }],
   });
   const serialized = JSON.stringify(profile);
 
   assert.doesNotMatch(serialized, /Иван Иванов|Телефон клиента|999 000/);
-  assert.match(profile.containerPath, /^\$\.NODE_[a-f0-9]{12}$/);
-  assert.ok(profile.schema.some(field => /^FIELD_[a-f0-9]{12}$/.test(field.path)));
+  assert.equal(profile.containerPath, '$.NODE_REDACTED');
+  assert.ok(profile.schema.some(field => field.path === 'FIELD_REDACTED'));
 });

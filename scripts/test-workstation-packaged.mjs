@@ -15,6 +15,8 @@ const expectedLocationArgument = process.argv.find(argument => argument.startsWi
 const expectedLocation = expectedLocationArgument?.slice('--expected-location='.length) || '';
 const expectedRemovedAuthArgument = process.argv.find(argument => argument.startsWith('--expected-removed-auth-account='));
 const expectedRemovedAuthAccount = expectedRemovedAuthArgument?.slice('--expected-removed-auth-account='.length) || '';
+const expectedVersionArgument = process.argv.find(argument => argument.startsWith('--expected-version='));
+const expectedVersion = expectedVersionArgument?.slice('--expected-version='.length) || '';
 
 function smokeAccount(username, locationId) {
   return {
@@ -86,6 +88,7 @@ try {
   const result = JSON.parse(await fs.readFile(outputPath, 'utf8'));
   if (result.ok !== true
     || result.mode !== 'workstation'
+    || (expectedVersion && result.version !== expectedVersion)
     || result.dolphinSkipped !== true
     || result.dolphinPackage?.enrollmentReady !== enrollmentExpected
     || result.dolphinPackage?.excelReaderReady !== true

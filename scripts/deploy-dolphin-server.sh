@@ -76,6 +76,7 @@ upsert_env_value DOLPHIN_CAMP_INITIAL_DATE 2023-09-01
 upsert_env_value DOLPHIN_CAMP_GUESTTYPES_PATH /api/v1/camp/guesttypes
 upsert_env_value DOLPHIN_CAMP_SERVICES_PATH /api/v1/camp/services
 upsert_env_value DOLPHIN_CAMP_ACCOUNTS_PATH /api/v1/camp/accounts
+upsert_env_value DOLPHIN_CAMP_ACCOUNTSALES_PATH /api/v1/camp/accountsales
 chmod 0600 "$env_file"
 
 nginx -t
@@ -111,10 +112,17 @@ test "$source_unauthorized_status" = 401
 source_config_response=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 \
   -H "Authorization: Bearer $DOLPHIN_CONNECTOR_TOKEN" \
   https://tbgame.ru/api/integrations/dolphin/source-config)
-node -e '
-  const value = JSON.parse(process.argv[1]);
-  const expectedApply = process.argv[2] === "1";
-  const expectedCampEnabled = process.argv[3] === "1";
+printf '%s' "$source_config_response" | \
+  EXPECTED_APPLY="${DOLPHIN_SOURCE_APPLY:-0}" \
+  EXPECTED_CAMP_ENABLED="${DOLPHIN_CAMP_SOURCE_ENABLED:-0}" \
+  node -e '
+  let body = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", chunk => { body += chunk; });
+  process.stdin.on("end", () => {
+  const value = JSON.parse(body);
+  const expectedApply = process.env.EXPECTED_APPLY === "1";
+  const expectedCampEnabled = process.env.EXPECTED_CAMP_ENABLED === "1";
   if (!value.enabled || !Array.isArray(value.baseUrls) || value.baseUrls.length === 0) process.exit(1);
   if (typeof value.apiKey !== "string" || value.apiKey.length < 16) process.exit(1);
   if (value.applyRedemptions !== expectedApply) process.exit(1);
@@ -124,7 +132,18 @@ node -e '
   if (endpoints.guestTypes !== "/api/v1/camp/guesttypes") process.exit(1);
   if (endpoints.services !== "/api/v1/camp/services") process.exit(1);
   if (endpoints.accounts !== "/api/v1/camp/accounts") process.exit(1);
-' "$source_config_response" "${DOLPHIN_SOURCE_APPLY:-0}" "${DOLPHIN_CAMP_SOURCE_ENABLED:-0}"
+  if (endpoints.accountSales !== "/api/v1/camp/accountsales") process.exit(1);
+  });
+'
+
+large_heartbeat_response=$(node -e 'process.stdout.write(JSON.stringify({ appVersion: "deploy-size-check", padding: "x".repeat(64 * 1024) }))' | \
+  curl -ksS --resolve tbgame.ru:443:127.0.0.1 \
+    -H "Authorization: Bearer $DOLPHIN_CONNECTOR_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data-binary @- \
+    https://tbgame.ru/api/integrations/dolphin/health)
+node -e 'const v=JSON.parse(process.argv[1]); if (!v.ok || v.service !== "dolphin-redemption-import") process.exit(1)' \
+  "$large_heartbeat_response"
 
 bad_enrollment_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
   -H 'Content-Type: application/json' \
@@ -175,7 +194,7 @@ done
 echo "Dolphin connector deployed. Backup: $backup_dir"
 echo "Health: authorized OK, unauthenticated 401, dry-run idempotency OK"
 echo "Local API config: authorized OK, configured redemption mode preserved"
-echo "CAMP diagnostic: enabled, start date and three endpoint paths verified"
+echo "CAMP diagnostic: enabled, start date and four endpoint paths verified"
 echo "Enrollment: wrong token rejected, one-time token left unused"
 echo "Redemption journal lines: $journal_after"
 printf 'Backups kept: %s\n' "${backups[*]}"

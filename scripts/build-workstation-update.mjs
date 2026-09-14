@@ -9,6 +9,7 @@ const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
 const releaseDirectory = path.join(repoRoot, 'release', 'workstation-update');
 const unpackedDirectory = path.join(repoRoot, 'release', 'workstation-update', 'win-unpacked');
 const fullBuildUnpackedDirectory = path.join(repoRoot, 'release', 'workstation', 'win-unpacked');
+const builderConfigPath = path.join(repoRoot, 'workstation', 'electron-builder.update.json');
 const updateArtifactPattern = /^Termburg-Workstation-Update-(\d+)\.(\d+)\.(\d+)\.exe(?:\.sha256|\.blockmap)?$/;
 
 function run(command, args) {
@@ -47,6 +48,9 @@ async function cleanupUpdateArtifacts(keepCount = 2) {
 }
 
 try {
+  const builderConfig = JSON.parse(await fs.readFile(builderConfigPath, 'utf8'));
+  const expectedVersion = String(builderConfig?.extraMetadata?.version || '');
+  if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)) throw new Error('Workstation update version is invalid.');
   await fs.rm(unpackedDirectory, { recursive: true, force: true });
   await fs.rm(fullBuildUnpackedDirectory, { recursive: true, force: true });
   await cleanupUpdateArtifacts();
@@ -64,6 +68,7 @@ try {
   runNodeScript('scripts/test-workstation-packaged.mjs', [
     `--unpacked-directory=${unpackedDirectory}`,
     '--without-enrollment',
+    `--expected-version=${expectedVersion}`,
   ]);
   runNodeScript('scripts/write-workstation-update-checksum.mjs');
   await cleanupUpdateArtifacts();
