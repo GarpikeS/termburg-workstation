@@ -13,6 +13,7 @@ const testFiles = [
   'workstation/status.test.mjs',
   'scripts/workstation-schedule-auth-secrets.test.mjs',
   'dolphin-agent/core/redemption-extractor.test.mjs',
+  'dolphin-agent/core/camp-source-client.test.mjs',
   'dolphin-agent/core/source-api-client.test.mjs',
   'dolphin-agent/core/sync-agent.test.mjs',
   'dolphin-agent/core/server-client.test.mjs',

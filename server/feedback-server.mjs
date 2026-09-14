@@ -21,6 +21,11 @@ const service = await startFeedbackService({
   dolphinSourceApiPath: process.env.DOLPHIN_SOURCE_API_PATH || '/api/v1/barcodes/game',
   dolphinSourceApply: process.env.DOLPHIN_SOURCE_APPLY === '1',
   dolphinSourceLookbackDays: Number(process.env.DOLPHIN_SOURCE_LOOKBACK_DAYS || 2),
+  dolphinCampSourceEnabled: process.env.DOLPHIN_CAMP_SOURCE_ENABLED === '1',
+  dolphinCampInitialDate: process.env.DOLPHIN_CAMP_INITIAL_DATE || '2023-09-01',
+  dolphinCampGuestTypesPath: process.env.DOLPHIN_CAMP_GUESTTYPES_PATH || '/api/v1/camp/guesttypes',
+  dolphinCampServicesPath: process.env.DOLPHIN_CAMP_SERVICES_PATH || '/api/v1/camp/services',
+  dolphinCampAccountsPath: process.env.DOLPHIN_CAMP_ACCOUNTS_PATH || '/api/v1/camp/accounts',
   dolphinSourceProfiles: {
     zelenogorsk: {
       apiKey: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_KEY || '',
@@ -28,6 +33,8 @@ const service = await startFeedbackService({
       apiPath: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_PATH || '/api/v1/barcodes/game',
       apply: process.env.DOLPHIN_ZELENOGORSK_SOURCE_APPLY === '1',
       lookbackDays: Number(process.env.DOLPHIN_ZELENOGORSK_SOURCE_LOOKBACK_DAYS || 2),
+      campEnabled: process.env.DOLPHIN_ZELENOGORSK_CAMP_SOURCE_ENABLED === '1',
+      campInitialDate: process.env.DOLPHIN_ZELENOGORSK_CAMP_INITIAL_DATE || '2023-09-01',
     },
   },
   dolphinConnectorsDataFile: process.env.DOLPHIN_CONNECTORS_DATA_FILE || path.join(

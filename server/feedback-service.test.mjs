@@ -672,6 +672,11 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     dolphinSourceApiPath: '/api/v1/barcodes/game',
     dolphinSourceApply: false,
     dolphinSourceLookbackDays: 2,
+    dolphinCampSourceEnabled: true,
+    dolphinCampInitialDate: '2023-09-01',
+    dolphinCampGuestTypesPath: '/api/v1/camp/guesttypes',
+    dolphinCampServicesPath: '/api/v1/camp/services',
+    dolphinCampAccountsPath: '/api/v1/camp/accounts',
     dolphinSourceProfiles: {
       zelenogorsk: {
         apiKey: 'zelenogorsk-source-api-key-for-test-only',
@@ -736,6 +741,15 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
       apiPath: '/api/v1/barcodes/game',
       lookbackDays: 3,
       applyRedemptions: true,
+      camp: {
+        enabled: false,
+        initialDate: '2023-09-01',
+        endpoints: {
+          guestTypes: '/api/v1/camp/guesttypes',
+          services: '/api/v1/camp/services',
+          accounts: '/api/v1/camp/accounts',
+        },
+      },
     });
 
     const legacySourceConfig = await fetch(`${origin}/api/integrations/dolphin/source-config`, {
@@ -749,6 +763,15 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
       apiPath: '/api/v1/barcodes/game',
       lookbackDays: 2,
       applyRedemptions: false,
+      camp: {
+        enabled: true,
+        initialDate: '2023-09-01',
+        endpoints: {
+          guestTypes: '/api/v1/camp/guesttypes',
+          services: '/api/v1/camp/services',
+          accounts: '/api/v1/camp/accounts',
+        },
+      },
     });
 
     const heartbeat = await fetch(`${origin}/api/integrations/dolphin/health`, {
@@ -764,10 +787,42 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           schemaKeys: ['barcode', 'entry_time'],
           apiKey: 'must-not-be-persisted',
         },
+        campApi: {
+          status: 'diagnostic',
+          lastAttemptAt: 1789380000000,
+          lastSuccessAt: 1789380001000,
+          initialDate: '2023-09-01',
+          currentDate: '2026-09-14',
+          apiKey: 'must-not-be-persisted',
+          resources: {
+            guestTypes: {
+              status: 'ok',
+              probes: [{
+                dateExchange: '2023-09-01',
+                baseUrl: 'http://10.10.0.250:60888',
+                queryStyle: 'standard',
+                payloadType: 'object',
+                containerPath: '$.Типы гостей',
+                rowCount: 182,
+                profiledRows: 182,
+                truncated: false,
+                byteCount: 12000,
+                schemaHash: 'c'.repeat(64),
+                schema: [{ path: 'NAME', types: ['string'], observed: 182, nulls: 0, value: 'must-not-be-persisted' }],
+                rawRows: [{ NAME: 'must-not-be-persisted' }],
+              }],
+              errors: [],
+            },
+          },
+        },
       }),
     });
     assert.equal(heartbeat.status, 200);
-    assert.equal((await heartbeat.json()).heartbeat.sourceApi.status, 'diagnostic');
+    const heartbeatBody = await heartbeat.json();
+    assert.equal(heartbeatBody.heartbeat.sourceApi.status, 'diagnostic');
+    assert.equal(heartbeatBody.heartbeat.campApi.status, 'diagnostic');
+    assert.equal(heartbeatBody.heartbeat.campApi.resources.guestTypes.probes[0].rowCount, 182);
+    assert.equal('rawRows' in heartbeatBody.heartbeat.campApi.resources.guestTypes.probes[0], false);
 
     const imported = await fetch(`${origin}/api/integrations/dolphin/redemptions`, {
       method: 'POST',

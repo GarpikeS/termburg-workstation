@@ -2,6 +2,7 @@ export const DEFAULT_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/rede
 export const DEFAULT_HEALTH_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/health';
 export const DEFAULT_SOURCE_CONFIG_ENDPOINT = 'https://tbgame.ru/api/integrations/dolphin/source-config';
 export const DEFAULT_SCAN_INTERVAL_MS = 5 * 60 * 1000;
+export const CAMP_PROBE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const HTTP_TIMEOUT_MS = 10_000;
 export const MAX_HTTP_ATTEMPTS = 2;
 export const MAX_BATCH_ROWS = 200;

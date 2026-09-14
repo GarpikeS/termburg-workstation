@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  CAMP_PROBE_INTERVAL_MS,
   DEFAULT_SCAN_INTERVAL_MS,
   DOLPHIN_EXPORT_NAME_PATTERN,
   MAX_BATCH_ROWS,
@@ -73,6 +74,7 @@ export class DolphinSyncAgent {
     this.readerOptions = options.readerOptions || {};
     this.clientFactory = options.clientFactory;
     this.sourceClientFactory = options.sourceClientFactory || null;
+    this.campClientFactory = options.campClientFactory || null;
     this.configProvider = options.configProvider;
     this.tokenProvider = options.tokenProvider;
     this.logger = options.logger || console;
@@ -107,6 +109,7 @@ export class DolphinSyncAgent {
       lastSuccessAt: state?.lastSuccessAt || null,
       lastError: state?.lastError || null,
       sourceApi: state?.sourceApi || null,
+      campApi: state?.campApi || null,
     };
   }
 
@@ -259,6 +262,76 @@ export class DolphinSyncAgent {
     }
   }
 
+  async scanCampApi(config, token, serverClient, options = {}) {
+    if (!this.campClientFactory || typeof serverClient?.sourceConfig !== 'function') return false;
+    const attemptedAt = this.now();
+    const lastAttemptAt = Number(this.state.campApi.lastAttemptAt) || 0;
+    if (options.force !== true && lastAttemptAt > 0 && attemptedAt - lastAttemptAt < CAMP_PROBE_INTERVAL_MS) {
+      return false;
+    }
+    const lastSuccessAt = Number(this.state.campApi.lastSuccessAt) || 0;
+    this.state.campApi.lastAttemptAt = attemptedAt;
+    try {
+      const sourceConfig = await serverClient.sourceConfig(token);
+      const campConfig = sourceConfig?.camp;
+      if (campConfig?.enabled !== true) {
+        this.state.campApi = {
+          ...this.state.campApi,
+          status: 'disabled',
+          lastAttemptAt: attemptedAt,
+          lastError: null,
+          resources: {},
+        };
+        return false;
+      }
+
+      const result = await this.campClientFactory({
+        ...campConfig,
+        baseUrls: sourceConfig.baseUrls,
+        apiKey: sourceConfig.apiKey,
+      }).probe({
+        timestamp: attemptedAt,
+        timezoneOffset: config.timezoneOffset,
+      });
+      const resourceErrors = Object.values(result.resources || {})
+        .flatMap(resource => Array.isArray(resource?.errors) ? resource.errors : [])
+        .filter(Boolean);
+      this.state.campApi = {
+        status: result.status,
+        lastAttemptAt: attemptedAt,
+        lastSuccessAt: result.status === 'diagnostic' ? this.now() : lastSuccessAt || null,
+        lastError: resourceErrors[0] || null,
+        initialDate: result.initialDate,
+        currentDate: result.currentDate,
+        resources: result.resources,
+      };
+      this.logger.info('CAMP API diagnostic completed', {
+        status: result.status,
+        initialDate: result.initialDate,
+        currentDate: result.currentDate,
+        resources: Object.fromEntries(Object.entries(result.resources || {}).map(([name, resource]) => [
+          name,
+          {
+            status: resource.status,
+            rowCounts: (resource.probes || []).map(probe => probe.rowCount),
+          },
+        ])),
+      });
+      if (result.status === 'error') throw new Error(resourceErrors[0] || 'CAMP API не вернул диагностические данные.');
+      return true;
+    } catch (error) {
+      const message = publicError(error);
+      this.state.campApi = {
+        ...this.state.campApi,
+        status: 'error',
+        lastAttemptAt: attemptedAt,
+        lastError: message,
+      };
+      this.logger.error('CAMP API diagnostic failed', { error: message });
+      throw error;
+    }
+  }
+
   dueRows(now) {
     return Object.values(this.state.queue)
       .filter(row => Number(row.nextAttemptAt || 0) <= now)
@@ -349,6 +422,14 @@ export class DolphinSyncAgent {
         cycleErrors.push(publicError(error));
       }
 
+      try {
+        await this.scanCampApi(config, token, serverClient, {
+          force: options.force === true || options.forceCamp === true,
+        });
+      } catch (error) {
+        cycleErrors.push(publicError(error));
+      }
+
       if (config.watchFolder) {
         try {
           const stat = await fs.stat(config.watchFolder);
@@ -382,6 +463,7 @@ export class DolphinSyncAgent {
               skippedWithoutEntryTime: this.state.sourceApi.skippedWithoutEntryTime,
               schemaKeys: this.state.sourceApi.schemaKeys,
             },
+            campApi: this.state.campApi,
           });
           this.state.lastSuccessAt = this.now();
         } catch (error) {

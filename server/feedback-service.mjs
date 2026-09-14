@@ -6,6 +6,7 @@ import { createAccountService } from './account-service.mjs';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_ADMIN_BODY_BYTES = 256 * 1024;
+const MAX_CONNECTOR_HEARTBEAT_BYTES = 128 * 1024;
 const MAX_REDEMPTION_IMPORT_ROWS = 2_000;
 const DEFAULT_RATE_LIMIT = 5;
 const DEFAULT_RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -186,6 +187,82 @@ function normalizeDolphinSourceUrls(value) {
   return [...new Set(normalized)].slice(0, 8);
 }
 
+function normalizeDolphinApiPath(value, fallback) {
+  return typeof value === 'string' && /^\/[a-zA-Z0-9/_-]{1,180}$/.test(value)
+    ? value
+    : fallback;
+}
+
+function safeCampSchemaPath(value) {
+  return text(value, 120).replace(/[^\p{L}\p{N}_. $-]/gu, '');
+}
+
+function sanitizeCampSchema(value) {
+  const allowedTypes = new Set(['array', 'bigint', 'boolean', 'date', 'function', 'null', 'number', 'object', 'string', 'symbol', 'undefined']);
+  return (Array.isArray(value) ? value : []).slice(0, 40).flatMap(field => {
+    const fieldPath = safeCampSchemaPath(field?.path);
+    if (!fieldPath) return [];
+    return [{
+      path: fieldPath,
+      types: (Array.isArray(field?.types) ? field.types : [])
+        .map(type => text(type, 16))
+        .filter(type => allowedTypes.has(type))
+        .slice(0, 8),
+      observed: Math.min(100_000, Math.max(0, Number(field?.observed) || 0)),
+      nulls: Math.min(100_000, Math.max(0, Number(field?.nulls) || 0)),
+    }];
+  });
+}
+
+function sanitizeCampProbe(value) {
+  const probe = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const baseUrl = normalizeDolphinSourceUrls([probe.baseUrl])[0] || null;
+  return {
+    dateExchange: isIsoDate(probe.dateExchange) ? probe.dateExchange : null,
+    baseUrl,
+    queryStyle: probe.queryStyle === 'legacy' ? 'legacy' : 'standard',
+    payloadType: text(probe.payloadType, 16) || null,
+    containerPath: safeCampSchemaPath(probe.containerPath) || null,
+    rowCount: Math.min(1_000_000, Math.max(0, Number(probe.rowCount) || 0)),
+    profiledRows: Math.min(10_000, Math.max(0, Number(probe.profiledRows) || 0)),
+    truncated: probe.truncated === true,
+    byteCount: Math.min(5 * 1024 * 1024, Math.max(0, Number(probe.byteCount) || 0)),
+    schemaHash: /^[a-f0-9]{64}$/i.test(probe.schemaHash || '') ? probe.schemaHash.toLowerCase() : null,
+    schema: sanitizeCampSchema(probe.schema),
+  };
+}
+
+function sanitizeCampResources(value) {
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(['guestTypes', 'services', 'accounts'].flatMap(resourceName => {
+    const resource = input[resourceName];
+    if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return [];
+    return [[resourceName, {
+      status: ['ok', 'partial', 'error'].includes(resource.status) ? resource.status : 'error',
+      probes: (Array.isArray(resource.probes) ? resource.probes : []).slice(0, 2).map(sanitizeCampProbe),
+      errors: (Array.isArray(resource.errors) ? resource.errors : [])
+        .map(error => text(error, 300))
+        .filter(Boolean)
+        .slice(0, 2),
+    }]];
+  }));
+}
+
+function sanitizeCampHeartbeat(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    status: ['waiting', 'disabled', 'diagnostic', 'partial', 'error'].includes(source.status)
+      ? source.status
+      : 'waiting',
+    lastAttemptAt: Number.isFinite(Number(source.lastAttemptAt)) ? Number(source.lastAttemptAt) : null,
+    lastSuccessAt: Number.isFinite(Number(source.lastSuccessAt)) ? Number(source.lastSuccessAt) : null,
+    lastError: text(source.lastError, 500) || null,
+    initialDate: isIsoDate(source.initialDate) ? source.initialDate : null,
+    currentDate: isIsoDate(source.currentDate) ? source.currentDate : null,
+    resources: sanitizeCampResources(source.resources),
+  };
+}
+
 function sanitizeDolphinHeartbeat(value) {
   const payload = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   const source = payload.sourceApi && typeof payload.sourceApi === 'object' && !Array.isArray(payload.sourceApi)
@@ -210,6 +287,7 @@ function sanitizeDolphinHeartbeat(value) {
         ? source.schemaKeys.map(key => text(key, 60)).filter(Boolean).slice(0, 40)
         : [],
     },
+    campApi: sanitizeCampHeartbeat(payload.campApi),
   };
 }
 
@@ -235,6 +313,11 @@ export function createFeedbackService(options) {
     dolphinSourceApiPath = '/api/v1/barcodes/game',
     dolphinSourceApply = false,
     dolphinSourceLookbackDays = 2,
+    dolphinCampSourceEnabled = false,
+    dolphinCampInitialDate = '2023-09-01',
+    dolphinCampGuestTypesPath = '/api/v1/camp/guesttypes',
+    dolphinCampServicesPath = '/api/v1/camp/services',
+    dolphinCampAccountsPath = '/api/v1/camp/accounts',
     dolphinSourceProfiles = {},
     connectorRateLimit = DEFAULT_CONNECTOR_RATE_LIMIT,
     connectorRateWindowMs = DEFAULT_CONNECTOR_RATE_WINDOW_MS,
@@ -252,15 +335,25 @@ export function createFeedbackService(options) {
     dolphinConnectorsDataFile || path.join(path.dirname(dataFile), 'dolphin-connectors.json'),
   );
   function normalizeSourceProfile(value = {}) {
-    const apiPath = /^\/[a-zA-Z0-9/_-]{1,180}$/.test(value.apiPath)
-      ? value.apiPath
-      : '/api/v1/barcodes/game';
+    const apiPath = normalizeDolphinApiPath(value.apiPath, '/api/v1/barcodes/game');
+    const campEndpoints = value.campEndpoints && typeof value.campEndpoints === 'object'
+      ? value.campEndpoints
+      : {};
     return {
       urls: normalizeDolphinSourceUrls(value.apiUrls),
       apiKey: text(value.apiKey, 256),
       apiPath,
       lookbackDays: Math.min(7, Math.max(0, Number(value.lookbackDays) || 0)),
       apply: value.apply === true,
+      camp: {
+        enabled: value.campEnabled === true,
+        initialDate: isIsoDate(value.campInitialDate) ? value.campInitialDate : '2023-09-01',
+        endpoints: {
+          guestTypes: normalizeDolphinApiPath(campEndpoints.guestTypes, '/api/v1/camp/guesttypes'),
+          services: normalizeDolphinApiPath(campEndpoints.services, '/api/v1/camp/services'),
+          accounts: normalizeDolphinApiPath(campEndpoints.accounts, '/api/v1/camp/accounts'),
+        },
+      },
     };
   }
   const defaultDolphinSourceProfile = normalizeSourceProfile({
@@ -269,6 +362,13 @@ export function createFeedbackService(options) {
     apiPath: dolphinSourceApiPath,
     lookbackDays: dolphinSourceLookbackDays,
     apply: dolphinSourceApply,
+    campEnabled: dolphinCampSourceEnabled,
+    campInitialDate: dolphinCampInitialDate,
+    campEndpoints: {
+      guestTypes: dolphinCampGuestTypesPath,
+      services: dolphinCampServicesPath,
+      accounts: dolphinCampAccountsPath,
+    },
   });
   const resolvedDolphinSourceProfiles = Object.fromEntries(Object.entries(dolphinSourceProfiles || {})
     .filter(([locationCode]) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(locationCode))
@@ -840,7 +940,9 @@ export function createFeedbackService(options) {
         const current = state.connectors.find(item => item.deviceId === identity.deviceId);
         if (!current) return null;
         current.lastSeenAt = now();
-        if (request.method === 'POST') current.heartbeat = sanitizeDolphinHeartbeat(await readJsonBody(request));
+        if (request.method === 'POST') {
+          current.heartbeat = sanitizeDolphinHeartbeat(await readJsonBody(request, MAX_CONNECTOR_HEARTBEAT_BYTES));
+        }
         await saveConnectorState(state);
         return current;
       });
@@ -872,6 +974,11 @@ export function createFeedbackService(options) {
       apiPath: profile.apiPath,
       lookbackDays: profile.lookbackDays,
       applyRedemptions: enabled && profile.apply,
+      camp: {
+        enabled: enabled && profile.camp.enabled,
+        initialDate: profile.camp.initialDate,
+        endpoints: profile.camp.endpoints,
+      },
     });
   }
 

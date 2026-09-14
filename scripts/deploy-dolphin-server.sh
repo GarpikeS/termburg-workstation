@@ -51,6 +51,16 @@ install -m 0644 "$staging_dir/feedback-service.mjs" "$app_dir/feedback-service.m
 install -m 0644 "$staging_dir/feedback-server.mjs" "$app_dir/feedback-server.mjs"
 install -m 0644 "$staging_dir/termliny-game.nginx.conf" "$nginx_file"
 
+upsert_env_value() {
+  local key=$1
+  local value=$2
+  if grep -q "^${key}=" "$env_file"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+  else
+    printf '\n%s=%s\n' "$key" "$value" >> "$env_file"
+  fi
+}
+
 if ! grep -q '^DOLPHIN_CONNECTOR_TOKEN=' "$env_file"; then
   umask 077
   connector_token=$(openssl rand -hex 32)
@@ -61,6 +71,11 @@ if grep -q '^DOLPHIN_ENROLLMENT_TOKEN_HASH=' "$env_file"; then
 else
   printf 'DOLPHIN_ENROLLMENT_TOKEN_HASH=%s\n' "$enrollment_hash" >> "$env_file"
 fi
+upsert_env_value DOLPHIN_CAMP_SOURCE_ENABLED 1
+upsert_env_value DOLPHIN_CAMP_INITIAL_DATE 2023-09-01
+upsert_env_value DOLPHIN_CAMP_GUESTTYPES_PATH /api/v1/camp/guesttypes
+upsert_env_value DOLPHIN_CAMP_SERVICES_PATH /api/v1/camp/services
+upsert_env_value DOLPHIN_CAMP_ACCOUNTS_PATH /api/v1/camp/accounts
 chmod 0600 "$env_file"
 
 nginx -t
@@ -99,10 +114,17 @@ source_config_response=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 \
 node -e '
   const value = JSON.parse(process.argv[1]);
   const expectedApply = process.argv[2] === "1";
+  const expectedCampEnabled = process.argv[3] === "1";
   if (!value.enabled || !Array.isArray(value.baseUrls) || value.baseUrls.length === 0) process.exit(1);
   if (typeof value.apiKey !== "string" || value.apiKey.length < 16) process.exit(1);
   if (value.applyRedemptions !== expectedApply) process.exit(1);
-' "$source_config_response" "${DOLPHIN_SOURCE_APPLY:-0}"
+  if (!value.camp || value.camp.enabled !== expectedCampEnabled) process.exit(1);
+  if (value.camp.initialDate !== "2023-09-01") process.exit(1);
+  const endpoints = value.camp.endpoints || {};
+  if (endpoints.guestTypes !== "/api/v1/camp/guesttypes") process.exit(1);
+  if (endpoints.services !== "/api/v1/camp/services") process.exit(1);
+  if (endpoints.accounts !== "/api/v1/camp/accounts") process.exit(1);
+' "$source_config_response" "${DOLPHIN_SOURCE_APPLY:-0}" "${DOLPHIN_CAMP_SOURCE_ENABLED:-0}"
 
 bad_enrollment_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
   -H 'Content-Type: application/json' \
@@ -153,6 +175,7 @@ done
 echo "Dolphin connector deployed. Backup: $backup_dir"
 echo "Health: authorized OK, unauthenticated 401, dry-run idempotency OK"
 echo "Local API config: authorized OK, configured redemption mode preserved"
+echo "CAMP diagnostic: enabled, start date and three endpoint paths verified"
 echo "Enrollment: wrong token rejected, one-time token left unused"
 echo "Redemption journal lines: $journal_after"
 printf 'Backups kept: %s\n' "${backups[*]}"

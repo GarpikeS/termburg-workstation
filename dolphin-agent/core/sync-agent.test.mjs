@@ -161,3 +161,147 @@ test('applies each local API redemption only once after server activation', asyn
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('probes CAMP once per day and reports only the diagnostic profile in heartbeat', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'termburg-camp-api-diagnostic-'));
+  const heartbeats = [];
+  const receivedConfigs = [];
+  let probeCount = 0;
+  let now = Date.parse('2026-09-14T10:00:00.000Z');
+  const sourceConfig = {
+    enabled: false,
+    baseUrls: ['http://10.10.0.250:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    camp: {
+      enabled: true,
+      initialDate: '2023-09-01',
+      endpoints: {
+        guestTypes: '/api/v1/camp/guesttypes',
+        services: '/api/v1/camp/services',
+        accounts: '/api/v1/camp/accounts',
+      },
+    },
+  };
+  const agent = new DolphinSyncAgent({
+    stateStore: createAgentStateStore(path.join(root, 'state.json')),
+    readFile: readDolphinFile,
+    clientFactory: () => ({
+      async sourceConfig() { return sourceConfig; },
+      async heartbeat(_token, value) {
+        heartbeats.push(value);
+        return { ok: true };
+      },
+    }),
+    campClientFactory: config => {
+      receivedConfigs.push(config);
+      return {
+        async probe() {
+          probeCount += 1;
+          return {
+            status: 'diagnostic',
+            initialDate: '2023-09-01',
+            currentDate: '2026-09-14',
+            resources: {
+              guestTypes: {
+                status: 'ok',
+                probes: [{ dateExchange: '2023-09-01', rowCount: 182, schemaHash: 'a'.repeat(64), schema: [] }],
+                errors: [],
+              },
+              services: { status: 'ok', probes: [], errors: [] },
+              accounts: { status: 'ok', probes: [], errors: [] },
+            },
+          };
+        },
+      };
+    },
+    configProvider: async () => ({
+      watchFolder: root,
+      endpoint: 'https://tbgame.ru/api/integrations/dolphin/redemptions',
+      timezoneOffset: '+03:00',
+      deviceId: 'dolphin-test-device-camp-0001',
+      appVersion: '1.1.12',
+    }),
+    tokenProvider: async () => 'test-token-that-is-long-enough',
+    logger: { info() {}, warn() {}, error() {} },
+    now: () => now,
+  });
+
+  try {
+    await agent.runOnce();
+    now += 5 * 60 * 1000;
+    await agent.runOnce();
+
+    assert.equal(probeCount, 1);
+    assert.equal(receivedConfigs[0].apiKey, 'local-api-key-for-test-only');
+    assert.equal(receivedConfigs[0].initialDate, '2023-09-01');
+    assert.equal(agent.status().campApi.status, 'diagnostic');
+    assert.equal(heartbeats.length, 2);
+    assert.equal(heartbeats[1].campApi.resources.guestTypes.probes[0].rowCount, 182);
+    assert.equal('apiKey' in heartbeats[1].campApi, false);
+    assert.doesNotMatch(JSON.stringify(heartbeats[1].campApi), /local-api-key/);
+
+    now += 24 * 60 * 60 * 1000;
+    await agent.runOnce();
+    assert.equal(probeCount, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('does not hammer CAMP after a partial diagnostic result', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'termburg-camp-api-partial-'));
+  let probeCount = 0;
+  let now = Date.parse('2026-09-14T10:00:00.000Z');
+  const agent = new DolphinSyncAgent({
+    stateStore: createAgentStateStore(path.join(root, 'state.json')),
+    readFile: readDolphinFile,
+    clientFactory: () => ({
+      async sourceConfig() {
+        return {
+          baseUrls: ['http://10.10.0.250:60888'],
+          apiKey: 'local-api-key-for-test-only',
+          camp: { enabled: true, initialDate: '2023-09-01', endpoints: {} },
+        };
+      },
+      async heartbeat() { return { ok: true }; },
+    }),
+    campClientFactory: () => ({
+      async probe() {
+        probeCount += 1;
+        return {
+          status: 'partial',
+          initialDate: '2023-09-01',
+          currentDate: '2026-09-14',
+          resources: {
+            guestTypes: { status: 'ok', probes: [], errors: [] },
+            services: { status: 'error', probes: [], errors: ['CAMP API не ответил за 10 секунд.'] },
+            accounts: { status: 'ok', probes: [], errors: [] },
+          },
+        };
+      },
+    }),
+    configProvider: async () => ({
+      watchFolder: root,
+      endpoint: 'https://tbgame.ru/api/integrations/dolphin/redemptions',
+      timezoneOffset: '+03:00',
+      deviceId: 'dolphin-test-device-camp-0002',
+      appVersion: '1.1.12',
+    }),
+    tokenProvider: async () => 'test-token-that-is-long-enough',
+    logger: { info() {}, warn() {}, error() {} },
+    now: () => now,
+  });
+
+  try {
+    await agent.runOnce();
+    now += 5 * 60 * 1000;
+    await agent.runOnce();
+    assert.equal(probeCount, 1);
+    assert.equal(agent.status().campApi.status, 'partial');
+
+    await agent.runOnce({ forceCamp: true });
+    assert.equal(probeCount, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

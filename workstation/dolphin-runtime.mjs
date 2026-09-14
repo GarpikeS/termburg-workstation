@@ -5,6 +5,7 @@ import { app, safeStorage } from 'electron';
 import { readDolphinFile } from '../dolphin-agent/core/file-readers.mjs';
 import { createFileLogger } from '../dolphin-agent/core/logger.mjs';
 import { DolphinServerClient } from '../dolphin-agent/core/server-client.mjs';
+import { CampSourceApiClient } from '../dolphin-agent/core/camp-source-client.mjs';
 import { DolphinSourceApiClient } from '../dolphin-agent/core/source-api-client.mjs';
 import { defaultSettings, loadSettings, saveSettings } from '../dolphin-agent/core/settings.mjs';
 import { createAgentStateStore } from '../dolphin-agent/core/state-store.mjs';
@@ -171,6 +172,7 @@ export class EmbeddedDolphinRuntime {
         readerOptions: { excelReaderPath: this.excelReaderPath() },
         clientFactory: endpoint => new DolphinServerClient({ endpoint }),
         sourceClientFactory: sourceConfig => new DolphinSourceApiClient(sourceConfig),
+        campClientFactory: sourceConfig => new CampSourceApiClient(sourceConfig),
         configProvider: async () => ({ ...this.settings, appVersion: this.appVersion }),
         tokenProvider: () => this.ensureEnrollment(),
         logger: this.fileLogger,
@@ -190,9 +192,9 @@ export class EmbeddedDolphinRuntime {
     }
   }
 
-  async runOnce() {
+  async runOnce(options = {}) {
     if (!this.started) await this.start();
-    return this.syncAgent.runOnce();
+    return this.syncAgent.runOnce(options);
   }
 
   stop() {
