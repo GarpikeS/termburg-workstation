@@ -12,6 +12,7 @@ const testFiles = [
   'workstation/site-sync-bootstrap.test.mjs',
   'workstation/status.test.mjs',
   'scripts/workstation-schedule-auth-secrets.test.mjs',
+  'scripts/workstation-site-sync-secrets.test.mjs',
   'dolphin-agent/core/redemption-extractor.test.mjs',
   'dolphin-agent/core/camp-source-client.test.mjs',
   'dolphin-agent/core/state-store.test.mjs',
@@ -21,6 +22,7 @@ const testFiles = [
   'frontend/tests/official-schedule.test.mjs',
   'frontend/tests/startup-watchdog.test.mjs',
   'server/schedule-service.test.mjs',
+  'server/schedule-auth.test.mjs',
   'server/feedback-service.test.mjs',
   'server/wordpress-schedule.test.mjs',
 ];

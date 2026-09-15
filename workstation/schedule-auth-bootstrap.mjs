@@ -30,6 +30,7 @@ export async function applyEmbeddedScheduleAuthDefaults({ embeddedFile, targetFi
   const removedAccounts = Array.isArray(parsed.removeAccounts)
     ? [...new Set(parsed.removeAccounts.filter(username => REMOVABLE_ACCOUNTS.includes(username)))]
     : [];
+  const replaceManagedAccounts = parsed.replaceManagedAccounts === true;
   if (managedAccounts.some(username => !parsed.accounts[username])) {
     throw new Error('Embedded schedule authentication has invalid managed accounts.');
   }
@@ -45,6 +46,11 @@ export async function applyEmbeddedScheduleAuthDefaults({ embeddedFile, targetFi
   const next = currentIsValid
     ? { ...current, accounts: { ...current.accounts } }
     : { schemaVersion: 1, accounts: {} };
+  if (replaceManagedAccounts) {
+    for (const username of MANAGED_ACCOUNTS) {
+      if (!managedAccounts.includes(username)) delete next.accounts[username];
+    }
+  }
   for (const username of managedAccounts) next.accounts[username] = parsed.accounts[username];
   const actuallyRemoved = removedAccounts.filter(username => Object.hasOwn(next.accounts, username));
   for (const username of removedAccounts) delete next.accounts[username];

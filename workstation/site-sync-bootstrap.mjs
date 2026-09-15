@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-const REQUIRED_LOCATION_IDS = ['1', '2'];
+const SUPPORTED_LOCATION_IDS = new Set(['1', '2']);
 
 function validateEndpoint(value) {
   let parsed;
@@ -39,11 +39,19 @@ export function normalizeEmbeddedSiteSync(value) {
   const sourceLocations = value.locations && typeof value.locations === 'object'
     ? value.locations
     : {};
+  const locationIds = Object.keys(sourceLocations).sort();
+  if (locationIds.length === 0) {
+    throw new Error('Embedded schedule connection file has no locations.');
+  }
+  const unsupportedLocation = locationIds.find(locationId => !SUPPORTED_LOCATION_IDS.has(locationId));
+  if (unsupportedLocation) {
+    throw new Error(`Unsupported embedded schedule location ${unsupportedLocation}.`);
+  }
   const locations = {};
-  for (const locationId of REQUIRED_LOCATION_IDS) {
+  for (const locationId of locationIds) {
     locations[locationId] = validateLocation(sourceLocations[locationId], locationId);
   }
-  return { version: 1, locations };
+  return { version: 1, replaceLocations: value.replaceLocations === true, locations };
 }
 
 async function readJsonOrFallback(filePath, fallback) {
@@ -75,9 +83,10 @@ export async function applyEmbeddedSiteSyncDefaults({ embeddedFile, targetFile, 
   const currentLocations = current.locations && typeof current.locations === 'object'
     ? current.locations
     : {};
-  const locations = { ...currentLocations };
+  const locations = embedded.replaceLocations ? {} : { ...currentLocations };
+  const locationIds = Object.keys(embedded.locations);
 
-  for (const locationId of REQUIRED_LOCATION_IDS) {
+  for (const locationId of locationIds) {
     const previous = currentLocations[locationId] && typeof currentLocations[locationId] === 'object'
       ? currentLocations[locationId]
       : {};
@@ -94,6 +103,6 @@ export async function applyEmbeddedSiteSyncDefaults({ embeddedFile, targetFile, 
     mode: 0o600,
   });
   await fs.rename(temporaryFile, targetFile);
-  logger.info?.('Embedded schedule connections applied.', { locationIds: REQUIRED_LOCATION_IDS });
-  return { embedded: true, applied: true, locationIds: [...REQUIRED_LOCATION_IDS] };
+  logger.info?.('Embedded schedule connections applied.', { locationIds });
+  return { embedded: true, applied: true, locationIds };
 }

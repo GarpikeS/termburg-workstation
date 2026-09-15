@@ -42,7 +42,7 @@ test('stages only protected schedule credentials for the selected complex', asyn
       password: 'synthetic-plaintext-must-not-be-copied',
       accounts: {
         moscow: storedAccount('moscow', '1'),
-        zelenogorsk: storedAccount('zelenogorsk', '2'),
+        zelenogorsk: { ...storedAccount('zelenogorsk', '2'), password: 'must-not-be-copied' },
       },
     }), 'utf8');
     const result = await stageWorkstationScheduleAuth({
@@ -53,8 +53,13 @@ test('stages only protected schedule credentials for the selected complex', asyn
     const content = await fs.readFile(result.outputFile, 'utf8');
     const stored = JSON.parse(content);
     assert.deepEqual(stored.managedAccounts, ['zelenogorsk']);
+    assert.equal(stored.replaceManagedAccounts, true);
+    assert.deepEqual(stored.removeAccounts, ['testtb']);
+    assert.deepEqual(Object.keys(stored.accounts), ['zelenogorsk']);
     assert.equal(content.includes('synthetic-plaintext-must-not-be-copied'), false);
     assert.equal(stored.accounts.zelenogorsk.hash, 'synthetic-derived-password-hash');
+    assert.equal(stored.accounts.moscow, undefined);
+    assert.equal(stored.accounts.zelenogorsk.password, undefined);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

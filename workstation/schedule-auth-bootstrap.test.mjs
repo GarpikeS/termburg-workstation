@@ -13,7 +13,7 @@ const account = (username, marker) => ({
   scrypt: { N: 1024, r: 8, p: 1, maxmem: 16_777_216, keyLength: 64 },
 });
 
-test('Greenogorsk package replaces only the Greenogorsk schedule account', async () => {
+test('Greenogorsk package keeps only the Greenogorsk schedule account', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'term-auth-bootstrap-'));
   try {
     const embeddedFile = path.join(root, 'embedded.json');
@@ -21,11 +21,17 @@ test('Greenogorsk package replaces only the Greenogorsk schedule account', async
     await fs.writeFile(embeddedFile, JSON.stringify({
       schemaVersion: 1,
       managedAccounts: ['zelenogorsk'],
-      accounts: { moscow: account('moscow', 'embedded'), zelenogorsk: account('zelenogorsk', 'embedded') },
+      replaceManagedAccounts: true,
+      removeAccounts: ['testtb'],
+      accounts: { zelenogorsk: account('zelenogorsk', 'embedded') },
     }), 'utf8');
     await fs.writeFile(targetFile, JSON.stringify({
       schemaVersion: 1,
-      accounts: { moscow: account('moscow', 'existing'), zelenogorsk: account('zelenogorsk', 'existing') },
+      accounts: {
+        moscow: account('moscow', 'existing'),
+        zelenogorsk: account('zelenogorsk', 'existing'),
+        testtb: account('testtb', 'obsolete'),
+      },
     }), 'utf8');
     const result = await applyEmbeddedScheduleAuthDefaults({
       embeddedFile,
@@ -34,8 +40,9 @@ test('Greenogorsk package replaces only the Greenogorsk schedule account', async
     });
     const stored = JSON.parse(await fs.readFile(targetFile, 'utf8'));
     assert.deepEqual(result.managedAccounts, ['zelenogorsk']);
-    assert.equal(stored.accounts.moscow.hash, 'hash-existing');
+    assert.equal(stored.accounts.moscow, undefined);
     assert.equal(stored.accounts.zelenogorsk.hash, 'hash-embedded');
+    assert.equal(stored.accounts.testtb, undefined);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

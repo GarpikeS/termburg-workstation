@@ -10,7 +10,9 @@
   "files": [
     "desktop/**/*",
     "workstation/**/*",
+    "!workstation/**/*.test.mjs",
     "dolphin-agent/core/**/*",
+    "!dolphin-agent/core/**/*.test.mjs",
     "dolphin-agent/adapters/excel-reader.ps1",
     "server/schedule-auth.mjs",
     "server/schedule-service.mjs",
@@ -28,7 +30,7 @@
   ],
   "extraMetadata": {
     "main": "desktop/main.mjs",
-    "version": "1.1.13",
+    "version": "1.1.14",
     "description": "Редактор расписания Термбурга и автоматическое погашение билетов Dolphin"
   },
   "win": {

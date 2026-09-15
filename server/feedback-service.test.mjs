@@ -895,3 +895,80 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test('Dolphin enrollment hash rotation preserves existing devices and allows a new enrollment', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-enrollment-rotation-'));
+  const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
+  const enrollmentTokenA = 'synthetic-enrollment-token-a-for-rotation-test-only';
+  const enrollmentTokenB = 'synthetic-enrollment-token-b-for-rotation-test-only';
+  const firstDeviceId = 'dolphin-moscow-11111111-2222-4333-8444-555555555555';
+  const secondDeviceId = 'dolphin-moscow-66666666-7777-4888-8999-aaaaaaaaaaaa';
+  const firstDeviceToken = 'c'.repeat(64);
+  const secondDeviceToken = 'd'.repeat(64);
+  let service;
+
+  const startService = enrollmentTokenHash => startFeedbackService({
+    dataFile: path.join(tempRoot, 'feedback.jsonl'),
+    claimsDataFile: path.join(tempRoot, 'reward-claims.jsonl'),
+    redemptionsDataFile: path.join(tempRoot, 'reward-redemptions.jsonl'),
+    dolphinConnectorsDataFile: connectorsDataFile,
+    dolphinEnrollmentTokenHash: enrollmentTokenHash,
+    host: '127.0.0.1',
+    port: 0,
+    logger: { info() {}, error() {} },
+    accountOptions: {
+      databaseFile: path.join(tempRoot, 'accounts.sqlite'),
+      authSecret: 'synthetic-test-secret-that-is-long-enough-for-account-authentication',
+    },
+  });
+
+  const enroll = (origin, payload) => fetch(`${origin}/api/integrations/dolphin/enroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  try {
+    service = await startService(sha256(enrollmentTokenA));
+    let origin = `http://127.0.0.1:${service.port}`;
+
+    const firstEnrollment = await enroll(origin, {
+      enrollmentToken: enrollmentTokenA,
+      deviceId: firstDeviceId,
+      deviceToken: firstDeviceToken,
+    });
+    assert.equal(firstEnrollment.status, 201);
+    assert.deepEqual(await firstEnrollment.json(), {
+      ok: true,
+      deviceId: firstDeviceId,
+      repeated: false,
+    });
+
+    await service.close();
+    service = undefined;
+
+    service = await startService(sha256(enrollmentTokenB));
+    origin = `http://127.0.0.1:${service.port}`;
+
+    const existingDeviceHealth = await fetch(`${origin}/api/integrations/dolphin/health`, {
+      headers: { Authorization: `Bearer ${firstDeviceToken}` },
+    });
+    assert.equal(existingDeviceHealth.status, 200);
+    assert.equal((await existingDeviceHealth.json()).deviceId, firstDeviceId);
+
+    const secondEnrollment = await enroll(origin, {
+      enrollmentToken: enrollmentTokenB,
+      deviceId: secondDeviceId,
+      deviceToken: secondDeviceToken,
+    });
+    assert.equal(secondEnrollment.status, 201);
+    assert.deepEqual(await secondEnrollment.json(), {
+      ok: true,
+      deviceId: secondDeviceId,
+      repeated: false,
+    });
+  } finally {
+    await service?.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

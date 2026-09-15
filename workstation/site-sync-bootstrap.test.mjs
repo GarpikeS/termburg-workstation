@@ -42,6 +42,38 @@ test('embedded connections create a ready site-sync store', async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('a Moscow-only package provisions only the Moscow connection', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'term-site-sync-'));
+  try {
+    const embeddedFile = path.join(root, 'embedded.json');
+    const targetFile = path.join(root, 'profile', 'site-sync.json');
+    await fs.writeFile(embeddedFile, JSON.stringify({
+      version: 1,
+      replaceLocations: true,
+      locations: { 1: embedded.locations[1] },
+    }), 'utf8');
+    await fs.mkdir(path.dirname(targetFile), { recursive: true });
+    await fs.writeFile(targetFile, JSON.stringify({
+      locations: {
+        1: { token: 'stale-token-that-is-long-enough', lastPublishedAt: '2026-09-14T12:00:00.000Z' },
+        2: embedded.locations[2],
+      },
+    }), 'utf8');
+    const result = await applyEmbeddedSiteSyncDefaults({
+      embeddedFile,
+      targetFile,
+      logger: { info() {}, warn() {} },
+    });
+    const stored = JSON.parse(await fs.readFile(targetFile, 'utf8'));
+    assert.deepEqual(result.locationIds, ['1']);
+    assert.deepEqual(Object.keys(stored.locations), ['1']);
+    assert.equal(stored.locations['1'].token, embedded.locations['1'].token);
+    assert.equal(stored.locations['1'].lastPublishedAt, '2026-09-14T12:00:00.000Z');
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
 test('embedded connections replace stale tokens and preserve publication history', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'term-site-sync-'));
   try {

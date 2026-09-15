@@ -47,7 +47,26 @@ function validAccount(account, username) {
     && typeof account?.salt === 'string'
     && typeof account?.hash === 'string'
     && account?.scrypt
-    && typeof account.scrypt === 'object';
+    && typeof account.scrypt === 'object'
+    && ['N', 'r', 'p', 'maxmem', 'keyLength'].every(
+      key => Number.isInteger(account.scrypt[key]) && account.scrypt[key] > 0,
+    );
+}
+
+function scopedAccount(account) {
+  return {
+    username: account.username,
+    locationId: account.locationId,
+    salt: account.salt,
+    hash: account.hash,
+    scrypt: {
+      N: account.scrypt.N,
+      r: account.scrypt.r,
+      p: account.scrypt.p,
+      maxmem: account.scrypt.maxmem,
+      keyLength: account.scrypt.keyLength,
+    },
+  };
 }
 
 export async function stageWorkstationScheduleAuth({ generatedDirectory, managedAccount, sourceFile = '' }) {
@@ -58,15 +77,16 @@ export async function stageWorkstationScheduleAuth({ generatedDirectory, managed
   if (!resolvedSource) throw new Error('Schedule authentication store was not found.');
   const source = JSON.parse(await fs.readFile(resolvedSource, 'utf8'));
   if (source?.schemaVersion !== 1
-    || !validAccount(source?.accounts?.moscow, 'moscow')
-    || !validAccount(source?.accounts?.zelenogorsk, 'zelenogorsk')) {
+    || !validAccount(source?.accounts?.[managedAccount], managedAccount)) {
     throw new Error('Schedule authentication store is invalid.');
   }
   const embedded = {
     schemaVersion: 1,
     updatedAt: source.updatedAt || new Date().toISOString(),
     managedAccounts: [managedAccount],
-    accounts: source.accounts,
+    replaceManagedAccounts: true,
+    removeAccounts: ['testtb'],
+    accounts: { [managedAccount]: scopedAccount(source.accounts[managedAccount]) },
   };
   await fs.mkdir(generatedDirectory, { recursive: true });
   const outputFile = path.join(generatedDirectory, EMBEDDED_SCHEDULE_AUTH_FILE);

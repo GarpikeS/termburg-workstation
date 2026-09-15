@@ -2,7 +2,6 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { stageWorkstationSiteSyncSecrets } from './workstation-site-sync-secrets.mjs';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
@@ -11,6 +10,8 @@ const unpackedDirectory = path.join(repoRoot, 'release', 'workstation-update', '
 const fullBuildUnpackedDirectory = path.join(repoRoot, 'release', 'workstation', 'win-unpacked');
 const builderConfigPath = path.join(repoRoot, 'workstation', 'electron-builder.update.json');
 const updateArtifactPattern = /^Termburg-Workstation-Update-(\d+)\.(\d+)\.(\d+)\.exe(?:\.sha256|\.blockmap)?$/;
+let currentArtifactName = '';
+let buildSucceeded = false;
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: repoRoot, stdio: 'inherit' });
@@ -19,6 +20,18 @@ function run(command, args) {
 
 function runNodeScript(relativePath, args = []) {
   run(process.execPath, [path.join(repoRoot, relativePath), ...args]);
+}
+
+function assertCleanGitWorktree() {
+  const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status !== 0) throw new Error('Could not verify a clean Git worktree before the update build.');
+  if (String(result.stdout || '').trim()) {
+    throw new Error('Public Workstation update must be built from a clean Git worktree.');
+  }
 }
 
 async function cleanupUpdateArtifacts(keepCount = 2) {
@@ -51,28 +64,47 @@ try {
   const builderConfig = JSON.parse(await fs.readFile(builderConfigPath, 'utf8'));
   const expectedVersion = String(builderConfig?.extraMetadata?.version || '');
   if (!/^\d+\.\d+\.\d+$/.test(expectedVersion)) throw new Error('Workstation update version is invalid.');
+  assertCleanGitWorktree();
+  currentArtifactName = `Termburg-Workstation-Update-${expectedVersion}.exe`;
+  await fs.mkdir(releaseDirectory, { recursive: true });
+  for (const staleFile of [currentArtifactName, `${currentArtifactName}.sha256`, `${currentArtifactName}.blockmap`]) {
+    await fs.rm(path.join(releaseDirectory, staleFile), { force: true });
+  }
   await fs.rm(unpackedDirectory, { recursive: true, force: true });
   await fs.rm(fullBuildUnpackedDirectory, { recursive: true, force: true });
   await cleanupUpdateArtifacts();
   await fs.rm(generatedDirectory, { recursive: true, force: true });
   run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm --prefix frontend run build']);
   runNodeScript('scripts/run-workstation-tests.mjs');
-  const siteSync = await stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory });
-  console.log(`Embedded schedule connections prepared for locations: ${siteSync.locationIds.join(', ')}.`);
   run(process.env.ComSpec || 'cmd.exe', [
     '/d',
     '/s',
     '/c',
     'npm exec -- electron-builder --config workstation/electron-builder.update.json --win --x64',
   ]);
+  runNodeScript('scripts/audit-workstation-package.mjs', [
+    `--unpacked-directory=${unpackedDirectory}`,
+    '--without-generated',
+  ]);
   runNodeScript('scripts/test-workstation-packaged.mjs', [
     `--unpacked-directory=${unpackedDirectory}`,
     '--without-enrollment',
+    '--without-site-sync',
+    '--preserve-existing-profile',
     `--expected-version=${expectedVersion}`,
   ]);
   runNodeScript('scripts/write-workstation-update-checksum.mjs');
   await cleanupUpdateArtifacts();
-  console.log('Public Workstation update built with schedule site connections and without a Dolphin enrollment token.');
+  buildSucceeded = true;
+  console.log('Public Workstation update built without embedded credentials or a Dolphin enrollment token.');
 } finally {
   await fs.rm(generatedDirectory, { recursive: true, force: true });
+  await fs.rm(unpackedDirectory, { recursive: true, force: true });
+  if (!buildSucceeded && currentArtifactName) {
+    await Promise.all([
+      currentArtifactName,
+      `${currentArtifactName}.sha256`,
+      `${currentArtifactName}.blockmap`,
+    ].map(fileName => fs.rm(path.join(releaseDirectory, fileName), { force: true })));
+  }
 }

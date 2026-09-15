@@ -118,6 +118,13 @@ export function createScheduleAuth({
       if (error?.code !== 'ENOENT') throw error;
       store = { schemaVersion: 1, accounts: {} };
     }
+    if (!normalizedTestProfile && store.accounts.testtb) {
+      delete store.accounts.testtb;
+      delete store.managedTestProfileVersion;
+      store.updatedAt = new Date(now()).toISOString();
+      await writeStore(store);
+      return store;
+    }
     if (normalizedTestProfile) {
       const current = store.accounts[normalizedTestProfile.username];
       const markerMatches = store.managedTestProfileVersion === normalizedTestProfile.version;
@@ -154,7 +161,12 @@ export function createScheduleAuth({
   }
 
   function storeIsConfigured(store) {
-    return ACCOUNT_DEFINITIONS.every(({ username }) => Boolean(store.accounts[username]?.hash && store.accounts[username]?.salt));
+    return ACCOUNT_DEFINITIONS.some(({ username, locationId }) => {
+      const account = store.accounts[username];
+      return account?.username === username
+        && account?.locationId === locationId
+        && Boolean(account.hash && account.salt && account.scrypt);
+    });
   }
 
   async function derivePassword(password, salt, options) {
@@ -291,9 +303,18 @@ export function createScheduleAuth({
 
     const store = await readStore();
     if (!storeIsConfigured(store)) throw authError('AUTH_NOT_CONFIGURED', 'Сначала настройте доступ.', 409);
-    const account = store.accounts[username] || fakeAccount;
+    const storedAccount = store.accounts[username];
+    const productionDefinition = ACCOUNT_DEFINITIONS.find(definition => definition.username === username);
+    const productionAccount = Boolean(productionDefinition
+      && storedAccount?.username === productionDefinition.username
+      && storedAccount?.locationId === productionDefinition.locationId);
+    const testAccount = Boolean(normalizedTestProfile?.username === username
+      && storedAccount?.username === normalizedTestProfile.username
+      && storedAccount?.locationId === normalizedTestProfile.locationId
+      && storedAccount?.isTest === true);
+    const account = productionAccount || testAccount ? storedAccount : fakeAccount;
     const valid = password.length <= PASSWORD_MAX_LENGTH && await verifyPassword(account, password);
-    if (!store.accounts[username] || !valid) {
+    if ((!productionAccount && !testAccount) || !valid) {
       recordFailure(key);
       throw authError('AUTH_INVALID_CREDENTIALS', 'Неверный логин или пароль.', 401);
     }

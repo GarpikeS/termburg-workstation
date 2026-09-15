@@ -11,27 +11,72 @@ const generatedDirectory = path.join(repoRoot, 'workstation', 'generated');
 const enrollmentFile = path.join(generatedDirectory, 'enrollment-token.json');
 const profileFile = path.join(generatedDirectory, 'device-profile.json');
 const releaseDirectory = path.join(repoRoot, 'release', 'workstation');
+const builderConfigPath = path.join(repoRoot, 'workstation', 'electron-builder.json');
+const builderConfig = JSON.parse(await fs.readFile(builderConfigPath, 'utf8'));
+const workstationVersion = String(builderConfig?.extraMetadata?.version || '');
+if (!/^\d+\.\d+\.\d+$/.test(workstationVersion)) throw new Error('Invalid Workstation version.');
 const locationArgument = process.argv.find(argument => argument.startsWith('--location='));
-const locationCode = locationArgument?.slice('--location='.length).trim().toLowerCase() || '';
+const locationCode = locationArgument?.slice('--location='.length).trim().toLowerCase() || 'moscow';
 const locationProfiles = {
-  zelenogorsk: { version: 1, locationCode: 'zelenogorsk', locationName: 'Зеленогорск' },
+  moscow: {
+    profile: { version: 1, locationCode: 'moscow', locationName: 'Термбург · Печатники' },
+    siteSyncLocationIds: ['1'],
+    artifactLabel: 'Moscow',
+  },
+  zelenogorsk: {
+    profile: { version: 1, locationCode: 'zelenogorsk', locationName: 'Зеленогорск' },
+    siteSyncLocationIds: ['2'],
+    artifactLabel: 'Zelenogorsk',
+  },
 };
-const locationProfile = locationCode ? locationProfiles[locationCode] : null;
-if (locationCode && !locationProfile) throw new Error(`Неизвестный профиль Workstation: ${locationCode}.`);
+const locationConfiguration = locationProfiles[locationCode];
+if (!locationConfiguration) throw new Error(`Неизвестный профиль Workstation: ${locationCode}.`);
+const locationProfile = locationConfiguration.profile;
 const enrollmentHashFile = path.join(
   releaseDirectory,
-  locationProfile ? `workstation-${locationProfile.locationCode}-enrollment.sha256` : 'workstation-enrollment.sha256',
+  `workstation-${locationProfile.locationCode}-enrollment.sha256`,
 );
 const enrollmentToken = randomBytes(32).toString('hex');
 const enrollmentTokenHash = createHash('sha256').update(enrollmentToken, 'utf8').digest('hex');
+const genericArtifactName = `Termburg-Workstation-Setup-${workstationVersion}.exe`;
+const targetArtifactName = `Termburg-Workstation-${locationConfiguration.artifactLabel}-Setup-${workstationVersion}.exe`;
+const unpackedDirectory = path.join(releaseDirectory, 'win-unpacked');
+const buildArtifactNames = [
+  genericArtifactName,
+  `${genericArtifactName}.sha256`,
+  `${genericArtifactName}.blockmap`,
+  targetArtifactName,
+  `${targetArtifactName}.sha256`,
+  `${targetArtifactName}.blockmap`,
+  path.basename(enrollmentHashFile),
+];
+let buildSucceeded = false;
 
 function run(command, args) {
   const result = spawnSync(command, args, { cwd: repoRoot, stdio: 'inherit' });
   if (result.status !== 0) throw new Error(`${command} завершился с кодом ${result.status}.`);
 }
 
-function runNodeScript(relativePath) {
-  run(process.execPath, [path.join(repoRoot, relativePath)]);
+function runNodeScript(relativePath, args = []) {
+  run(process.execPath, [path.join(repoRoot, relativePath), ...args]);
+}
+
+function assertCleanGitWorktree() {
+  const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status !== 0) throw new Error('Не удалось проверить чистоту Git worktree перед сборкой.');
+  if (String(result.stdout || '').trim()) {
+    throw new Error('Workstation Setup разрешено собирать только из чистого Git worktree.');
+  }
+}
+
+async function writePrivateFileAtomically(filePath, content) {
+  const temporaryFile = `${filePath}.${process.pid}.tmp`;
+  await fs.writeFile(temporaryFile, content, { encoding: 'utf8', mode: 0o600 });
+  await fs.rename(temporaryFile, filePath);
 }
 
 async function fileSha256(filePath) {
@@ -46,14 +91,8 @@ async function fileSha256(filePath) {
 }
 
 async function finalizeLocationArtifact() {
-  const builderConfig = JSON.parse(await fs.readFile(
-    path.join(repoRoot, 'workstation', 'electron-builder.json'),
-    'utf8',
-  ));
-  const version = String(builderConfig?.extraMetadata?.version || '');
-  if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid Workstation version.');
-  const sourceName = `Termburg-Workstation-Setup-${version}.exe`;
-  const targetName = `Termburg-Workstation-Zelenogorsk-Setup-${version}.exe`;
+  const sourceName = genericArtifactName;
+  const targetName = targetArtifactName;
   const sourcePath = path.join(releaseDirectory, sourceName);
   const targetPath = path.join(releaseDirectory, targetName);
   await fs.rm(targetPath, { force: true });
@@ -72,7 +111,7 @@ async function finalizeLocationArtifact() {
 
   const entries = await fs.readdir(releaseDirectory);
   const versions = [...new Set(entries.map(name => {
-    const match = name.match(/^Termburg-Workstation-(?:Zelenogorsk-)?Setup-(\d+)\.(\d+)\.(\d+)\.exe(?:\.sha256|\.blockmap)?$/);
+    const match = name.match(/^Termburg-Workstation-(?:Moscow-|Zelenogorsk-)?Setup-(\d+)\.(\d+)\.(\d+)\.exe(?:\.sha256|\.blockmap)?$/);
     return match ? `${match[1]}.${match[2]}.${match[3]}` : '';
   }).filter(Boolean))].sort((left, right) => {
     const score = value => value.split('.').reduce((total, part) => total * 1000 + Number(part), 0);
@@ -80,33 +119,40 @@ async function finalizeLocationArtifact() {
   });
   const obsolete = new Set(versions.slice(2));
   for (const name of entries) {
-    const match = name.match(/^Termburg-Workstation-(?:Zelenogorsk-)?Setup-(\d+\.\d+\.\d+)\.exe(?:\.sha256|\.blockmap)?$/);
+    const match = name.match(/^Termburg-Workstation-(?:Moscow-|Zelenogorsk-)?Setup-(\d+\.\d+\.\d+)\.exe(?:\.sha256|\.blockmap)?$/);
     if (match && obsolete.has(match[1])) await fs.rm(path.join(releaseDirectory, name), { force: true });
   }
-  console.log(`Greenogorsk Workstation installer built: ${targetName}`);
+  console.log(`${locationProfile.locationName} Workstation installer built: ${targetName}`);
+  return { targetName, targetPath };
 }
 
 try {
+  assertCleanGitWorktree();
+  await fs.rm(generatedDirectory, { recursive: true, force: true });
+  await fs.mkdir(releaseDirectory, { recursive: true });
+  for (const staleFile of buildArtifactNames) {
+    await fs.rm(path.join(releaseDirectory, staleFile), { force: true });
+  }
   run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'npm --prefix frontend run build']);
   runNodeScript('scripts/run-workstation-tests.mjs');
+  await fs.rm(generatedDirectory, { recursive: true, force: true });
   await fs.mkdir(generatedDirectory, { recursive: true });
-  await fs.mkdir(releaseDirectory, { recursive: true });
   await fs.writeFile(enrollmentFile, `${JSON.stringify({ version: 1, enrollmentToken })}\n`, {
     encoding: 'utf8',
     mode: 0o600,
   });
-  if (locationProfile) {
-    await fs.writeFile(profileFile, `${JSON.stringify(locationProfile)}\n`, { encoding: 'utf8', mode: 0o600 });
-  }
-  const siteSync = await stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory });
+  await fs.writeFile(profileFile, `${JSON.stringify(locationProfile)}\n`, { encoding: 'utf8', mode: 0o600 });
+  const siteSync = await stageWorkstationSiteSyncSecrets({
+    repoRoot,
+    generatedDirectory,
+    locationIds: locationConfiguration.siteSyncLocationIds,
+  });
   console.log(`Embedded schedule connections prepared for locations: ${siteSync.locationIds.join(', ')}.`);
-  if (locationProfile) {
-    const scheduleAuth = await stageWorkstationScheduleAuth({
-      generatedDirectory,
-      managedAccount: locationProfile.locationCode,
-    });
-    console.log(`Embedded schedule access prepared for: ${scheduleAuth.managedAccounts.join(', ')}.`);
-  }
+  const scheduleAuth = await stageWorkstationScheduleAuth({
+    generatedDirectory,
+    managedAccount: locationProfile.locationCode,
+  });
+  console.log(`Embedded schedule access prepared for: ${scheduleAuth.managedAccounts.join(', ')}.`);
 
   run(process.env.ComSpec || 'cmd.exe', [
     '/d',
@@ -114,20 +160,30 @@ try {
     '/c',
     'electron-builder --config workstation/electron-builder.json --win --x64',
   ]);
+  runNodeScript('scripts/audit-workstation-package.mjs', [
+    `--unpacked-directory=${unpackedDirectory}`,
+    `--expected-location=${locationProfile.locationCode}`,
+    `--expected-site-location=${locationConfiguration.siteSyncLocationIds.join(',')}`,
+    `--expected-auth-account=${locationProfile.locationCode}`,
+  ]);
   run(process.execPath, [
     path.join(repoRoot, 'scripts', 'test-workstation-packaged.mjs'),
-    ...(locationProfile ? [`--expected-location=${locationProfile.locationCode}`] : []),
+    `--expected-location=${locationProfile.locationCode}`,
+    `--expected-site-location=${locationConfiguration.siteSyncLocationIds.join(',')}`,
+    `--expected-auth-account=${locationProfile.locationCode}`,
+    `--expected-version=${workstationVersion}`,
   ]);
 
-  await fs.writeFile(enrollmentHashFile, `${enrollmentTokenHash}\n`, { encoding: 'utf8', mode: 0o600 });
-  if (locationProfile) {
-    await finalizeLocationArtifact();
-  } else {
-    runNodeScript('scripts/write-workstation-release-checksum.mjs');
-    runNodeScript('scripts/cleanup-workstation-releases.mjs');
-  }
-  console.log(`${locationProfile?.locationName || 'Workstation'} installer built; one-time enrollment secret was not printed.`);
+  await finalizeLocationArtifact();
+  await writePrivateFileAtomically(enrollmentHashFile, `${enrollmentTokenHash}\n`);
+  buildSucceeded = true;
+  console.log(`${locationProfile.locationName} installer built; one-time enrollment secret was not printed.`);
 } finally {
   await fs.rm(enrollmentFile, { force: true });
   await fs.rm(generatedDirectory, { recursive: true, force: true });
+  await fs.rm(unpackedDirectory, { recursive: true, force: true });
+  if (!buildSucceeded) {
+    await Promise.all(buildArtifactNames.map(fileName => fs.rm(path.join(releaseDirectory, fileName), { force: true })));
+    await fs.rm(`${enrollmentHashFile}.${process.pid}.tmp`, { force: true });
+  }
 }

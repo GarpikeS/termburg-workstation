@@ -25,13 +25,29 @@ async function firstExistingFile(filePaths) {
   return '';
 }
 
-export async function stageWorkstationSiteSyncSecrets({ repoRoot, generatedDirectory }) {
+export async function stageWorkstationSiteSyncSecrets({
+  repoRoot,
+  generatedDirectory,
+  locationIds,
+}) {
+  if (!Array.isArray(locationIds)) throw new Error('Schedule location selection is required.');
+  const selectedLocationIds = [...new Set(locationIds.map(value => String(value).trim()))];
+  if (selectedLocationIds.length === 0 || selectedLocationIds.some(value => !['1', '2'].includes(value))) {
+    throw new Error('Unknown or empty schedule location selection.');
+  }
   const sourceFile = await firstExistingFile(candidateFiles());
   if (!sourceFile) {
     throw new Error('Schedule site tokens were not found. Set TERMBURG_SITE_SYNC_FILE or configure site-sync.json locally.');
   }
   const source = JSON.parse(await fs.readFile(sourceFile, 'utf8'));
-  const embedded = normalizeEmbeddedSiteSync({ version: 1, locations: source.locations });
+  const selectedLocations = Object.fromEntries(
+    selectedLocationIds.map(locationId => [locationId, source?.locations?.[locationId]]),
+  );
+  const embedded = normalizeEmbeddedSiteSync({
+    version: 1,
+    replaceLocations: true,
+    locations: selectedLocations,
+  });
   await fs.mkdir(generatedDirectory, { recursive: true });
   const outputFile = path.join(generatedDirectory, EMBEDDED_SITE_SYNC_FILE);
   await fs.writeFile(outputFile, `${JSON.stringify(embedded)}\n`, { encoding: 'utf8', mode: 0o600 });
