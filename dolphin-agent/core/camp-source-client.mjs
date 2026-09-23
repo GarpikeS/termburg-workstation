@@ -37,6 +37,9 @@ const DEFAULT_ENDPOINTS = Object.freeze({
   accounts: '/api/v1/camp/accounts',
   accountSales: '/api/v1/camp/accountsales',
 });
+const TRUSTED_CAMP_HTTP_ORIGINS = new Set([
+  'http://85.202.234.197:60888',
+]);
 
 export class CampSourceApiError extends Error {
   constructor(message, options = {}) {
@@ -98,6 +101,15 @@ function isPrivateIpv4(hostname) {
 }
 
 function normalizeCampBaseUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ''));
+  } catch {
+    return '';
+  }
+  if (parsed.username || parsed.password) return '';
+  if (TRUSTED_CAMP_HTTP_ORIGINS.has(parsed.origin)) return parsed.origin;
+
   const normalized = normalizeSourceBaseUrl(value);
   if (!normalized) return '';
   const hostname = new URL(normalized).hostname.toLowerCase();

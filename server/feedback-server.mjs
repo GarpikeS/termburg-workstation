@@ -22,6 +22,7 @@ const service = await startFeedbackService({
   dolphinSourceApply: process.env.DOLPHIN_SOURCE_APPLY === '1',
   dolphinSourceLookbackDays: Number(process.env.DOLPHIN_SOURCE_LOOKBACK_DAYS || 2),
   dolphinCampSourceEnabled: process.env.DOLPHIN_CAMP_SOURCE_ENABLED === '1',
+  dolphinCampSourceApiUrls: process.env.DOLPHIN_CAMP_SOURCE_API_URLS || process.env.DOLPHIN_SOURCE_API_URLS || '',
   dolphinCampInitialDate: process.env.DOLPHIN_CAMP_INITIAL_DATE || '2023-09-01',
   dolphinCampGuestTypesPath: process.env.DOLPHIN_CAMP_GUESTTYPES_PATH || '/api/v1/camp/guesttypes',
   dolphinCampServicesPath: process.env.DOLPHIN_CAMP_SERVICES_PATH || '/api/v1/camp/services',
@@ -35,6 +36,9 @@ const service = await startFeedbackService({
       apply: process.env.DOLPHIN_ZELENOGORSK_SOURCE_APPLY === '1',
       lookbackDays: Number(process.env.DOLPHIN_ZELENOGORSK_SOURCE_LOOKBACK_DAYS || 2),
       campEnabled: process.env.DOLPHIN_ZELENOGORSK_CAMP_SOURCE_ENABLED === '1',
+      campApiUrls: process.env.DOLPHIN_ZELENOGORSK_CAMP_SOURCE_API_URLS
+        || process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_URLS
+        || '',
       campInitialDate: process.env.DOLPHIN_ZELENOGORSK_CAMP_INITIAL_DATE || '2023-09-01',
     },
   },

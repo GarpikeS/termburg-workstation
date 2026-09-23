@@ -288,7 +288,7 @@ export class DolphinSyncAgent {
 
       const result = await this.campClientFactory({
         ...campConfig,
-        baseUrls: sourceConfig.baseUrls,
+        baseUrls: Array.isArray(campConfig.baseUrls) ? campConfig.baseUrls : sourceConfig.baseUrls,
         apiKey: sourceConfig.apiKey,
       }).probe({
         timestamp: attemptedAt,

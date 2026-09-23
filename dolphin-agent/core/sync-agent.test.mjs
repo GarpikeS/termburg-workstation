@@ -174,6 +174,7 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
     apiKey: 'local-api-key-for-test-only',
     camp: {
       enabled: true,
+      baseUrls: ['http://85.202.234.197:60888'],
       initialDate: '2023-09-01',
       endpoints: {
         guestTypes: '/api/v1/camp/guesttypes',
@@ -246,6 +247,7 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
 
     assert.equal(probeCount, 1);
     assert.equal(receivedConfigs[0].apiKey, 'local-api-key-for-test-only');
+    assert.deepEqual(receivedConfigs[0].baseUrls, ['http://85.202.234.197:60888']);
     assert.equal(receivedConfigs[0].initialDate, '2023-09-01');
     assert.equal(receivedConfigs[0].endpoints.accountSales, '/api/v1/camp/accountsales');
     assert.equal(agent.status().campApi.status, 'diagnostic');

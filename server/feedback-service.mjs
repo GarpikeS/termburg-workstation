@@ -42,6 +42,9 @@ const CAMP_SCHEMA_FIELDS = new Set([
   'IDPARENTDOC', 'KINDCHECK', 'QUANTITYSUM',
 ]);
 const CAMP_RESOURCE_NAMES = ['guestTypes', 'services', 'accounts', 'accountSales'];
+const TRUSTED_CAMP_HTTP_ORIGINS = new Set([
+  'http://85.202.234.197:60888',
+]);
 const SAFE_CAMP_ERRORS = new Set([
   'CAMP API не ответил за 10 секунд.',
   'Нет связи с CAMP API.',
@@ -197,7 +200,10 @@ function isPrivateIpv4(hostname) {
     || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31);
 }
 
-function normalizeDolphinSourceUrls(value) {
+function normalizeDolphinSourceUrls(value, options = {}) {
+  const allowedPublicHttpOrigins = options.allowedPublicHttpOrigins instanceof Set
+    ? options.allowedPublicHttpOrigins
+    : new Set();
   const candidates = Array.isArray(value) ? value : String(value || '').split(',');
   const normalized = candidates.flatMap(candidate => {
     try {
@@ -205,7 +211,8 @@ function normalizeDolphinSourceUrls(value) {
       if (url.username || url.password || !['http:', 'https:'].includes(url.protocol)) return [];
       const hostname = url.hostname.toLowerCase();
       const privateHost = hostname === 'localhost' || hostname === '::1' || isPrivateIpv4(hostname);
-      if (url.protocol === 'http:' && !privateHost) return [];
+      const approvedPublicHttp = url.protocol === 'http:' && allowedPublicHttpOrigins.has(url.origin);
+      if (url.protocol === 'http:' && !privateHost && !approvedPublicHttp) return [];
       url.pathname = '/';
       url.search = '';
       url.hash = '';
@@ -378,6 +385,7 @@ export function createFeedbackService(options) {
     dolphinSourceApply = false,
     dolphinSourceLookbackDays = 2,
     dolphinCampSourceEnabled = false,
+    dolphinCampSourceApiUrls = '',
     dolphinCampInitialDate = '2023-09-01',
     dolphinCampGuestTypesPath = '/api/v1/camp/guesttypes',
     dolphinCampServicesPath = '/api/v1/camp/services',
@@ -401,17 +409,22 @@ export function createFeedbackService(options) {
   );
   function normalizeSourceProfile(value = {}) {
     const apiPath = normalizeDolphinApiPath(value.apiPath, '/api/v1/barcodes/game');
+    const apiUrls = normalizeDolphinSourceUrls(value.apiUrls);
+    const campUrls = normalizeDolphinSourceUrls(value.campApiUrls || value.apiUrls, {
+      allowedPublicHttpOrigins: TRUSTED_CAMP_HTTP_ORIGINS,
+    });
     const campEndpoints = value.campEndpoints && typeof value.campEndpoints === 'object'
       ? value.campEndpoints
       : {};
     return {
-      urls: normalizeDolphinSourceUrls(value.apiUrls),
+      urls: apiUrls,
       apiKey: text(value.apiKey, 256),
       apiPath,
       lookbackDays: Math.min(7, Math.max(0, Number(value.lookbackDays) || 0)),
       apply: value.apply === true,
       camp: {
         enabled: value.campEnabled === true,
+        urls: campUrls,
         initialDate: isIsoDate(value.campInitialDate) ? value.campInitialDate : '2023-09-01',
         endpoints: {
           guestTypes: normalizeDolphinApiPath(campEndpoints.guestTypes, '/api/v1/camp/guesttypes'),
@@ -429,6 +442,7 @@ export function createFeedbackService(options) {
     lookbackDays: dolphinSourceLookbackDays,
     apply: dolphinSourceApply,
     campEnabled: dolphinCampSourceEnabled,
+    campApiUrls: dolphinCampSourceApiUrls || dolphinSourceApiUrls,
     campInitialDate: dolphinCampInitialDate,
     campEndpoints: {
       guestTypes: dolphinCampGuestTypesPath,
@@ -1034,15 +1048,17 @@ export function createFeedbackService(options) {
     if (!identity.authorized) return;
     const profile = sourceProfileForDevice(identity.deviceId);
     const enabled = profile.urls.length > 0 && profile.apiKey.length >= 16;
+    const campEnabled = profile.camp.enabled && profile.camp.urls.length > 0 && profile.apiKey.length >= 16;
     sendJson(response, 200, {
       enabled,
       baseUrls: enabled ? profile.urls : [],
-      apiKey: enabled ? profile.apiKey : '',
+      apiKey: enabled || campEnabled ? profile.apiKey : '',
       apiPath: profile.apiPath,
       lookbackDays: profile.lookbackDays,
       applyRedemptions: enabled && profile.apply,
       camp: {
-        enabled: enabled && profile.camp.enabled,
+        enabled: campEnabled,
+        baseUrls: campEnabled ? profile.camp.urls : [],
         initialDate: profile.camp.initialDate,
         endpoints: profile.camp.endpoints,
       },

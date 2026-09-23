@@ -115,25 +115,35 @@ test('negotiates standard and legacy query styles independently for each endpoin
   assert.ok(!urls.includes('http://10.10.0.250:60888/api/v1/camp/accountsales&dateexchange=2023-09-01'));
 });
 
-test('never sends a CAMP API key outside the private network', async () => {
-  let called = false;
+test('allows only the approved Dolphin CAMP origin over public plain HTTP', async () => {
+  const requests = [];
   const config = normalizeCampSourceConfig({
     enabled: true,
-    baseUrls: ['http://85.202.234.197:60888', 'https://public-api.example.test'],
-    apiKey: 'must-never-leave-over-http',
+    baseUrls: [
+      'http://85.202.234.197:60888/untrusted-path?leak=yes',
+      'http://203.0.113.7:60888',
+      'https://public-api.example.test',
+    ],
+    apiKey: 'approved-vendor-key-for-test-only',
     initialDate: '2023-09-01',
   });
   const client = new CampSourceApiClient(config, {
-    fetchImpl: async () => {
-      called = true;
-      return new Response('{}');
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
     },
   });
 
-  await assert.rejects(() => client.probe(), /не настроен/i);
-  assert.equal(config.enabled, false);
-  assert.deepEqual(config.baseUrls, []);
-  assert.equal(called, false);
+  const result = await client.probe({
+    timestamp: Date.parse('2023-09-01T10:00:00.000Z'),
+    timezoneOffset: '+03:00',
+  });
+  assert.equal(result.status, 'diagnostic');
+  assert.equal(config.enabled, true);
+  assert.deepEqual(config.baseUrls, ['http://85.202.234.197:60888']);
+  assert.ok(requests.length > 0);
+  assert.ok(requests.every(request => request.url.startsWith('http://85.202.234.197:60888/')));
+  assert.ok(requests.every(request => request.options.headers['X-API-Key'] === 'approved-vendor-key-for-test-only'));
 });
 
 test('profiles field names and types without retaining source values', () => {

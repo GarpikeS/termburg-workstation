@@ -673,6 +673,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     dolphinSourceApply: false,
     dolphinSourceLookbackDays: 2,
     dolphinCampSourceEnabled: true,
+    dolphinCampSourceApiUrls: 'http://85.202.234.197:60888,http://203.0.113.7:60888',
     dolphinCampInitialDate: '2023-09-01',
     dolphinCampGuestTypesPath: '/api/v1/camp/guesttypes',
     dolphinCampServicesPath: '/api/v1/camp/services',
@@ -744,6 +745,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
       applyRedemptions: true,
       camp: {
         enabled: false,
+        baseUrls: [],
         initialDate: '2023-09-01',
         endpoints: {
           guestTypes: '/api/v1/camp/guesttypes',
@@ -767,6 +769,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
       applyRedemptions: false,
       camp: {
         enabled: true,
+        baseUrls: ['http://85.202.234.197:60888'],
         initialDate: '2023-09-01',
         endpoints: {
           guestTypes: '/api/v1/camp/guesttypes',
