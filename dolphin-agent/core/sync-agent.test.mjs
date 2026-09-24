@@ -330,3 +330,221 @@ test('does not hammer CAMP after a partial diagnostic result', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+function completeBusinessResources() {
+  return {
+    accounts: [{ ID: 10, ISSTAFF: 0, NAME: 'Иван Иванов' }],
+    cards: [{ ID: 20, ISSTAFFCARD: 0, SERIAL: 'CARD-SECRET' }],
+    skudAreas: [{ ID: 1, STATUS: 0, KIND: 1, ISCHECKBALANCE: 1 }],
+    skudControllers: [{ ID: 101, IDAREA: 1, READERIN: 1, READEROUT: 2, STATUS: 0 }],
+    skudVerifyLogs: [
+      {
+        DATEACTION: '2026-09-09 09:00:00.000',
+        IDCONTROLLER: 101,
+        IDREADER: 1,
+        ISALLOW: 1,
+        READERIN: 1,
+        IDACCOUNT: 10,
+        IDCARD: 20,
+        STATUS: 0,
+      },
+      {
+        DATEACTION: '2026-09-10 09:00:00.000',
+        IDCONTROLLER: 101,
+        IDREADER: 1,
+        ISALLOW: 1,
+        READERIN: 1,
+        IDACCOUNT: 10,
+        IDCARD: 20,
+        STATUS: 0,
+      },
+    ],
+    accountPayments: [
+      { DATEDOC: '2026-09-09 10:00:00.000', SUMMA: 123.45, STATUS: 0, ISNOTFISCAL: 0 },
+      { DATEDOC: '2026-09-10 10:00:00.000', SUMMA: 500, STATUS: 0, ISNOTFISCAL: 0 },
+    ],
+  };
+}
+
+test('persists and retries the identical business aggregate before advancing its sequence', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'termburg-camp-business-idempotency-'));
+  const stateStore = createAgentStateStore(path.join(root, 'state.json'));
+  const uploads = [];
+  const heartbeats = [];
+  let businessFetches = 0;
+  let now = Date.parse('2026-09-10T10:00:00.000Z');
+  let failFirstUpload = true;
+  const sourceConfig = {
+    enabled: false,
+    apiKey: 'local-api-key-for-test-only',
+    camp: {
+      enabled: true,
+      baseUrls: ['http://85.202.234.197:60888'],
+      initialDate: '2023-09-01',
+      endpoints: {},
+      business: {
+        enabled: true,
+        lookbackDays: 1,
+        endpoints: {
+          accounts: '/api/v1/camp/accounts',
+          cards: '/api/v1/camp/cards',
+          skudAreas: '/api/v1/camp/skudareas',
+          skudControllers: '/api/v1/camp/skudcontrollers',
+          skudVerifyLogs: '/api/v1/camp/skudverifylogs',
+          accountPayments: '/api/v1/camp/accountpayments',
+        },
+      },
+    },
+  };
+  const serverClient = {
+    async sourceConfig() { return sourceConfig; },
+    async heartbeat(_token, value) {
+      heartbeats.push(structuredClone(value));
+      return { ok: true };
+    },
+    async sendBusinessSummary(_token, envelope) {
+      uploads.push(structuredClone(envelope));
+      if (failFirstUpload) {
+        failFirstUpload = false;
+        throw new Error('Нет связи с сервером.');
+      }
+      return { ok: true, sequence: envelope.sequence };
+    },
+  };
+  const createAgent = () => new DolphinSyncAgent({
+    stateStore,
+    readFile: readDolphinFile,
+    clientFactory: () => serverClient,
+    campClientFactory: () => ({
+      async probe() {
+        return {
+          status: 'diagnostic',
+          initialDate: '2023-09-01',
+          currentDate: '2026-09-10',
+          resources: {},
+        };
+      },
+      async fetchBusinessResources() {
+        businessFetches += 1;
+        return {
+          currentDate: '2026-09-10',
+          from: '2026-09-09',
+          through: '2026-09-10',
+          completeThrough: '2026-09-09',
+          resources: completeBusinessResources(),
+          quality: {
+            dateExchangeUsable: true,
+            blockers: [],
+            resourceSchemaHashes: { accountPayments: 'a'.repeat(64) },
+          },
+        };
+      },
+    }),
+    configProvider: async () => ({
+      watchFolder: root,
+      endpoint: 'https://tbgame.ru/api/integrations/dolphin/redemptions',
+      timezoneOffset: '+03:00',
+      deviceId: 'dolphin-test-device-business-0001',
+      appVersion: '1.1.16',
+    }),
+    tokenProvider: async () => 'test-token-that-is-long-enough',
+    logger: { info() {}, warn() {}, error() {} },
+    now: () => now,
+  });
+
+  try {
+    const firstAgent = createAgent();
+    await firstAgent.runOnce({ forceBusiness: true });
+    const afterFailure = await stateStore.load();
+    assert.equal(uploads.length, 1);
+    assert.equal(businessFetches, 1);
+    assert.equal(afterFailure.businessSync.pending?.sequence, 1);
+    assert.equal(afterFailure.businessSync.status, 'error');
+    assert.deepEqual(heartbeats[0].businessSync, {
+      status: 'error',
+      lastAttemptAt: now,
+      lastSuccessAt: null,
+      lastError: 'Нет связи с сервером.',
+      lastSequence: 0,
+      pending: true,
+    });
+    assert.doesNotMatch(JSON.stringify(heartbeats[0]), /days|fiscalRevenueKopecks|uniqueVisitors|Иван Иванов|CARD-SECRET|IDACCOUNT|IDCARD/u);
+
+    const restartedAgent = createAgent();
+    await restartedAgent.runOnce();
+    const afterRetry = await stateStore.load();
+    assert.equal(uploads.length, 2);
+    assert.deepEqual(uploads[1], uploads[0]);
+    assert.equal(businessFetches, 1);
+    assert.equal(afterRetry.businessSync.pending, null);
+    assert.equal(afterRetry.businessSync.lastSequence, 1);
+    assert.equal(afterRetry.businessSync.status, 'active');
+    assert.deepEqual(heartbeats[1].businessSync, {
+      status: 'active',
+      lastAttemptAt: now,
+      lastSuccessAt: now,
+      lastError: null,
+      lastSequence: 1,
+      pending: false,
+    });
+    assert.equal(uploads[1].days[0].uniqueVisitors, 1);
+    assert.equal(uploads[1].days[0].fiscalRevenueKopecks, 12345);
+    assert.equal(uploads[1].days[1].visitorStatus, 'incomplete');
+    assert.equal(uploads[1].days[1].revenueStatus, 'incomplete');
+    assert.doesNotMatch(JSON.stringify(uploads), /Иван Иванов|CARD-SECRET|IDACCOUNT|IDCARD/u);
+
+    now += 5 * 60 * 1000;
+    await restartedAgent.runOnce({ forceBusiness: true });
+    assert.equal(uploads.length, 3);
+    assert.equal(businessFetches, 2);
+    assert.equal(uploads[2].generationId, uploads[0].generationId);
+    assert.equal(uploads[2].sequence, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('keeps business collection dormant when the source-config flag is disabled', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'termburg-camp-business-disabled-'));
+  let businessFetches = 0;
+  let uploads = 0;
+  const agent = new DolphinSyncAgent({
+    stateStore: createAgentStateStore(path.join(root, 'state.json')),
+    readFile: readDolphinFile,
+    clientFactory: () => ({
+      async sourceConfig() {
+        return {
+          apiKey: 'local-api-key-for-test-only',
+          camp: { enabled: true, business: { enabled: false } },
+        };
+      },
+      async heartbeat() { return { ok: true }; },
+      async sendBusinessSummary() { uploads += 1; },
+    }),
+    campClientFactory: () => ({
+      async probe() {
+        return { status: 'diagnostic', initialDate: '2023-09-01', currentDate: '2026-09-10', resources: {} };
+      },
+      async fetchBusinessResources() { businessFetches += 1; },
+    }),
+    configProvider: async () => ({
+      watchFolder: root,
+      endpoint: 'https://tbgame.ru/api/integrations/dolphin/redemptions',
+      timezoneOffset: '+03:00',
+      deviceId: 'dolphin-test-device-business-0002',
+      appVersion: '1.1.16',
+    }),
+    tokenProvider: async () => 'test-token-that-is-long-enough',
+    logger: { info() {}, warn() {}, error() {} },
+    now: () => Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+
+  try {
+    await agent.runOnce({ forceBusiness: true });
+    assert.equal(businessFetches, 0);
+    assert.equal(uploads, 0);
+    assert.equal(agent.status().businessSync.status, 'disabled');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

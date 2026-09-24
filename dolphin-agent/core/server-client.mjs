@@ -32,6 +32,10 @@ export class DolphinServerClient {
       || (this.endpoint.includes('/api/integrations/dolphin/')
         ? new URL('source-config', `${this.endpoint.replace(/\/redemptions\/?$/, '/')}`).toString()
         : DEFAULT_SOURCE_CONFIG_ENDPOINT);
+    this.businessSummaryEndpoint = options.businessSummaryEndpoint
+      || (this.endpoint.includes('/api/integrations/dolphin/')
+        ? new URL('business-summary', `${this.endpoint.replace(/\/redemptions\/?$/, '/')}`).toString()
+        : '');
     this.fetch = options.fetchImpl || globalThis.fetch;
     this.timeoutMs = options.timeoutMs || HTTP_TIMEOUT_MS;
     this.maxAttempts = options.maxAttempts || MAX_HTTP_ATTEMPTS;
@@ -85,6 +89,18 @@ export class DolphinServerClient {
 
   async sourceConfig(token) {
     const response = await this.request(this.sourceConfigEndpoint, { method: 'GET' }, token);
+    return response.json();
+  }
+
+  async sendBusinessSummary(token, value) {
+    if (!this.businessSummaryEndpoint) {
+      throw new DolphinServerError('Сервер агрегатов Dolphin не настроен.', { retryable: false });
+    }
+    const response = await this.request(this.businessSummaryEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value),
+    }, token);
     return response.json();
   }
 

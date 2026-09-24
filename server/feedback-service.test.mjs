@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -658,7 +658,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-enrollment-'));
   const enrollmentToken = 'installer-one-time-token-for-test-only';
   const deviceToken = 'a'.repeat(64);
-  const deviceId = 'dolphin-zelenogorsk-11111111-2222-4333-8444-555555555555';
+  const deviceId = 'dolphin-moscow-11111111-2222-4333-8444-555555555555';
   const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
   const service = await startFeedbackService({
     dataFile: path.join(tempRoot, 'feedback.jsonl'),
@@ -666,6 +666,7 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     redemptionsDataFile: path.join(tempRoot, 'reward-redemptions.jsonl'),
     dolphinConnectorsDataFile: connectorsDataFile,
     dolphinEnrollmentTokenHash: sha256(enrollmentToken),
+    dolphinEnrollmentLocationCode: 'zelenogorsk',
     dolphinConnectorToken: 'legacy-dolphin-connector-token-for-test-only',
     dolphinSourceApiKey: 'dolphin-source-api-key-for-test-only',
     dolphinSourceApiUrls: 'http://127.0.0.1:60888,http://10.10.0.250:60888,http://85.202.234.197:60888',
@@ -679,6 +680,9 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
     dolphinCampServicesPath: '/api/v1/camp/services',
     dolphinCampAccountsPath: '/api/v1/camp/accounts',
     dolphinCampAccountSalesPath: '/api/v1/camp/accountsales-custom',
+    dolphinCampBusinessEnabled: true,
+    dolphinCampBusinessLookbackDays: 9,
+    dolphinCampAccountPaymentsPath: '/api/v1/camp/accountpayments-custom',
     dolphinSourceProfiles: {
       zelenogorsk: {
         apiKey: 'zelenogorsk-source-api-key-for-test-only',
@@ -753,6 +757,18 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           accounts: '/api/v1/camp/accounts',
           accountSales: '/api/v1/camp/accountsales',
         },
+        business: {
+          enabled: false,
+          lookbackDays: 7,
+          endpoints: {
+            accountPayments: '/api/v1/camp/accountpayments',
+            skudVerifyLogs: '/api/v1/camp/skudverifylogs',
+            cards: '/api/v1/camp/cards',
+            skudAreas: '/api/v1/camp/skudareas',
+            skudControllers: '/api/v1/camp/skudcontrollers',
+            kkmCheques: '/api/v1/camp/kkmcheques',
+          },
+        },
       },
     });
 
@@ -776,6 +792,18 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
           services: '/api/v1/camp/services',
           accounts: '/api/v1/camp/accounts',
           accountSales: '/api/v1/camp/accountsales-custom',
+        },
+        business: {
+          enabled: true,
+          lookbackDays: 9,
+          endpoints: {
+            accountPayments: '/api/v1/camp/accountpayments-custom',
+            skudVerifyLogs: '/api/v1/camp/skudverifylogs',
+            cards: '/api/v1/camp/cards',
+            skudAreas: '/api/v1/camp/skudareas',
+            skudControllers: '/api/v1/camp/skudcontrollers',
+            kkmCheques: '/api/v1/camp/kkmcheques',
+          },
         },
       },
     });
@@ -899,6 +927,137 @@ test('Dolphin installer enrolls once and receives a device-bound connector token
   }
 });
 
+test('Dolphin business aggregates use the server-bound complex, stay idempotent/private, and are internally readable', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-business-'));
+  const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
+  const summariesDataFile = path.join(tempRoot, 'dolphin-business-summaries.json');
+  const enrollmentToken = 'synthetic-enrollment-token-for-business-test-only';
+  const deviceId = 'dolphin-zelenogorsk-11111111-2222-4333-8444-555555555555';
+  const deviceToken = 'e'.repeat(64);
+  const internalToken = 'synthetic-internal-business-token-for-test-only';
+  const service = await startFeedbackService({
+    dataFile: path.join(tempRoot, 'feedback.jsonl'),
+    claimsDataFile: path.join(tempRoot, 'reward-claims.jsonl'),
+    redemptionsDataFile: path.join(tempRoot, 'reward-redemptions.jsonl'),
+    dolphinConnectorsDataFile: connectorsDataFile,
+    dolphinBusinessSummariesDataFile: summariesDataFile,
+    dolphinBusinessInternalToken: internalToken,
+    dolphinEnrollmentTokenHash: sha256(enrollmentToken),
+    dolphinEnrollmentLocationCode: 'moscow',
+    now: () => Date.UTC(2026, 8, 24, 6, 0, 0),
+    host: '127.0.0.1',
+    port: 0,
+    logger: { info() {}, error() {} },
+    accountOptions: {
+      databaseFile: path.join(tempRoot, 'accounts.sqlite'),
+      authSecret: 'synthetic-test-secret-that-is-long-enough-for-account-authentication',
+    },
+  });
+  const origin = `http://127.0.0.1:${service.port}`;
+  const endpoint = `${origin}/api/integrations/dolphin/business-summary`;
+  const upload = {
+    schemaVersion: 1,
+    generationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    sequence: 7,
+    generatedAt: '2026-09-24T05:55:00.000Z',
+    window: { from: '2026-09-23', through: '2026-09-23', completeThrough: '2026-09-23', timezone: 'Europe/Moscow' },
+    days: [{
+      date: '2026-09-23',
+      uniqueVisitors: 171,
+      visitorStatus: 'complete',
+      fiscalRevenueKopecks: 23214300,
+      revenueStatus: 'complete',
+      fiscalPaymentRows: 42,
+    }],
+    quality: {
+      dateExchangeUsable: true,
+      blockers: [],
+      resourceSchemaHashes: { accountPayments: 'a'.repeat(64), skudVerifyLogs: 'b'.repeat(64) },
+    },
+  };
+
+  try {
+    const enrollment = await fetch(`${origin}/api/integrations/dolphin/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enrollmentToken, deviceId, deviceToken }),
+    });
+    assert.equal(enrollment.status, 201);
+
+    const denied = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(upload),
+    });
+    assert.equal(denied.status, 401);
+
+    const created = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({ ...upload, customerName: 'must-not-be-accepted' }),
+    });
+    assert.equal(created.status, 400);
+
+    const invalidCompleteNull = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({
+        ...upload,
+        days: [{ ...upload.days[0], uniqueVisitors: null }],
+      }),
+    });
+    assert.equal(invalidCompleteNull.status, 400);
+
+    const accepted = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify(upload),
+    });
+    assert.equal(accepted.status, 201);
+    assert.deepEqual(await accepted.json(), {
+      ok: true,
+      scopeId: 'pechatniki',
+      sequence: 7,
+      repeated: false,
+      receivedAt: '2026-09-24T06:00:00.000Z',
+    });
+
+    const repeated = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify(upload),
+    });
+    assert.equal(repeated.status, 200);
+    assert.equal((await repeated.json()).repeated, true);
+
+    const conflicting = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({ ...upload, days: [{ ...upload.days[0], uniqueVisitors: 172 }] }),
+    });
+    assert.equal(conflicting.status, 409);
+
+    const deniedInternal = await fetch(`${origin}/api/internal/dolphin/business-summaries`);
+    assert.equal(deniedInternal.status, 401);
+    const internal = await fetch(`${origin}/api/internal/dolphin/business-summaries`, {
+      headers: { Authorization: `Bearer ${internalToken}` },
+    });
+    assert.equal(internal.status, 200);
+    const stored = await internal.json();
+    assert.equal(stored.scopes.pechatniki.scopeEvidence, 'device-profile');
+    assert.equal(stored.scopes.pechatniki.upload.days[0].uniqueVisitors, 171);
+    assert.equal(stored.scopes.pechatniki.upload.days[0].fiscalRevenueKopecks, 23214300);
+
+    const storedText = await readFile(summariesDataFile, 'utf8');
+    assert.doesNotMatch(storedText, /customerName|must-not-be-accepted/);
+    assert.doesNotMatch(storedText, new RegExp(deviceToken));
+    assert.doesNotMatch(storedText, new RegExp(internalToken));
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Dolphin enrollment hash rotation preserves existing devices and allows a new enrollment', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-enrollment-rotation-'));
   const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
@@ -916,6 +1075,7 @@ test('Dolphin enrollment hash rotation preserves existing devices and allows a n
     redemptionsDataFile: path.join(tempRoot, 'reward-redemptions.jsonl'),
     dolphinConnectorsDataFile: connectorsDataFile,
     dolphinEnrollmentTokenHash: enrollmentTokenHash,
+    dolphinEnrollmentLocationCode: 'moscow',
     host: '127.0.0.1',
     port: 0,
     logger: { info() {}, error() {} },
@@ -970,6 +1130,134 @@ test('Dolphin enrollment hash rotation preserves existing devices and allows a n
       deviceId: secondDeviceId,
       repeated: false,
     });
+  } finally {
+    await service?.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Dolphin enrollment fails closed when the server has no assigned complex', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-no-scope-'));
+  const enrollmentToken = 'synthetic-enrollment-token-without-scope-for-test-only';
+  const service = await startFeedbackService({
+    dataFile: path.join(tempRoot, 'feedback.jsonl'),
+    dolphinConnectorsDataFile: path.join(tempRoot, 'dolphin-connectors.json'),
+    dolphinEnrollmentTokenHash: sha256(enrollmentToken),
+    dolphinSourceApiKey: 'must-not-be-exposed-to-unbound-device',
+    dolphinSourceApiUrls: 'http://127.0.0.1:60888',
+    host: '127.0.0.1',
+    port: 0,
+    logger: { info() {}, error() {} },
+    accountOptions: {
+      databaseFile: path.join(tempRoot, 'accounts.sqlite'),
+      authSecret: 'synthetic-test-secret-that-is-long-enough-for-account-authentication',
+    },
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${service.port}/api/integrations/dolphin/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enrollmentToken,
+        deviceId: 'dolphin-moscow-11111111-2222-4333-8444-555555555555',
+        deviceToken: 'f'.repeat(64),
+      }),
+    });
+    assert.equal(response.status, 503);
+    const connectorsDataFile = path.join(tempRoot, 'dolphin-connectors.json');
+    await assert.rejects(readFile(connectorsDataFile, 'utf8'), { code: 'ENOENT' });
+
+    const unboundToken = '1'.repeat(64);
+    await writeFile(connectorsDataFile, `${JSON.stringify({
+      version: 1,
+      connectors: [{
+        deviceId: 'legacy-unbound-device-0001',
+        tokenHash: sha256(unboundToken),
+        createdAt: Date.UTC(2026, 8, 24, 6, 0, 0),
+      }],
+      enrollments: [],
+    })}\n`, 'utf8');
+    const sourceConfig = await fetch(`http://127.0.0.1:${service.port}/api/integrations/dolphin/source-config`, {
+      headers: { Authorization: `Bearer ${unboundToken}` },
+    });
+    assert.equal(sourceConfig.status, 403);
+    assert.doesNotMatch(await sourceConfig.text(), /must-not-be-exposed/);
+  } finally {
+    await service.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('Dolphin business store recovers from backup and never overwrites two corrupt copies', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'termburg-dolphin-business-store-'));
+  const dataFile = path.join(tempRoot, 'feedback.jsonl');
+  const summariesDataFile = path.join(tempRoot, 'dolphin-business-summaries.json');
+  const internalToken = 'synthetic-internal-business-token-for-store-test-only';
+  const upload = {
+    schemaVersion: 1,
+    generationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    sequence: 1,
+    generatedAt: '2026-09-24T05:55:00.000Z',
+    window: { from: '2026-09-23', through: '2026-09-23', completeThrough: '2026-09-23', timezone: 'Europe/Moscow' },
+    days: [{
+      date: '2026-09-23',
+      uniqueVisitors: 12,
+      visitorStatus: 'complete',
+      fiscalRevenueKopecks: 345600,
+      revenueStatus: 'complete',
+      fiscalPaymentRows: 3,
+    }],
+    quality: { dateExchangeUsable: true, blockers: [], resourceSchemaHashes: {} },
+  };
+  const validBackup = {
+    schemaVersion: 1,
+    updatedAt: '2026-09-24T06:00:00.000Z',
+    scopes: {
+      pechatniki: {
+        schemaVersion: 1,
+        scopeId: 'pechatniki',
+        scopeEvidence: 'device-profile',
+        generatedAt: upload.generatedAt,
+        receivedAt: '2026-09-24T06:00:00.000Z',
+        upload,
+      },
+    },
+  };
+  const start = () => startFeedbackService({
+    dataFile,
+    dolphinBusinessSummariesDataFile: summariesDataFile,
+    dolphinBusinessInternalToken: internalToken,
+    now: () => Date.UTC(2026, 8, 24, 6, 0, 0),
+    host: '127.0.0.1',
+    port: 0,
+    logger: { info() {}, error() {} },
+    accountOptions: {
+      databaseFile: path.join(tempRoot, 'accounts.sqlite'),
+      authSecret: 'synthetic-test-secret-that-is-long-enough-for-account-authentication',
+    },
+  });
+  let service;
+  try {
+    await writeFile(summariesDataFile, '{broken-primary', 'utf8');
+    await writeFile(`${summariesDataFile}.bak`, `${JSON.stringify(validBackup)}\n`, 'utf8');
+    service = await start();
+    let response = await fetch(`http://127.0.0.1:${service.port}/api/internal/dolphin/business-summaries`, {
+      headers: { Authorization: `Bearer ${internalToken}` },
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).scopes.pechatniki.upload.days[0].uniqueVisitors, 12);
+    assert.equal(await readFile(summariesDataFile, 'utf8'), '{broken-primary');
+    await service.close();
+    service = undefined;
+
+    await writeFile(`${summariesDataFile}.bak`, '{broken-backup', 'utf8');
+    service = await start();
+    response = await fetch(`http://127.0.0.1:${service.port}/api/internal/dolphin/business-summaries`, {
+      headers: { Authorization: `Bearer ${internalToken}` },
+    });
+    assert.equal(response.status, 500);
+    assert.equal(await readFile(summariesDataFile, 'utf8'), '{broken-primary');
+    assert.equal(await readFile(`${summariesDataFile}.bak`, 'utf8'), '{broken-backup');
   } finally {
     await service?.close();
     await rm(tempRoot, { recursive: true, force: true });

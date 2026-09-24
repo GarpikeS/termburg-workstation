@@ -26,6 +26,8 @@ const KNOWN_CAMP_FIELDS = new Set([
   'IDTYPESALE', 'DAYNO', 'IDRSTACCOUNT', 'COMPUTERNAME', 'IDSALE', 'IDMAIN',
   'IDHOTELACCOUNTPAYMENT', 'GUIDOPER', 'IDCARDFORSERVICE', 'QUANTITY', 'ISEXTRATIME',
   'IDPARENTDOC', 'KINDCHECK', 'QUANTITYSUM',
+  'ISSTAFFCARD', 'IDAREA', 'READERIN', 'READEROUT', 'ISCHECKBALANCE', 'DATEACTION',
+  'IDCONTROLLER', 'IDREADER', 'ISALLOW', 'ISNOTFISCAL',
 ]);
 const KNOWN_CONTAINER_KEYS = new Set([
   'rows', 'data', 'items', 'result', 'guesttypes', 'guest_types', 'services', 'accounts',
@@ -37,6 +39,62 @@ const DEFAULT_ENDPOINTS = Object.freeze({
   accounts: '/api/v1/camp/accounts',
   accountSales: '/api/v1/camp/accountsales',
 });
+const BUSINESS_RESOURCE_SPECS = Object.freeze({
+  accounts: Object.freeze({
+    requiredFields: Object.freeze(['ID', 'ISSTAFF']),
+    aliases: Object.freeze({ ID: Object.freeze(['ID', 'id']), ISSTAFF: Object.freeze(['ISSTAFF', 'isStaff']) }),
+  }),
+  cards: Object.freeze({
+    requiredFields: Object.freeze(['ID', 'ISSTAFFCARD']),
+    aliases: Object.freeze({ ID: Object.freeze(['ID', 'id']), ISSTAFFCARD: Object.freeze(['ISSTAFFCARD', 'isStaffCard']) }),
+  }),
+  skudAreas: Object.freeze({
+    requiredFields: Object.freeze(['ID', 'STATUS', 'KIND', 'ISCHECKBALANCE']),
+    aliases: Object.freeze({
+      ID: Object.freeze(['ID', 'id']),
+      STATUS: Object.freeze(['STATUS', 'status']),
+      KIND: Object.freeze(['KIND', 'kind']),
+      ISCHECKBALANCE: Object.freeze(['ISCHECKBALANCE', 'isCheckBalance']),
+    }),
+  }),
+  skudControllers: Object.freeze({
+    requiredFields: Object.freeze(['ID', 'IDAREA', 'READERIN', 'READEROUT', 'STATUS']),
+    aliases: Object.freeze({
+      ID: Object.freeze(['ID', 'id']),
+      IDAREA: Object.freeze(['IDAREA', 'idArea']),
+      READERIN: Object.freeze(['READERIN', 'readerIn']),
+      READEROUT: Object.freeze(['READEROUT', 'readerOut']),
+      STATUS: Object.freeze(['STATUS', 'status']),
+    }),
+  }),
+  skudVerifyLogs: Object.freeze({
+    requiredFields: Object.freeze([
+      'DATEACTION', 'IDCONTROLLER', 'IDREADER', 'ISALLOW', 'READERIN', 'IDACCOUNT', 'IDCARD', 'STATUS',
+    ]),
+    dateField: 'DATEACTION',
+    aliases: Object.freeze({
+      DATEACTION: Object.freeze(['DATEACTION', 'dateAction']),
+      IDCONTROLLER: Object.freeze(['IDCONTROLLER', 'idController']),
+      IDREADER: Object.freeze(['IDREADER', 'idReader']),
+      ISALLOW: Object.freeze(['ISALLOW', 'isAllow']),
+      READERIN: Object.freeze(['READERIN', 'readerIn']),
+      IDACCOUNT: Object.freeze(['IDACCOUNT', 'idAccount']),
+      IDCARD: Object.freeze(['IDCARD', 'idCard']),
+      STATUS: Object.freeze(['STATUS', 'status']),
+    }),
+  }),
+  accountPayments: Object.freeze({
+    requiredFields: Object.freeze(['DATEDOC', 'SUMMA', 'STATUS', 'ISNOTFISCAL']),
+    dateField: 'DATEDOC',
+    aliases: Object.freeze({
+      DATEDOC: Object.freeze(['DATEDOC', 'dateDoc']),
+      SUMMA: Object.freeze(['SUMMA', 'summa', 'amount']),
+      STATUS: Object.freeze(['STATUS', 'status']),
+      ISNOTFISCAL: Object.freeze(['ISNOTFISCAL', 'isNotFiscal']),
+    }),
+  }),
+});
+const BUSINESS_RESOURCE_NAMES = Object.freeze(Object.keys(BUSINESS_RESOURCE_SPECS));
 const TRUSTED_CAMP_HTTP_ORIGINS = new Set([
   'http://85.202.234.197:60888',
 ]);
@@ -61,6 +119,21 @@ function normalizeApiPath(value, fallback) {
     : fallback;
 }
 
+function normalizeBusinessConfig(value = {}, fallbacks = {}) {
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const inputEndpoints = input.endpoints && typeof input.endpoints === 'object' && !Array.isArray(input.endpoints)
+    ? input.endpoints
+    : {};
+  return {
+    enabled: input.enabled === true,
+    lookbackDays: Math.min(31, Math.max(1, Number(input.lookbackDays) || 7)),
+    endpoints: Object.fromEntries(BUSINESS_RESOURCE_NAMES.map(name => [
+      name,
+      normalizeApiPath(inputEndpoints[name], name === 'accounts' ? fallbacks.accounts || '' : ''),
+    ])),
+  };
+}
+
 export function normalizeCampSourceConfig(value = {}) {
   const urls = Array.isArray(value.baseUrls) ? value.baseUrls : [];
   const baseUrls = [...new Set(urls.map(normalizeCampBaseUrl).filter(Boolean))].slice(0, 8);
@@ -78,6 +151,9 @@ export function normalizeCampSourceConfig(value = {}) {
       accounts: normalizeApiPath(inputEndpoints.accounts, DEFAULT_ENDPOINTS.accounts),
       accountSales: normalizeApiPath(inputEndpoints.accountSales, DEFAULT_ENDPOINTS.accountSales),
     },
+    business: normalizeBusinessConfig(value.business, {
+      accounts: normalizeApiPath(inputEndpoints.accounts, DEFAULT_ENDPOINTS.accounts),
+    }),
   };
 }
 
@@ -176,6 +252,51 @@ function findRows(value, depth = 0, containerPath = '$') {
     };
   }
   return { rows: [value], containerPath };
+}
+
+function projectedBusinessRows(value, resource) {
+  const spec = BUSINESS_RESOURCE_SPECS[resource];
+  const collection = findRows(value);
+  if (!spec || collection.rows.length > MAX_SOURCE_API_ROWS) {
+    return { rows: [], rowCount: collection.rows.length, schemaComplete: false };
+  }
+  let schemaComplete = true;
+  const rows = collection.rows.slice(0, MAX_SOURCE_API_ROWS).map(source => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      schemaComplete = false;
+      return {};
+    }
+    const projected = {};
+    for (const fieldName of spec.requiredFields) {
+      const alias = spec.aliases[fieldName].find(name => Object.hasOwn(source, name));
+      if (!alias) {
+        schemaComplete = false;
+        continue;
+      }
+      projected[fieldName] = source[alias];
+    }
+    return projected;
+  });
+  return { rows, rowCount: collection.rows.length, schemaComplete };
+}
+
+function previousCalendarDate(value, days) {
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return new Date(timestamp - Math.max(0, Number(days) || 0) * 86_400_000).toISOString().slice(0, 10);
+}
+
+function calendarDates(from, through) {
+  const dates = [];
+  for (let timestamp = Date.parse(`${from}T00:00:00.000Z`);
+    timestamp <= Date.parse(`${through}T00:00:00.000Z`);
+    timestamp += 86_400_000) {
+    dates.push(new Date(timestamp).toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function localDatePrefix(value) {
+  return String(value ?? '').trim().match(/^(\d{4}-\d{2}-\d{2})(?:$|[T\s])/u)?.[1] || '';
 }
 
 function scalarType(value) {
@@ -314,7 +435,7 @@ export class CampSourceApiClient {
     ));
   }
 
-  async fetchResource(resource, apiPath, dateExchange) {
+  async fetchResource(resource, apiPath, dateExchange, options = {}) {
     const failures = [];
     for (const baseUrl of this.orderedBaseUrls()) {
       if (this.deadBaseUrls.has(baseUrl)) continue;
@@ -345,11 +466,23 @@ export class CampSourceApiClient {
             throw new CampSourceApiError(`CAMP API вернул не JSON при запросе ${resource}.`);
           }
           this.preferredBaseUrl = baseUrl;
+          const profile = profileCampResponse(parsed, { byteCount: Buffer.byteLength(body, 'utf8') });
+          const projection = options.businessProjection === true
+            ? projectedBusinessRows(parsed, resource)
+            : null;
+          const projectedSchemaHash = projection
+            ? profileCampResponse(projection.rows).schemaHash
+            : '';
           return {
             dateExchange,
             baseUrl,
             queryStyle: style,
-            ...profileCampResponse(parsed, { byteCount: Buffer.byteLength(body, 'utf8') }),
+            ...profile,
+            ...(projection ? {
+              projectedRows: projection.rows,
+              projectionSchemaComplete: projection.schemaComplete,
+              projectedSchemaHash,
+            } : {}),
           };
         } catch (error) {
           const normalized = publicNetworkError(error);
@@ -365,6 +498,88 @@ export class CampSourceApiClient {
       }
     }
     throw new CampSourceApiError(failures.at(-1) || `CAMP API недоступен при запросе ${resource}.`);
+  }
+
+  async fetchBusinessResources(options = {}) {
+    if (!this.config.enabled || this.config.business.enabled !== true) {
+      throw new CampSourceApiError('Сбор бизнес-показателей CAMP API не настроен.');
+    }
+    this.deadBaseUrls.clear();
+    this.preferredBaseUrl = '';
+    const timestamp = Number.isFinite(Number(options.timestamp)) ? Number(options.timestamp) : Date.now();
+    const currentDate = timezoneDateKey(timestamp, '+03:00');
+    const lookbackDays = Math.min(31, Math.max(1, Number(options.lookbackDays) || this.config.business.lookbackDays));
+    const from = previousCalendarDate(currentDate, lookbackDays);
+    const through = currentDate;
+    const dates = calendarDates(from, through);
+    const resources = {};
+    const resourceSchemaHashes = {};
+    const blockers = [];
+    let dateExchangeUsable = true;
+
+    for (const resource of BUSINESS_RESOURCE_NAMES) {
+      const apiPath = this.config.business.endpoints[resource];
+      const rows = [];
+      const hashes = new Set();
+      let valid = Boolean(apiPath);
+      let schemaObserved = false;
+      if (!apiPath) {
+        dateExchangeUsable = false;
+        if (!blockers.includes('source-unavailable')) blockers.push('source-unavailable');
+      }
+      for (const dateExchange of valid ? dates : []) {
+        let result;
+        try {
+          result = await this.fetchResource(resource, apiPath, dateExchange, { businessProjection: true });
+        } catch {
+          valid = false;
+          dateExchangeUsable = false;
+          if (!blockers.includes('source-unavailable')) blockers.push('source-unavailable');
+          break;
+        }
+        if (result.rowCount > MAX_SOURCE_API_ROWS || result.projectionSchemaComplete !== true) {
+          valid = false;
+          if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
+          break;
+        }
+        if (result.rowCount > 0) {
+          schemaObserved = true;
+          hashes.add(result.projectedSchemaHash);
+        }
+        const dateField = BUSINESS_RESOURCE_SPECS[resource].dateField;
+        if (dateField && result.projectedRows.some(row => localDatePrefix(row[dateField]) !== dateExchange)) {
+          valid = false;
+          dateExchangeUsable = false;
+          if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
+          break;
+        }
+        rows.push(...result.projectedRows);
+      }
+      if (!schemaObserved) {
+        valid = false;
+        if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
+      }
+      if (hashes.size > 1) {
+        valid = false;
+        if (!blockers.includes('schema-changed')) blockers.push('schema-changed');
+      }
+      if (!valid) continue;
+      resources[resource] = rows;
+      resourceSchemaHashes[resource] = [...hashes][0];
+    }
+
+    return {
+      currentDate,
+      from,
+      through,
+      completeThrough: previousCalendarDate(currentDate, 1),
+      resources,
+      quality: {
+        dateExchangeUsable,
+        blockers,
+        resourceSchemaHashes,
+      },
+    };
   }
 
   async probe(options = {}) {

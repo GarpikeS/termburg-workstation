@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
@@ -11,7 +11,8 @@ import {
   UNKNOWN_RETRY_TTL_MS,
 } from './constants.mjs';
 import { extractRedemptions } from './redemption-extractor.mjs';
-import { sanitizeCampApiState } from './state-store.mjs';
+import { aggregateCampBusinessDays } from './camp-business-aggregator.mjs';
+import { sanitizeBusinessSyncState, sanitizeCampApiState } from './state-store.mjs';
 
 const MAX_FILES_PER_SCAN = 100;
 const MAX_BATCHES_PER_SCAN = 10;
@@ -111,6 +112,7 @@ export class DolphinSyncAgent {
       lastError: state?.lastError || null,
       sourceApi: state?.sourceApi || null,
       campApi: state?.campApi || null,
+      businessSync: state?.businessSync || null,
     };
   }
 
@@ -333,6 +335,125 @@ export class DolphinSyncAgent {
     }
   }
 
+  async scanCampBusiness(config, token, serverClient, options = {}) {
+    if (!this.campClientFactory || typeof serverClient?.sourceConfig !== 'function'
+      || typeof serverClient?.sendBusinessSummary !== 'function') return false;
+    const attemptedAt = this.now();
+    try {
+      const sourceConfig = await serverClient.sourceConfig(token);
+      const campConfig = sourceConfig?.camp;
+      const businessConfig = campConfig?.business;
+      if (campConfig?.enabled !== true || businessConfig?.enabled !== true) {
+        this.state.businessSync = sanitizeBusinessSyncState({
+          ...this.state.businessSync,
+          status: 'disabled',
+          lastError: null,
+        });
+        return false;
+      }
+
+      const pending = this.state.businessSync.pending;
+      const lastAttemptAt = Number(this.state.businessSync.lastAttemptAt) || 0;
+      if (!pending && options.force !== true && lastAttemptAt > 0
+        && attemptedAt - lastAttemptAt < CAMP_PROBE_INTERVAL_MS) return false;
+
+      if (pending) {
+        await serverClient.sendBusinessSummary(token, pending);
+        this.state.businessSync = sanitizeBusinessSyncState({
+          ...this.state.businessSync,
+          status: pending.quality.blockers.length > 0 ? 'blocked' : 'active',
+          lastSequence: pending.sequence,
+          pending: null,
+          lastSuccessAt: this.now(),
+          lastError: null,
+        });
+        this.logger.info('CAMP business aggregate uploaded', {
+          sequence: pending.sequence,
+          from: pending.window.from,
+          through: pending.window.through,
+          status: this.state.businessSync.status,
+        });
+        return true;
+      }
+
+      const result = await this.campClientFactory({
+        ...campConfig,
+        baseUrls: Array.isArray(campConfig.baseUrls) ? campConfig.baseUrls : sourceConfig.baseUrls,
+        apiKey: sourceConfig.apiKey,
+        business: businessConfig,
+      }).fetchBusinessResources({
+        timestamp: attemptedAt,
+        lookbackDays: businessConfig.lookbackDays,
+      });
+      const aggregate = aggregateCampBusinessDays(result.resources, {
+        currentDate: result.currentDate,
+        from: result.from,
+        through: result.through,
+        dateExchangeUsable: result.quality?.dateExchangeUsable === true,
+        blockers: result.quality?.blockers,
+        resourceSchemaHashes: result.quality?.resourceSchemaHashes,
+      });
+      let generationId = this.state.businessSync.generationId;
+      let sequence = Number(this.state.businessSync.lastSequence) + 1;
+      if (!generationId || !Number.isSafeInteger(sequence) || sequence < 1) {
+        generationId = randomUUID();
+        sequence = 1;
+      }
+      const envelope = {
+        schemaVersion: 1,
+        generationId,
+        sequence,
+        generatedAt: new Date(attemptedAt).toISOString(),
+        window: {
+          from: result.from,
+          through: result.through,
+          completeThrough: result.completeThrough,
+          timezone: 'Europe/Moscow',
+        },
+        days: aggregate.days,
+        quality: aggregate.quality,
+      };
+      this.state.businessSync = sanitizeBusinessSyncState({
+        ...this.state.businessSync,
+        status: aggregate.quality.blockers.length > 0 ? 'blocked' : 'waiting',
+        generationId,
+        pending: envelope,
+        lastAttemptAt: attemptedAt,
+        lastError: null,
+      });
+      if (!this.state.businessSync.pending) throw new Error('Агрегат CAMP не прошёл локальную проверку.');
+
+      // Persist before the network call so a crash retries the exact same idempotency tuple and payload.
+      await this.persist();
+      await serverClient.sendBusinessSummary(token, this.state.businessSync.pending);
+      this.state.businessSync = sanitizeBusinessSyncState({
+        ...this.state.businessSync,
+        status: aggregate.quality.blockers.length > 0 ? 'blocked' : 'active',
+        lastSequence: sequence,
+        pending: null,
+        lastSuccessAt: this.now(),
+        lastError: null,
+      });
+      this.logger.info('CAMP business aggregate uploaded', {
+        sequence,
+        from: result.from,
+        through: result.through,
+        status: this.state.businessSync.status,
+      });
+      return true;
+    } catch (error) {
+      const message = publicError(error);
+      this.state.businessSync = sanitizeBusinessSyncState({
+        ...this.state.businessSync,
+        status: 'error',
+        lastAttemptAt: this.state.businessSync.lastAttemptAt || attemptedAt,
+        lastError: message,
+      });
+      this.logger.error('CAMP business synchronization failed', { error: message });
+      throw error;
+    }
+  }
+
   dueRows(now) {
     return Object.values(this.state.queue)
       .filter(row => Number(row.nextAttemptAt || 0) <= now)
@@ -431,6 +552,14 @@ export class DolphinSyncAgent {
         cycleErrors.push(publicError(error));
       }
 
+      try {
+        await this.scanCampBusiness(config, token, serverClient, {
+          force: options.force === true || options.forceBusiness === true,
+        });
+      } catch (error) {
+        cycleErrors.push(publicError(error));
+      }
+
       if (config.watchFolder) {
         try {
           const stat = await fs.stat(config.watchFolder);
@@ -465,6 +594,14 @@ export class DolphinSyncAgent {
               schemaKeys: this.state.sourceApi.schemaKeys,
             },
             campApi: sanitizeCampApiState(this.state.campApi),
+            businessSync: {
+              status: this.state.businessSync.status,
+              lastAttemptAt: this.state.businessSync.lastAttemptAt || null,
+              lastSuccessAt: this.state.businessSync.lastSuccessAt || null,
+              lastError: this.state.businessSync.lastError,
+              lastSequence: this.state.businessSync.lastSequence,
+              pending: Boolean(this.state.businessSync.pending),
+            },
           });
           this.state.lastSuccessAt = this.now();
         } catch (error) {

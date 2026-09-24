@@ -216,3 +216,141 @@ test('redacts unknown container and field names so dynamic PII keys cannot leave
   assert.equal(profile.containerPath, '$.NODE_REDACTED');
   assert.ok(profile.schema.some(field => field.path === 'FIELD_REDACTED'));
 });
+
+const businessEndpoints = {
+  cards: '/api/v1/camp/cards',
+  skudAreas: '/api/v1/camp/skudareas',
+  skudControllers: '/api/v1/camp/skudcontrollers',
+  skudVerifyLogs: '/api/v1/camp/skudverifylogs',
+  accountPayments: '/api/v1/camp/accountpayments',
+};
+
+function businessBody(url, overrides = {}) {
+  const date = new URL(url).searchParams.get('dateexchange');
+  if (url.includes('/accounts?')) return [{ ID: 10, ISSTAFF: 0, NAME: 'Иван Иванов' }];
+  if (url.includes('/cards?')) return [{ ID: 20, ISSTAFFCARD: 0, SERIAL: 'CARD-SECRET' }];
+  if (url.includes('/skudareas?')) return [{ ID: 1, STATUS: 0, KIND: 1, ISCHECKBALANCE: 1, NAME: 'Главный вход' }];
+  if (url.includes('/skudcontrollers?')) {
+    return [{ ID: 101, IDAREA: 1, READERIN: 1, READEROUT: 2, STATUS: 0, ADDRESS: 'SECRET' }];
+  }
+  if (url.includes('/skudverifylogs?')) {
+    return [{
+      DATEACTION: overrides.verifyDate || `${date} 09:00:00.000`,
+      IDCONTROLLER: 101,
+      IDREADER: 1,
+      ISALLOW: 1,
+      READERIN: 1,
+      IDACCOUNT: 10,
+      IDCARD: 20,
+      STATUS: 0,
+      GUESTNAME: 'Иван Иванов',
+    }];
+  }
+  if (url.includes('/accountpayments?')) {
+    return [{
+      DATEDOC: overrides.paymentDate || `${date} 10:00:00.000`,
+      SUMMA: 123.45,
+      STATUS: 0,
+      ISNOTFISCAL: 0,
+      COMMENT: 'Телефон +7 999 555-44-33',
+    }];
+  }
+  return [];
+}
+
+test('business collection projects only required fields for completed days and today', async () => {
+  const requests = [];
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(JSON.stringify(businessBody(url)), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+
+  assert.equal(requests.length, 12);
+  assert.deepEqual({
+    currentDate: result.currentDate,
+    from: result.from,
+    through: result.through,
+    completeThrough: result.completeThrough,
+  }, {
+    currentDate: '2026-09-10',
+    from: '2026-09-09',
+    through: '2026-09-10',
+    completeThrough: '2026-09-09',
+  });
+  assert.equal(result.resources.accountPayments.length, 2);
+  assert.deepEqual(Object.keys(result.resources.accountPayments[0]).sort(), ['DATEDOC', 'ISNOTFISCAL', 'STATUS', 'SUMMA']);
+  assert.deepEqual(Object.keys(result.resources.skudVerifyLogs[0]).sort(), [
+    'DATEACTION', 'IDACCOUNT', 'IDCARD', 'IDCONTROLLER', 'IDREADER', 'ISALLOW', 'READERIN', 'STATUS',
+  ]);
+  assert.equal(result.quality.dateExchangeUsable, true);
+  assert.deepEqual(result.quality.blockers, []);
+  assert.equal(Object.keys(result.quality.resourceSchemaHashes).length, 6);
+  assert.doesNotMatch(JSON.stringify(result), /Иван Иванов|CARD-SECRET|Телефон|SECRET/u);
+});
+
+test('business collection fails closed when endpoints or schemas are missing', async () => {
+  const withoutEndpoints = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: {} },
+  }, { fetchImpl: async () => { throw new Error('must not request'); } });
+  const missing = await withoutEndpoints.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+  assert.deepEqual(missing.resources, {});
+  assert.equal(missing.quality.dateExchangeUsable, false);
+  assert.deepEqual(missing.quality.blockers, ['source-unavailable', 'incomplete-resource']);
+
+  const incompleteSchema = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async url => {
+      const body = url.includes('/cards?') ? [{ ID: 20, SERIAL: 'CARD-SECRET' }] : businessBody(url);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+  const result = await incompleteSchema.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+  assert.equal(Object.hasOwn(result.resources, 'cards'), false);
+  assert.ok(result.quality.blockers.includes('incomplete-resource'));
+  assert.doesNotMatch(JSON.stringify(result), /CARD-SECRET/u);
+});
+
+test('business collection rejects a transactional response outside its requested date', async () => {
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async url => new Response(JSON.stringify(businessBody(url, {
+      paymentDate: '2026-09-01 10:00:00.000',
+    })), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+  });
+
+  const result = await client.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+  assert.equal(Object.hasOwn(result.resources, 'accountPayments'), false);
+  assert.equal(result.quality.dateExchangeUsable, false);
+  assert.ok(result.quality.blockers.includes('incomplete-resource'));
+});
