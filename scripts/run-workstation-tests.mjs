@@ -8,6 +8,7 @@ const testFiles = [
   'workstation/device-profile.test.mjs',
   'workstation/github-updater.test.mjs',
   'workstation/migration.test.mjs',
+  'workstation/manual-dolphin-sync.test.mjs',
   'workstation/schedule-auth-bootstrap.test.mjs',
   'workstation/site-sync-bootstrap.test.mjs',
   'workstation/status.test.mjs',
