@@ -154,9 +154,8 @@ async function confirmWorkstationUpdate() {
     });
     const launcher = await launchWorkstationInstaller({
       installerPath: pendingWorkstationUpdate.targetFile,
-      relaunchPath: process.execPath,
     });
-    logger.info('Workstation update helper started', { pid: launcher.pid });
+    logger.info('Workstation update installer started directly', { pid: launcher.pid });
     app.quit();
   } catch (error) {
     workstationUpdateInstalling = false;

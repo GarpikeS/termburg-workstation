@@ -6,7 +6,6 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  buildInstallerLauncherCommand,
   checkForWorkstationUpdate,
   compareWorkstationVersions,
   findWorkstationUpdate,
@@ -72,44 +71,42 @@ test('rejects a release without a checksum asset', async () => {
   assert.deepEqual(result, { updateReady: false, reason: 'missing-checksum' });
 });
 
-test('builds a deferred installer launch without exposing shell metacharacters', () => {
-  const command = buildInstallerLauncherCommand(
-    "C:\\Updates\\Termburg's Update.exe",
-    4321,
-    'C:\\Programs\\Termburg Workstation.exe',
-  );
-  assert.match(command, /Get-Process -Id 4321 -ErrorAction SilentlyContinue/);
-  assert.match(command, /if\(\$null -ne \$runningProcess\)/);
-  assert.match(command, /Termburg''s Update\.exe/);
-  assert.match(command, /-ArgumentList '\/S'/);
-  assert.match(command, /-PassThru -Wait/);
-  assert.match(command, /\$null -ne \$installerProcess\.ExitCode/);
-  assert.match(command, /Termburg Workstation\.exe/);
-});
-
-test('waits until the hidden detached installer helper has actually started', async () => {
+test('starts the verified installer directly and asks NSIS to reopen the updated app', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'workstation-launch-'));
+  const installerPath = path.join(directory, 'Termburg Workstation Update.exe');
+  await fs.writeFile(installerPath, 'fixture');
   let invocation = null;
   let unrefCalled = false;
-  const resultPromise = launchWorkstationInstaller({
-    installerPath: 'C:\\Updates\\Workstation.exe',
-    currentPid: 9876,
-    relaunchPath: 'C:\\Programs\\Workstation.exe',
-    platform: 'win32',
-    spawnImpl: (command, args, options) => {
-      invocation = { command, args, options };
-      const child = new EventEmitter();
-      child.pid = 2468;
-      child.unref = () => { unrefCalled = true; };
-      queueMicrotask(() => child.emit('spawn'));
-      return child;
-    },
-  });
-  assert.equal(unrefCalled, false);
-  const result = await resultPromise;
-  assert.equal(result.pid, 2468);
-  assert.equal(unrefCalled, true);
-  assert.equal(invocation.command, 'powershell.exe');
-  assert.equal(invocation.options.detached, true);
-  assert.equal(invocation.options.windowsHide, true);
-  assert.ok(invocation.args.includes('-EncodedCommand'));
+  try {
+    const resultPromise = launchWorkstationInstaller({
+      installerPath,
+      platform: 'win32',
+      spawnImpl: (command, args, options) => {
+        invocation = { command, args, options };
+        const child = new EventEmitter();
+        child.pid = 2468;
+        child.unref = () => { unrefCalled = true; };
+        queueMicrotask(() => child.emit('spawn'));
+        return child;
+      },
+    });
+    assert.equal(unrefCalled, false);
+    const result = await resultPromise;
+    assert.equal(result.pid, 2468);
+    assert.equal(unrefCalled, true);
+    assert.equal(invocation.command, path.resolve(installerPath));
+    assert.deepEqual(invocation.args, ['/S', '--updated', '--force-run']);
+    assert.equal(invocation.options.detached, true);
+    assert.equal(invocation.options.windowsHide, false);
+    assert.deepEqual(result.args, invocation.args);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('refuses to start a missing update installer', async () => {
+  await assert.rejects(
+    launchWorkstationInstaller({ installerPath: path.join(os.tmpdir(), 'missing-workstation-update.exe'), platform: 'win32' }),
+    /installer is missing/i,
+  );
 });
