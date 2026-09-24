@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  CAMP_PROBE_INTERVAL_MS,
+  CAMP_REFRESH_INTERVAL_MS,
   DEFAULT_SCAN_INTERVAL_MS,
   DOLPHIN_EXPORT_NAME_PATTERN,
   MAX_BATCH_ROWS,
@@ -269,7 +269,7 @@ export class DolphinSyncAgent {
     if (!this.campClientFactory || typeof serverClient?.sourceConfig !== 'function') return false;
     const attemptedAt = this.now();
     const lastAttemptAt = Number(this.state.campApi.lastAttemptAt) || 0;
-    if (options.force !== true && lastAttemptAt > 0 && attemptedAt - lastAttemptAt < CAMP_PROBE_INTERVAL_MS) {
+    if (options.force !== true && lastAttemptAt > 0 && attemptedAt - lastAttemptAt < CAMP_REFRESH_INTERVAL_MS) {
       return false;
     }
     const lastSuccessAt = Number(this.state.campApi.lastSuccessAt) || 0;
@@ -355,7 +355,7 @@ export class DolphinSyncAgent {
       const pending = this.state.businessSync.pending;
       const lastAttemptAt = Number(this.state.businessSync.lastAttemptAt) || 0;
       if (!pending && options.force !== true && lastAttemptAt > 0
-        && attemptedAt - lastAttemptAt < CAMP_PROBE_INTERVAL_MS) return false;
+        && attemptedAt - lastAttemptAt < CAMP_REFRESH_INTERVAL_MS) return false;
 
       if (pending) {
         await serverClient.sendBusinessSummary(token, pending);

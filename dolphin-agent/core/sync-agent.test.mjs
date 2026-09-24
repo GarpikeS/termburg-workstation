@@ -162,7 +162,7 @@ test('applies each local API redemption only once after server activation', asyn
   }
 });
 
-test('probes CAMP once per day and reports only the diagnostic profile in heartbeat', async () => {
+test('probes CAMP once per hour and reports only the diagnostic profile in heartbeat', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'termburg-camp-api-diagnostic-'));
   const heartbeats = [];
   const receivedConfigs = [];
@@ -264,7 +264,7 @@ test('probes CAMP once per day and reports only the diagnostic profile in heartb
     assert.ok(heartbeats.every(heartbeat => heartbeat.campApi.resources.accountSales));
     assert.doesNotMatch(JSON.stringify(heartbeats), /local-api-key|resource-secret-key|CASHBOX-SECRET|rawRows/);
 
-    now += 24 * 60 * 60 * 1000;
+    now += 55 * 60 * 1000;
     await agent.runOnce();
     assert.equal(probeCount, 2);
   } finally {
@@ -494,11 +494,22 @@ test('persists and retries the identical business aggregate before advancing its
     assert.doesNotMatch(JSON.stringify(uploads), /Иван Иванов|CARD-SECRET|IDACCOUNT|IDCARD/u);
 
     now += 5 * 60 * 1000;
-    await restartedAgent.runOnce({ forceBusiness: true });
+    await restartedAgent.runOnce();
+    assert.equal(uploads.length, 2);
+    assert.equal(businessFetches, 1);
+
+    now += 55 * 60 * 1000;
+    await restartedAgent.runOnce();
     assert.equal(uploads.length, 3);
     assert.equal(businessFetches, 2);
     assert.equal(uploads[2].generationId, uploads[0].generationId);
     assert.equal(uploads[2].sequence, 2);
+
+    now += 5 * 60 * 1000;
+    await restartedAgent.runOnce({ forceBusiness: true });
+    assert.equal(uploads.length, 4);
+    assert.equal(businessFetches, 3);
+    assert.equal(uploads[3].sequence, 3);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
