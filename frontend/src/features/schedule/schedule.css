@@ -155,9 +155,11 @@
 
 .schedule-price {
   width: max-content;
+  max-width: 100%;
   min-height: 1.6rem;
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 0.32rem;
   margin-top: 0.55rem;
   padding: 0.25rem 0.52rem;
@@ -165,6 +167,7 @@
   font-size: 0.68rem;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .schedule-price--free {
@@ -4750,8 +4753,8 @@
 }
 
 .schedule-mobile__hero {
-  min-height: 13rem;
-  padding-bottom: 2.5rem;
+  min-height: 11.75rem;
+  padding: max(1.35rem, calc(env(safe-area-inset-top) + 0.65rem)) 1rem 1.65rem;
   color: white;
   background:
     linear-gradient(180deg, rgba(12, 10, 19, 0.62), rgba(22, 17, 32, 0.94)),
@@ -4848,9 +4851,17 @@
   color: #8fd8dd;
 }
 
+.schedule-mobile__title-row {
+  margin-top: 1.05rem;
+}
+
 .schedule-mobile__title-row h1,
 .schedule-mobile__clock strong {
   color: white;
+}
+
+.schedule-mobile__clock strong {
+  font-size: 1.5rem;
 }
 
 .schedule-mobile__title-row p,
@@ -4964,6 +4975,50 @@
   border-color: #d9e3e5;
   border-radius: 0.7rem;
   box-shadow: none;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) {
+  grid-template-columns: 4.8rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.72rem;
+  padding: 0.9rem;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__time {
+  min-width: 0;
+  align-content: center;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__time strong {
+  font-size: clamp(1.38rem, 6vw, 1.55rem);
+  line-height: 1;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__time span {
+  font-size: 0.75rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__body h3 {
+  font-size: clamp(1rem, 4.25vw, 1.12rem);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__venue {
+  font-size: 0.78rem;
+  line-height: 1.28;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-event__details {
+  font-size: 0.74rem;
+}
+
+.schedule-mobile .schedule-event:not(.schedule-event--compact) .schedule-price {
+  min-height: 1.75rem;
+  padding: 0.3rem 0.58rem;
+  font-size: 0.75rem;
 }
 
 .schedule-mobile .schedule-event--highlighted {
