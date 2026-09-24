@@ -121,7 +121,7 @@ function showMainWindow() {
 async function runDolphinNow() {
   if (!dolphinRuntime) return;
   try {
-    dolphinStatus = await dolphinRuntime.runOnce({ forceCamp: true });
+    dolphinStatus = await dolphinRuntime.runOnce({ forceCamp: true, forceBusiness: true });
   } catch (error) {
     logger.error('Manual Dolphin synchronization failed', error);
   } finally {
