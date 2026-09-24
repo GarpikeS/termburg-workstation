@@ -147,6 +147,13 @@ function isDolphinBusinessStore(value) {
     && !Array.isArray(value.scopes);
 }
 
+function dolphinBusinessWriterDeviceId(entry) {
+  for (const candidate of [entry?.writerDeviceId, entry?.deviceId]) {
+    if (typeof candidate === 'string' && /^[a-zA-Z0-9-]{16,80}$/.test(candidate)) return candidate;
+  }
+  return '';
+}
+
 function sanitizeDolphinBusinessUpload(value, currentTime = Date.now()) {
   if (!exactKeys(value, new Set(['schemaVersion', 'generationId', 'sequence', 'generatedAt', 'window', 'days', 'quality']))) return null;
   if (value.schemaVersion !== 1) return null;
@@ -623,6 +630,14 @@ export function createFeedbackService(options) {
 
   function sourceProfileForLocation(locationCode) {
     return resolvedDolphinSourceProfiles[locationCode] || defaultDolphinSourceProfile;
+  }
+
+  function isDolphinCampBusinessProfileEnabled(profile) {
+    return dolphinCampBusinessEnabled
+      && profile.camp.enabled
+      && profile.camp.urls.length > 0
+      && profile.apiKey.length >= 16
+      && profile.camp.business.enabled;
   }
   const accountService = createAccountService({
     databaseFile: accountOptions.databaseFile || path.join(path.dirname(resolvedDataFile), 'accounts.sqlite'),
@@ -1335,6 +1350,7 @@ export function createFeedbackService(options) {
       : defaultDolphinSourceProfile;
     const enabled = profile.urls.length > 0 && profile.apiKey.length >= 16;
     const campEnabled = profile.camp.enabled && profile.camp.urls.length > 0 && profile.apiKey.length >= 16;
+    const campBusinessEnabled = isDolphinCampBusinessProfileEnabled(profile);
     sendJson(response, 200, {
       enabled,
       baseUrls: enabled ? profile.urls : [],
@@ -1348,7 +1364,7 @@ export function createFeedbackService(options) {
         initialDate: profile.camp.initialDate,
         endpoints: profile.camp.endpoints,
         business: {
-          enabled: campEnabled && profile.camp.business.enabled,
+          enabled: campBusinessEnabled,
           lookbackDays: profile.camp.business.lookbackDays,
           endpoints: profile.camp.business.endpoints,
         },
@@ -1370,6 +1386,10 @@ export function createFeedbackService(options) {
     const scopeId = dolphinBusinessScopeForIdentity(identity);
     if (!scopeId) {
       sendJson(response, 403, { error: 'Для этого рабочего места не назначен комплекс.' });
+      return;
+    }
+    if (!isDolphinCampBusinessProfileEnabled(sourceProfileForLocation(identity.locationCode))) {
+      sendJson(response, 503, { error: 'Агрегаты Dolphin временно отключены.' });
       return;
     }
     const limit = consumeRateLimit(
@@ -1400,8 +1420,22 @@ export function createFeedbackService(options) {
     const result = await withDolphinBusinessLock(async () => {
       const store = await loadDolphinBusinessSummaries();
       const previous = store.scopes[scopeId];
+      const writerDeviceId = dolphinBusinessWriterDeviceId(previous);
+      if (writerDeviceId && writerDeviceId !== identity.deviceId) return { writerConflict: true };
       if (previous?.generationId === generationId && previous.sequence === sequence) {
-        return previous.payloadSha256 === payloadSha256 ? { repeated: true, value: previous } : { conflict: true };
+        if (previous.payloadSha256 !== payloadSha256) return { conflict: true };
+        if (previous.writerDeviceId === identity.deviceId) return { repeated: true, value: previous };
+
+        const updatedAt = new Date(now()).toISOString();
+        const value = { ...previous, writerDeviceId: identity.deviceId };
+        delete value.deviceId;
+        const next = {
+          schemaVersion: 1,
+          updatedAt,
+          scopes: { ...store.scopes, [scopeId]: value },
+        };
+        await saveDolphinBusinessSummaries(next);
+        return { repeated: true, value };
       }
       if (previous?.generationId === generationId && previous.sequence > sequence) return { stale: true };
       if (previous?.generationId !== generationId && previous?.generatedAt && generatedAt < previous.generatedAt) return { stale: true };
@@ -1411,7 +1445,7 @@ export function createFeedbackService(options) {
         schemaVersion: 1,
         scopeId,
         scopeEvidence: 'device-profile',
-        deviceId: identity.deviceId,
+        writerDeviceId: identity.deviceId,
         generationId,
         sequence,
         generatedAt,
@@ -1430,6 +1464,10 @@ export function createFeedbackService(options) {
 
     if (result.conflict) {
       sendJson(response, 409, { error: 'Этот номер агрегата уже использован с другим содержимым.' });
+      return;
+    }
+    if (result.writerConflict) {
+      sendJson(response, 409, { error: 'Для этого комплекса уже назначено рабочее место.' });
       return;
     }
     if (result.stale) {
