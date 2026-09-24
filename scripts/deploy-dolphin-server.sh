@@ -206,7 +206,8 @@ upsert_env_value DOLPHIN_ENROLLMENT_LOCATION_CODE moscow
 upsert_env_value DOLPHIN_BUSINESS_SUMMARIES_DATA_FILE "$business_store"
 if [[ "$team_env_was_present" = 1 ]]; then
   upsert_env_value DOLPHIN_BUSINESS_INTERNAL_TOKEN "$business_internal_token" "$team_env_file"
-  upsert_env_value TEAM_DOLPHIN_LIVE_ENABLED 1 "$team_env_file"
+  # The consumer stays gated until the vendor endpoints and seven-day overlap are verified.
+  upsert_env_value TEAM_DOLPHIN_LIVE_ENABLED 0 "$team_env_file"
   upsert_env_value TEAM_DOLPHIN_LIVE_SUMMARY_URL \
     http://127.0.0.1:4175/api/internal/dolphin/business-summaries "$team_env_file"
   upsert_env_value TEAM_DOLPHIN_LIVE_SUMMARY_TIMEOUT_MS 2000 "$team_env_file"
@@ -355,20 +356,38 @@ business_store_fingerprint() {
 }
 
 business_store_before=$(business_store_fingerprint)
-business_unauthorized_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
-  -H 'Content-Type: application/json' \
-  --data '{}' \
-  https://tbgame.ru/api/integrations/dolphin/business-summary)
-test "$business_unauthorized_status" = 401
+business_unauthorized_status=000
+for _attempt in {1..10}; do
+  business_unauthorized_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
+    -X POST \
+    -H 'Content-Type: application/json' \
+    --data '{}' \
+    https://tbgame.ru/api/integrations/dolphin/business-summary || true)
+  [[ "$business_unauthorized_status" = 401 ]] && break
+  sleep 1
+done
+if [[ "$business_unauthorized_status" != 401 ]]; then
+  echo "Unexpected unauthenticated business-summary status: $business_unauthorized_status (expected 401)" >&2
+  false
+fi
 
 # The deployment credential is intentionally not device-scoped. A 403 proves authentication succeeded
 # while also proving that this smoke test cannot write a complex aggregate.
-business_legacy_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
-  -H "Authorization: Bearer $DOLPHIN_CONNECTOR_TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data '{}' \
-  https://tbgame.ru/api/integrations/dolphin/business-summary)
-test "$business_legacy_status" = 403
+business_legacy_status=000
+for _attempt in {1..10}; do
+  business_legacy_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
+    -X POST \
+    -H "Authorization: Bearer $DOLPHIN_CONNECTOR_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{}' \
+    https://tbgame.ru/api/integrations/dolphin/business-summary || true)
+  [[ "$business_legacy_status" = 403 ]] && break
+  sleep 1
+done
+if [[ "$business_legacy_status" != 403 ]]; then
+  echo "Unexpected legacy-token business-summary status: $business_legacy_status (expected 403)" >&2
+  false
+fi
 test "$(business_store_fingerprint)" = "$business_store_before"
 
 public_internal_status=$(curl -ksS --resolve tbgame.ru:443:127.0.0.1 -o /dev/null -w '%{http_code}' \
