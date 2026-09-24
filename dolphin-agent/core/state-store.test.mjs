@@ -85,3 +85,68 @@ test('persisting diagnostic state keeps only allowlisted fields and no CAMP valu
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test('persists only the retryable business envelope and strips injected source rows', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'termburg-business-state-privacy-'));
+  const stateFile = path.join(root, 'state.json');
+  const state = createDefaultAgentState();
+  state.businessSync = {
+    status: 'blocked',
+    generationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    lastSequence: 0,
+    lastAttemptAt: Date.parse('2026-09-10T10:00:00.000Z'),
+    pending: {
+      schemaVersion: 1,
+      generationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      sequence: 1,
+      generatedAt: '2026-09-10T10:00:00.000Z',
+      window: {
+        from: '2026-09-09',
+        through: '2026-09-10',
+        completeThrough: '2026-09-09',
+        timezone: 'Europe/Moscow',
+      },
+      days: [
+        {
+          date: '2026-09-09',
+          uniqueVisitors: 1,
+          visitorStatus: 'complete',
+          fiscalRevenueKopecks: 12345,
+          revenueStatus: 'complete',
+          fiscalPaymentRows: 1,
+          rawRows: [{ NAME: 'Иван Иванов' }],
+        },
+        {
+          date: '2026-09-10',
+          uniqueVisitors: null,
+          visitorStatus: 'incomplete',
+          fiscalRevenueKopecks: null,
+          revenueStatus: 'incomplete',
+          fiscalPaymentRows: 1,
+        },
+      ],
+      quality: {
+        dateExchangeUsable: true,
+        blockers: [],
+        resourceSchemaHashes: { accountPayments: 'A'.repeat(64), secretTable: 'b'.repeat(64) },
+      },
+      accounts: [{ ID: 10, NAME: 'Иван Иванов' }],
+    },
+  };
+
+  try {
+    const stored = await createAgentStateStore(stateFile).save(state);
+    const serialized = await fs.readFile(stateFile, 'utf8');
+    assert.equal(stored.version, 4);
+    assert.equal(stored.businessSync.pending.sequence, 1);
+    assert.deepEqual(stored.businessSync.pending.quality.resourceSchemaHashes, {
+      accountPayments: 'a'.repeat(64),
+    });
+    assert.deepEqual(Object.keys(stored.businessSync.pending.days[0]).sort(), [
+      'date', 'fiscalPaymentRows', 'fiscalRevenueKopecks', 'revenueStatus', 'uniqueVisitors', 'visitorStatus',
+    ]);
+    assert.doesNotMatch(serialized, /Иван Иванов|rawRows|secretTable|accounts/u);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

@@ -78,3 +78,50 @@ test('fetches source configuration and sends a sanitized heartbeat with the devi
     sourceApi: { status: 'diagnostic' },
   });
 });
+
+test('uploads only the aggregate envelope to the dedicated business summary endpoint', async () => {
+  const requests = [];
+  const client = new DolphinServerClient({
+    endpoint: 'https://tbgame.ru/api/integrations/dolphin/redemptions',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(JSON.stringify({ ok: true, scopeId: 'pechatniki', sequence: 7 }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+    maxAttempts: 1,
+  });
+  const envelope = {
+    schemaVersion: 1,
+    generationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    sequence: 7,
+    generatedAt: '2026-09-24T00:00:00.000Z',
+    window: {
+      from: '2026-09-23',
+      through: '2026-09-23',
+      completeThrough: '2026-09-23',
+      timezone: 'Europe/Moscow',
+    },
+    days: [{
+      date: '2026-09-23',
+      uniqueVisitors: 171,
+      visitorStatus: 'complete',
+      fiscalRevenueKopecks: 23214300,
+      revenueStatus: 'complete',
+      fiscalPaymentRows: 42,
+    }],
+    quality: {
+      dateExchangeUsable: true,
+      blockers: [],
+      resourceSchemaHashes: { accountPayments: 'a'.repeat(64) },
+    },
+  };
+
+  await client.sendBusinessSummary('connector-secret', envelope);
+
+  assert.equal(requests[0].url, 'https://tbgame.ru/api/integrations/dolphin/business-summary');
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer connector-secret');
+  assert.deepEqual(JSON.parse(requests[0].options.body), envelope);
+  assert.doesNotMatch(requests[0].options.body, /name|phone|cardSerial/i);
+});

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, Tray } from 'electron';
 import { readDolphinFile } from './core/file-readers.mjs';
+import { CampSourceApiClient } from './core/camp-source-client.mjs';
 import { createFileLogger } from './core/logger.mjs';
 import { extractRedemptions } from './core/redemption-extractor.mjs';
 import { DolphinServerClient } from './core/server-client.mjs';
@@ -201,7 +202,10 @@ function createTray() {
   tray.setToolTip(APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Открыть', click: showWindow },
-    { label: 'Синхронизировать сейчас', click: () => void syncAgent.runOnce() },
+    {
+      label: 'Проверить Dolphin сейчас',
+      click: () => void syncAgent.runOnce({ forceCamp: true, forceBusiness: true }),
+    },
     { type: 'separator' },
     { label: 'Выход', click: () => app.quit() },
   ]));
@@ -261,6 +265,7 @@ async function start() {
     readerOptions: { excelReaderPath: excelReaderPath() },
     clientFactory: endpoint => new DolphinServerClient({ endpoint }),
     sourceClientFactory: sourceConfig => new DolphinSourceApiClient(sourceConfig),
+    campClientFactory: sourceConfig => new CampSourceApiClient(sourceConfig),
     configProvider: async () => ({ ...settings, appVersion: app.getVersion() }),
     tokenProvider: ensureEnrollment,
     logger,
@@ -291,7 +296,7 @@ ipcMain.handle('agent:save-settings', async (_event, value) => {
 });
 ipcMain.handle('agent:sync-now', async (_event, force) => {
   if (force) await syncAgent.clearProcessedFiles();
-  await syncAgent.runOnce({ force });
+  await syncAgent.runOnce({ force, forceCamp: true, forceBusiness: true });
   return combinedStatus();
 });
 ipcMain.handle('agent:test-connection', async () => {

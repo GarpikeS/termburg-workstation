@@ -7,6 +7,8 @@ import { createAccountService } from './account-service.mjs';
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_ADMIN_BODY_BYTES = 256 * 1024;
 const MAX_CONNECTOR_HEARTBEAT_BYTES = 128 * 1024;
+const MAX_DOLPHIN_BUSINESS_SUMMARY_BYTES = 256 * 1024;
+const MAX_DOLPHIN_BUSINESS_DAYS = 62;
 const MAX_REDEMPTION_IMPORT_ROWS = 2_000;
 const DEFAULT_RATE_LIMIT = 5;
 const DEFAULT_RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -67,6 +69,24 @@ const CASHIER_EXPORT_FIELDS = [
   'expiresAt',
   'status',
 ];
+const DOLPHIN_BUSINESS_SCOPE_BY_DEVICE_LOCATION = Object.freeze({
+  moscow: 'pechatniki',
+  zelenogorsk: 'zelenogorsk',
+});
+const DOLPHIN_BUSINESS_SCOPES = new Set(Object.values(DOLPHIN_BUSINESS_SCOPE_BY_DEVICE_LOCATION));
+const DOLPHIN_BUSINESS_DAY_STATUSES = new Set(['complete', 'blocked', 'incomplete']);
+const DOLPHIN_BUSINESS_RESOURCE_NAMES = new Set([
+  'accountPayments', 'skudVerifyLogs', 'cards', 'skudAreas', 'skudControllers', 'accounts', 'kkmCheques',
+]);
+const DOLPHIN_BUSINESS_BLOCKERS = new Set([
+  'unresolved-controller-events',
+  'unresolved-staff-events',
+  'no-safely-classified-guest-controller',
+  'incomplete-resource',
+  'schema-changed',
+  'source-unavailable',
+  'fiscal-semantics-unconfirmed',
+]);
 
 function sendJson(response, statusCode, value, extraHeaders = {}) {
   const body = JSON.stringify(value);
@@ -101,6 +121,111 @@ function csvCell(value) {
 
 function isIsoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isCalendarDate(value) {
+  if (!isIsoDate(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isoTimestamp(value) {
+  if (typeof value !== 'string' || value.length > 40) return '';
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
+}
+
+function exactKeys(value, allowed) {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).every(key => allowed.has(key));
+}
+
+function isDolphinBusinessStore(value) {
+  return value?.schemaVersion === 1
+    && value.scopes
+    && typeof value.scopes === 'object'
+    && !Array.isArray(value.scopes);
+}
+
+function sanitizeDolphinBusinessUpload(value, currentTime = Date.now()) {
+  if (!exactKeys(value, new Set(['schemaVersion', 'generationId', 'sequence', 'generatedAt', 'window', 'days', 'quality']))) return null;
+  if (value.schemaVersion !== 1) return null;
+  const generationId = text(value.generationId, 36).toLowerCase();
+  const sequence = Number(value.sequence);
+  const generatedAt = isoTimestamp(value.generatedAt);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(generationId)
+    || !Number.isSafeInteger(sequence) || sequence < 1 || !generatedAt
+    || Date.parse(generatedAt) > currentTime + 5 * 60 * 1000) return null;
+
+  const window = value.window;
+  if (!exactKeys(window, new Set(['from', 'through', 'completeThrough', 'timezone']))
+    || !isCalendarDate(window.from) || !isCalendarDate(window.through) || !isCalendarDate(window.completeThrough)
+    || window.from > window.completeThrough || window.completeThrough > window.through
+    || window.timezone !== 'Europe/Moscow') return null;
+
+  if (!Array.isArray(value.days) || value.days.length === 0 || value.days.length > MAX_DOLPHIN_BUSINESS_DAYS) return null;
+  const dates = new Set();
+  const days = [];
+  for (const input of value.days) {
+    if (!exactKeys(input, new Set([
+      'date', 'uniqueVisitors', 'visitorStatus', 'fiscalRevenueKopecks', 'revenueStatus', 'fiscalPaymentRows',
+    ])) || !isCalendarDate(input.date) || input.date < window.from || input.date > window.through
+      || !DOLPHIN_BUSINESS_DAY_STATUSES.has(input.visitorStatus)
+      || !DOLPHIN_BUSINESS_DAY_STATUSES.has(input.revenueStatus) || dates.has(input.date)) return null;
+    const uniqueVisitors = input.uniqueVisitors === null ? null : Number(input.uniqueVisitors);
+    const fiscalRevenueKopecks = input.fiscalRevenueKopecks === null ? null : Number(input.fiscalRevenueKopecks);
+    const fiscalPaymentRows = Number(input.fiscalPaymentRows);
+    if (uniqueVisitors !== null && (!Number.isSafeInteger(uniqueVisitors) || uniqueVisitors < 0 || uniqueVisitors > 1_000_000)) return null;
+    if (fiscalRevenueKopecks !== null && (!Number.isSafeInteger(fiscalRevenueKopecks) || Math.abs(fiscalRevenueKopecks) > 10_000_000_000_000)) return null;
+    if (!Number.isSafeInteger(fiscalPaymentRows) || fiscalPaymentRows < 0 || fiscalPaymentRows > 10_000_000) return null;
+    if (input.visitorStatus === 'complete' && uniqueVisitors === null) return null;
+    if (input.revenueStatus === 'complete' && fiscalRevenueKopecks === null) return null;
+    if (input.visitorStatus !== 'complete' && uniqueVisitors !== null) return null;
+    if (input.revenueStatus !== 'complete' && fiscalRevenueKopecks !== null) return null;
+    dates.add(input.date);
+    days.push({
+      date: input.date,
+      uniqueVisitors,
+      visitorStatus: input.visitorStatus,
+      fiscalRevenueKopecks,
+      revenueStatus: input.revenueStatus,
+      fiscalPaymentRows,
+    });
+  }
+  days.sort((left, right) => left.date.localeCompare(right.date));
+  if (days[0].date !== window.from || days.at(-1).date !== window.through) return null;
+  const expectedDayCount = Math.floor(
+    (Date.parse(`${window.through}T00:00:00.000Z`) - Date.parse(`${window.from}T00:00:00.000Z`)) / 86_400_000,
+  ) + 1;
+  if (days.length !== expectedDayCount) return null;
+  if (days.some(day => day.date > window.completeThrough
+    && (day.visitorStatus === 'complete' || day.revenueStatus === 'complete'))) return null;
+
+  const quality = value.quality;
+  if (!exactKeys(quality, new Set(['dateExchangeUsable', 'blockers', 'resourceSchemaHashes']))
+    || typeof quality.dateExchangeUsable !== 'boolean' || !Array.isArray(quality.blockers)
+    || quality.blockers.length > 12 || !quality.blockers.every(blocker => DOLPHIN_BUSINESS_BLOCKERS.has(blocker))
+    || !quality.resourceSchemaHashes || typeof quality.resourceSchemaHashes !== 'object'
+    || Array.isArray(quality.resourceSchemaHashes)) return null;
+  const resourceSchemaHashes = {};
+  for (const [resource, hash] of Object.entries(quality.resourceSchemaHashes)) {
+    if (!DOLPHIN_BUSINESS_RESOURCE_NAMES.has(resource) || !/^[a-f0-9]{64}$/i.test(hash)) return null;
+    resourceSchemaHashes[resource] = hash.toLowerCase();
+  }
+
+  return {
+    schemaVersion: 1,
+    generationId,
+    sequence,
+    generatedAt,
+    window: { ...window },
+    days,
+    quality: {
+      dateExchangeUsable: quality.dateExchangeUsable,
+      blockers: [...quality.blockers],
+      resourceSchemaHashes,
+    },
+  };
 }
 
 function localDateKey(timestamp, city) {
@@ -378,7 +503,10 @@ export function createFeedbackService(options) {
     rewardAdminToken = '',
     dolphinConnectorToken = '',
     dolphinEnrollmentTokenHash = '',
+    dolphinEnrollmentLocationCode = '',
     dolphinConnectorsDataFile = '',
+    dolphinBusinessSummariesDataFile = '',
+    dolphinBusinessInternalToken = '',
     dolphinSourceApiKey = '',
     dolphinSourceApiUrls = '',
     dolphinSourceApiPath = '/api/v1/barcodes/game',
@@ -391,6 +519,14 @@ export function createFeedbackService(options) {
     dolphinCampServicesPath = '/api/v1/camp/services',
     dolphinCampAccountsPath = '/api/v1/camp/accounts',
     dolphinCampAccountSalesPath = '/api/v1/camp/accountsales',
+    dolphinCampBusinessEnabled = false,
+    dolphinCampBusinessLookbackDays = 7,
+    dolphinCampAccountPaymentsPath = '/api/v1/camp/accountpayments',
+    dolphinCampSkudVerifyLogsPath = '/api/v1/camp/skudverifylogs',
+    dolphinCampCardsPath = '/api/v1/camp/cards',
+    dolphinCampSkudAreasPath = '/api/v1/camp/skudareas',
+    dolphinCampSkudControllersPath = '/api/v1/camp/skudcontrollers',
+    dolphinCampKkmChequesPath = '/api/v1/camp/kkmcheques',
     dolphinSourceProfiles = {},
     connectorRateLimit = DEFAULT_CONNECTOR_RATE_LIMIT,
     connectorRateWindowMs = DEFAULT_CONNECTOR_RATE_WINDOW_MS,
@@ -407,6 +543,10 @@ export function createFeedbackService(options) {
   const resolvedDolphinConnectorsDataFile = path.resolve(
     dolphinConnectorsDataFile || path.join(path.dirname(dataFile), 'dolphin-connectors.json'),
   );
+  const resolvedDolphinBusinessSummariesDataFile = path.resolve(
+    dolphinBusinessSummariesDataFile || path.join(path.dirname(dataFile), 'dolphin-business-summaries.json'),
+  );
+  const resolvedDolphinBusinessSummariesBackupFile = `${resolvedDolphinBusinessSummariesDataFile}.bak`;
   function normalizeSourceProfile(value = {}) {
     const apiPath = normalizeDolphinApiPath(value.apiPath, '/api/v1/barcodes/game');
     const apiUrls = normalizeDolphinSourceUrls(value.apiUrls);
@@ -432,6 +572,18 @@ export function createFeedbackService(options) {
           accounts: normalizeDolphinApiPath(campEndpoints.accounts, '/api/v1/camp/accounts'),
           accountSales: normalizeDolphinApiPath(campEndpoints.accountSales, '/api/v1/camp/accountsales'),
         },
+        business: {
+          enabled: value.campBusinessEnabled === true,
+          lookbackDays: Math.min(31, Math.max(1, Number(value.campBusinessLookbackDays) || 7)),
+          endpoints: {
+            accountPayments: normalizeDolphinApiPath(campEndpoints.accountPayments, '/api/v1/camp/accountpayments'),
+            skudVerifyLogs: normalizeDolphinApiPath(campEndpoints.skudVerifyLogs, '/api/v1/camp/skudverifylogs'),
+            cards: normalizeDolphinApiPath(campEndpoints.cards, '/api/v1/camp/cards'),
+            skudAreas: normalizeDolphinApiPath(campEndpoints.skudAreas, '/api/v1/camp/skudareas'),
+            skudControllers: normalizeDolphinApiPath(campEndpoints.skudControllers, '/api/v1/camp/skudcontrollers'),
+            kkmCheques: normalizeDolphinApiPath(campEndpoints.kkmCheques, '/api/v1/camp/kkmcheques'),
+          },
+        },
       },
     };
   }
@@ -449,15 +601,28 @@ export function createFeedbackService(options) {
       services: dolphinCampServicesPath,
       accounts: dolphinCampAccountsPath,
       accountSales: dolphinCampAccountSalesPath,
+      accountPayments: dolphinCampAccountPaymentsPath,
+      skudVerifyLogs: dolphinCampSkudVerifyLogsPath,
+      cards: dolphinCampCardsPath,
+      skudAreas: dolphinCampSkudAreasPath,
+      skudControllers: dolphinCampSkudControllersPath,
+      kkmCheques: dolphinCampKkmChequesPath,
     },
+    campBusinessEnabled: dolphinCampBusinessEnabled,
+    campBusinessLookbackDays: dolphinCampBusinessLookbackDays,
   });
   const resolvedDolphinSourceProfiles = Object.fromEntries(Object.entries(dolphinSourceProfiles || {})
     .filter(([locationCode]) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(locationCode))
     .map(([locationCode, profile]) => [locationCode, normalizeSourceProfile(profile)]));
+  const resolvedEnrollmentLocationCode = Object.hasOwn(DOLPHIN_BUSINESS_SCOPE_BY_DEVICE_LOCATION, dolphinEnrollmentLocationCode)
+    ? dolphinEnrollmentLocationCode
+    : '';
+  const resolvedEnrollmentScopeId = resolvedEnrollmentLocationCode
+    ? DOLPHIN_BUSINESS_SCOPE_BY_DEVICE_LOCATION[resolvedEnrollmentLocationCode]
+    : '';
 
-  function sourceProfileForDevice(deviceId) {
-    const match = String(deviceId || '').match(/^dolphin-([a-z0-9]+(?:-[a-z0-9]+)*)-[0-9a-f-]{36}$/);
-    return (match && resolvedDolphinSourceProfiles[match[1]]) || defaultDolphinSourceProfile;
+  function sourceProfileForLocation(locationCode) {
+    return resolvedDolphinSourceProfiles[locationCode] || defaultDolphinSourceProfile;
   }
   const accountService = createAccountService({
     databaseFile: accountOptions.databaseFile || path.join(path.dirname(resolvedDataFile), 'accounts.sqlite'),
@@ -475,8 +640,10 @@ export function createFeedbackService(options) {
   let claims = null;
   let redemptions = null;
   let connectorState = null;
+  let dolphinBusinessSummaries = null;
   let claimQueue = Promise.resolve();
   let connectorQueue = Promise.resolve();
+  let dolphinBusinessQueue = Promise.resolve();
   let boundPort = port;
 
   function consumeRateLimit(
@@ -561,6 +728,12 @@ export function createFeedbackService(options) {
     return result;
   }
 
+  function withDolphinBusinessLock(task) {
+    const result = dolphinBusinessQueue.then(task, task);
+    dolphinBusinessQueue = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
   async function loadConnectorState() {
     if (connectorState) return connectorState;
     try {
@@ -583,6 +756,63 @@ export function createFeedbackService(options) {
     await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o640 });
     await fs.rename(temporaryPath, resolvedDolphinConnectorsDataFile);
     connectorState = value;
+  }
+
+  async function loadDolphinBusinessSummaries() {
+    if (dolphinBusinessSummaries) return dolphinBusinessSummaries;
+    let invalidExistingStore = false;
+    for (const candidate of [resolvedDolphinBusinessSummariesDataFile, resolvedDolphinBusinessSummariesBackupFile]) {
+      try {
+        const value = JSON.parse(await fs.readFile(candidate, 'utf8'));
+        if (isDolphinBusinessStore(value)) {
+          dolphinBusinessSummaries = value;
+          return dolphinBusinessSummaries;
+        }
+        invalidExistingStore = true;
+      } catch (error) {
+        if (error?.code === 'ENOENT') continue;
+        if (error instanceof SyntaxError) {
+          invalidExistingStore = true;
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (invalidExistingStore) throw new Error('DOLPHIN_BUSINESS_STORE_INVALID');
+    dolphinBusinessSummaries = { schemaVersion: 1, updatedAt: null, scopes: {} };
+    return dolphinBusinessSummaries;
+  }
+
+  async function saveDolphinBusinessSummaries(value) {
+    await fs.mkdir(path.dirname(resolvedDolphinBusinessSummariesDataFile), { recursive: true });
+    const temporaryPath = `${resolvedDolphinBusinessSummariesDataFile}.${process.pid}.${randomUUID()}.tmp`;
+    await fs.writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o640 });
+    let preservedValidCopy = false;
+    try {
+      const primary = JSON.parse(await fs.readFile(resolvedDolphinBusinessSummariesDataFile, 'utf8'));
+      if (isDolphinBusinessStore(primary)) {
+        await fs.copyFile(resolvedDolphinBusinessSummariesDataFile, resolvedDolphinBusinessSummariesBackupFile);
+        preservedValidCopy = true;
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+    }
+    if (!preservedValidCopy) {
+      try {
+        const backup = JSON.parse(await fs.readFile(resolvedDolphinBusinessSummariesBackupFile, 'utf8'));
+        preservedValidCopy = isDolphinBusinessStore(backup);
+      } catch (error) {
+        if (error?.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+      }
+    }
+    if (!preservedValidCopy) await fs.copyFile(temporaryPath, resolvedDolphinBusinessSummariesBackupFile);
+    await fs.rename(temporaryPath, resolvedDolphinBusinessSummariesDataFile);
+    dolphinBusinessSummaries = value;
+  }
+
+  function dolphinBusinessScopeForIdentity(identity) {
+    const scopeId = identity?.scopeId;
+    return DOLPHIN_BUSINESS_SCOPES.has(scopeId) ? scopeId : '';
   }
 
   function validateOrigin(request, response) {
@@ -615,15 +845,23 @@ export function createFeedbackService(options) {
     const authorization = String(request.headers.authorization || '');
     const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
     if (dolphinConnectorToken && equalHex(sha256(token), sha256(dolphinConnectorToken))) {
-      return { authorized: true, kind: 'legacy', deviceId: '' };
+      return { authorized: true, kind: 'legacy', deviceId: '', locationCode: '', scopeId: '' };
     }
     if (token) {
       const tokenHash = sha256(token);
       const connector = (await loadConnectorState()).connectors.find(item => equalHex(item?.tokenHash, tokenHash));
-      if (connector) return { authorized: true, kind: 'device', deviceId: connector.deviceId };
+      if (connector) {
+        return {
+          authorized: true,
+          kind: 'device',
+          deviceId: connector.deviceId,
+          locationCode: text(connector.locationCode, 40),
+          scopeId: DOLPHIN_BUSINESS_SCOPES.has(connector.scopeId) ? connector.scopeId : '',
+        };
+      }
     }
     sendJson(response, 401, { error: 'Нужен ключ агента Dolphin.' }, { 'WWW-Authenticate': 'Bearer' });
-    return { authorized: false, kind: '', deviceId: '' };
+    return { authorized: false, kind: '', deviceId: '', locationCode: '', scopeId: '' };
   }
 
   async function handleDolphinEnrollment(request, response) {
@@ -653,6 +891,10 @@ export function createFeedbackService(options) {
       sendJson(response, 503, { error: 'Автоматическая активация временно недоступна.' });
       return;
     }
+    if (!resolvedEnrollmentLocationCode || !resolvedEnrollmentScopeId) {
+      sendJson(response, 503, { error: 'Для установщика не назначен комплекс.' });
+      return;
+    }
     if (!/^[a-zA-Z0-9-]{16,80}$/.test(deviceId) || !/^[a-f0-9]{64}$/.test(deviceToken)) {
       sendJson(response, 400, { error: 'Установщик передал неверные данные активации.' });
       return;
@@ -670,21 +912,58 @@ export function createFeedbackService(options) {
         if (consumed.deviceId !== deviceId || !equalHex(consumed.deviceTokenHash, deviceTokenHash)) {
           return { conflict: true };
         }
-        if (!state.connectors.some(item => item.deviceId === deviceId && equalHex(item.tokenHash, deviceTokenHash))) {
-          state.connectors.push({ deviceId, tokenHash: deviceTokenHash, createdAt: consumed.consumedAt });
-          await saveConnectorState(state);
+        if ((consumed.locationCode && consumed.locationCode !== resolvedEnrollmentLocationCode)
+          || (consumed.scopeId && consumed.scopeId !== resolvedEnrollmentScopeId)) return { conflict: true };
+        const existingConnector = state.connectors.find(item => (
+          item.deviceId === deviceId && equalHex(item.tokenHash, deviceTokenHash)
+        ));
+        if (existingConnector
+          && ((existingConnector.locationCode && existingConnector.locationCode !== resolvedEnrollmentLocationCode)
+            || (existingConnector.scopeId && existingConnector.scopeId !== resolvedEnrollmentScopeId))) {
+          return { conflict: true };
         }
+        consumed.locationCode = resolvedEnrollmentLocationCode;
+        consumed.scopeId = resolvedEnrollmentScopeId;
+        if (existingConnector) {
+          existingConnector.locationCode = resolvedEnrollmentLocationCode;
+          existingConnector.scopeId = resolvedEnrollmentScopeId;
+        } else {
+          state.connectors.push({
+            deviceId,
+            tokenHash: deviceTokenHash,
+            locationCode: resolvedEnrollmentLocationCode,
+            scopeId: resolvedEnrollmentScopeId,
+            createdAt: consumed.consumedAt,
+          });
+        }
+        await saveConnectorState(state);
         return { enrolled: true, repeated: true };
       }
 
       const existingDevice = state.connectors.find(item => item.deviceId === deviceId);
       if (existingDevice && !equalHex(existingDevice.tokenHash, deviceTokenHash)) return { conflict: true };
+      if (existingDevice
+        && ((existingDevice.locationCode && existingDevice.locationCode !== resolvedEnrollmentLocationCode)
+          || (existingDevice.scopeId && existingDevice.scopeId !== resolvedEnrollmentScopeId))) return { conflict: true };
       const currentTime = now();
-      if (!existingDevice) state.connectors.push({ deviceId, tokenHash: deviceTokenHash, createdAt: currentTime });
+      if (existingDevice) {
+        existingDevice.locationCode = resolvedEnrollmentLocationCode;
+        existingDevice.scopeId = resolvedEnrollmentScopeId;
+      } else {
+        state.connectors.push({
+          deviceId,
+          tokenHash: deviceTokenHash,
+          locationCode: resolvedEnrollmentLocationCode,
+          scopeId: resolvedEnrollmentScopeId,
+          createdAt: currentTime,
+        });
+      }
       state.enrollments.push({
         enrollmentTokenHash: expectedEnrollmentHash,
         deviceId,
         deviceTokenHash,
+        locationCode: resolvedEnrollmentLocationCode,
+        scopeId: resolvedEnrollmentScopeId,
         consumedAt: currentTime,
       });
       await saveConnectorState(state);
@@ -1046,7 +1325,14 @@ export function createFeedbackService(options) {
     }
     const identity = await requireDolphinConnector(request, response);
     if (!identity.authorized) return;
-    const profile = sourceProfileForDevice(identity.deviceId);
+    if (identity.kind === 'device'
+      && !Object.hasOwn(DOLPHIN_BUSINESS_SCOPE_BY_DEVICE_LOCATION, identity.locationCode)) {
+      sendJson(response, 403, { error: 'Для этого рабочего места не назначен комплекс.' });
+      return;
+    }
+    const profile = identity.kind === 'device'
+      ? sourceProfileForLocation(identity.locationCode)
+      : defaultDolphinSourceProfile;
     const enabled = profile.urls.length > 0 && profile.apiKey.length >= 16;
     const campEnabled = profile.camp.enabled && profile.camp.urls.length > 0 && profile.apiKey.length >= 16;
     sendJson(response, 200, {
@@ -1061,7 +1347,132 @@ export function createFeedbackService(options) {
         baseUrls: campEnabled ? profile.camp.urls : [],
         initialDate: profile.camp.initialDate,
         endpoints: profile.camp.endpoints,
+        business: {
+          enabled: campEnabled && profile.camp.business.enabled,
+          lookbackDays: profile.camp.business.lookbackDays,
+          endpoints: profile.camp.business.endpoints,
+        },
       },
+    });
+  }
+
+  async function handleDolphinBusinessSummaryUpload(request, response) {
+    if (request.method !== 'POST') {
+      sendJson(response, 405, { error: 'Доступна только отправка агрегата.' }, { Allow: 'POST' });
+      return;
+    }
+    const identity = await requireDolphinConnector(request, response);
+    if (!identity.authorized) return;
+    if (identity.kind !== 'device' || !identity.deviceId) {
+      sendJson(response, 403, { error: 'Агрегат принимает только зарегистрированное рабочее место.' });
+      return;
+    }
+    const scopeId = dolphinBusinessScopeForIdentity(identity);
+    if (!scopeId) {
+      sendJson(response, 403, { error: 'Для этого рабочего места не назначен комплекс.' });
+      return;
+    }
+    const limit = consumeRateLimit(
+      `business:${identity.deviceId}`,
+      now(),
+      connectorRateBuckets,
+      connectorRateLimit,
+      connectorRateWindowMs,
+    );
+    if (!limit.allowed) {
+      sendJson(response, 429, { error: 'Рабочее место слишком часто отправляет агрегаты.' }, {
+        'Retry-After': String(limit.retryAfter),
+      });
+      return;
+    }
+    if (!requireJson(request, response)) return;
+
+    const payload = sanitizeDolphinBusinessUpload(
+      await readJsonBody(request, MAX_DOLPHIN_BUSINESS_SUMMARY_BYTES),
+      now(),
+    );
+    if (!payload) {
+      sendJson(response, 400, { error: 'Агрегат Dolphin не соответствует контракту.' });
+      return;
+    }
+    const { generationId, sequence, generatedAt } = payload;
+    const payloadSha256 = sha256(JSON.stringify(payload));
+    const result = await withDolphinBusinessLock(async () => {
+      const store = await loadDolphinBusinessSummaries();
+      const previous = store.scopes[scopeId];
+      if (previous?.generationId === generationId && previous.sequence === sequence) {
+        return previous.payloadSha256 === payloadSha256 ? { repeated: true, value: previous } : { conflict: true };
+      }
+      if (previous?.generationId === generationId && previous.sequence > sequence) return { stale: true };
+      if (previous?.generationId !== generationId && previous?.generatedAt && generatedAt < previous.generatedAt) return { stale: true };
+
+      const receivedAt = new Date(now()).toISOString();
+      const value = {
+        schemaVersion: 1,
+        scopeId,
+        scopeEvidence: 'device-profile',
+        deviceId: identity.deviceId,
+        generationId,
+        sequence,
+        generatedAt,
+        receivedAt,
+        payloadSha256,
+        upload: payload,
+      };
+      const next = {
+        schemaVersion: 1,
+        updatedAt: receivedAt,
+        scopes: { ...store.scopes, [scopeId]: value },
+      };
+      await saveDolphinBusinessSummaries(next);
+      return { repeated: false, value };
+    });
+
+    if (result.conflict) {
+      sendJson(response, 409, { error: 'Этот номер агрегата уже использован с другим содержимым.' });
+      return;
+    }
+    if (result.stale) {
+      sendJson(response, 409, { error: 'Получен устаревший агрегат Dolphin.' });
+      return;
+    }
+    sendJson(response, result.repeated ? 200 : 201, {
+      ok: true,
+      scopeId,
+      sequence,
+      repeated: result.repeated,
+      receivedAt: result.value.receivedAt,
+    });
+  }
+
+  async function handleDolphinBusinessSummariesInternal(request, response) {
+    if (request.method !== 'GET') {
+      sendJson(response, 405, { error: 'Доступно только чтение агрегатов.' }, { Allow: 'GET' });
+      return;
+    }
+    const authorization = String(request.headers.authorization || '');
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!dolphinBusinessInternalToken || !token || !equalHex(sha256(token), sha256(dolphinBusinessInternalToken))) {
+      sendJson(response, 401, { error: 'Нужен внутренний ключ агрегатов Dolphin.' }, { 'WWW-Authenticate': 'Bearer' });
+      return;
+    }
+    const store = await loadDolphinBusinessSummaries();
+    sendJson(response, 200, {
+      schemaVersion: 1,
+      updatedAt: store.updatedAt || null,
+      scopes: Object.fromEntries(Object.entries(store.scopes || {}).flatMap(([scopeId, entry]) => {
+        const upload = sanitizeDolphinBusinessUpload(entry?.upload, now());
+        return DOLPHIN_BUSINESS_SCOPES.has(scopeId) && upload
+          ? [[scopeId, {
+            schemaVersion: 1,
+            scopeId,
+            scopeEvidence: 'device-profile',
+            generatedAt: upload.generatedAt,
+            receivedAt: isoTimestamp(entry.receivedAt) || null,
+            upload,
+          }]]
+          : [];
+      })),
     });
   }
 
@@ -1158,6 +1569,16 @@ export function createFeedbackService(options) {
 
       if (url.pathname === '/api/integrations/dolphin/source-config') {
         await handleDolphinSourceConfig(request, response);
+        return;
+      }
+
+      if (url.pathname === '/api/integrations/dolphin/business-summary') {
+        await handleDolphinBusinessSummaryUpload(request, response);
+        return;
+      }
+
+      if (url.pathname === '/api/internal/dolphin/business-summaries') {
+        await handleDolphinBusinessSummariesInternal(request, response);
         return;
       }
 
@@ -1273,6 +1694,7 @@ export function createFeedbackService(options) {
     claimsDataFile: resolvedClaimsDataFile,
     redemptionsDataFile: resolvedRedemptionsDataFile,
     dolphinConnectorsDataFile: resolvedDolphinConnectorsDataFile,
+    dolphinBusinessSummariesDataFile: resolvedDolphinBusinessSummariesDataFile,
     accountDatabaseFile: accountService.databaseFile,
   };
 }

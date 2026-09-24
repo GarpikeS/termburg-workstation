@@ -16,6 +16,8 @@ const service = await startFeedbackService({
   rewardAdminToken: process.env.REWARD_ADMIN_TOKEN || '',
   dolphinConnectorToken: process.env.DOLPHIN_CONNECTOR_TOKEN || '',
   dolphinEnrollmentTokenHash: process.env.DOLPHIN_ENROLLMENT_TOKEN_HASH || '',
+  dolphinEnrollmentLocationCode: process.env.DOLPHIN_ENROLLMENT_LOCATION_CODE || '',
+  dolphinBusinessInternalToken: process.env.DOLPHIN_BUSINESS_INTERNAL_TOKEN || '',
   dolphinSourceApiKey: process.env.DOLPHIN_SOURCE_API_KEY || '',
   dolphinSourceApiUrls: process.env.DOLPHIN_SOURCE_API_URLS || '',
   dolphinSourceApiPath: process.env.DOLPHIN_SOURCE_API_PATH || '/api/v1/barcodes/game',
@@ -28,6 +30,14 @@ const service = await startFeedbackService({
   dolphinCampServicesPath: process.env.DOLPHIN_CAMP_SERVICES_PATH || '/api/v1/camp/services',
   dolphinCampAccountsPath: process.env.DOLPHIN_CAMP_ACCOUNTS_PATH || '/api/v1/camp/accounts',
   dolphinCampAccountSalesPath: process.env.DOLPHIN_CAMP_ACCOUNTSALES_PATH || '/api/v1/camp/accountsales',
+  dolphinCampBusinessEnabled: process.env.DOLPHIN_CAMP_BUSINESS_ENABLED === '1',
+  dolphinCampBusinessLookbackDays: Number(process.env.DOLPHIN_CAMP_BUSINESS_LOOKBACK_DAYS || 7),
+  dolphinCampAccountPaymentsPath: process.env.DOLPHIN_CAMP_ACCOUNTPAYMENTS_PATH || '/api/v1/camp/accountpayments',
+  dolphinCampSkudVerifyLogsPath: process.env.DOLPHIN_CAMP_SKUDVERIFYLOGS_PATH || '/api/v1/camp/skudverifylogs',
+  dolphinCampCardsPath: process.env.DOLPHIN_CAMP_CARDS_PATH || '/api/v1/camp/cards',
+  dolphinCampSkudAreasPath: process.env.DOLPHIN_CAMP_SKUDAREAS_PATH || '/api/v1/camp/skudareas',
+  dolphinCampSkudControllersPath: process.env.DOLPHIN_CAMP_SKUDCONTROLLERS_PATH || '/api/v1/camp/skudcontrollers',
+  dolphinCampKkmChequesPath: process.env.DOLPHIN_CAMP_KKMCHEQUES_PATH || '/api/v1/camp/kkmcheques',
   dolphinSourceProfiles: {
     zelenogorsk: {
       apiKey: process.env.DOLPHIN_ZELENOGORSK_SOURCE_API_KEY || '',
@@ -45,6 +55,10 @@ const service = await startFeedbackService({
   dolphinConnectorsDataFile: process.env.DOLPHIN_CONNECTORS_DATA_FILE || path.join(
     path.dirname(process.env.REWARD_REDEMPTIONS_DATA_FILE || path.join(repoRoot, 'server', 'data', 'reward-redemptions.jsonl')),
     'dolphin-connectors.json',
+  ),
+  dolphinBusinessSummariesDataFile: process.env.DOLPHIN_BUSINESS_SUMMARIES_DATA_FILE || path.join(
+    path.dirname(process.env.REWARD_REDEMPTIONS_DATA_FILE || path.join(repoRoot, 'server', 'data', 'reward-redemptions.jsonl')),
+    'dolphin-business-summaries.json',
   ),
   accountOptions: {
     databaseFile: process.env.AUTH_DATA_FILE || path.join(repoRoot, 'server', 'data', 'accounts.sqlite'),

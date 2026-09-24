@@ -7,7 +7,7 @@ import {
 
 export function createDefaultAgentState() {
   return {
-    version: 3,
+    version: 4,
     processedFiles: {},
     processedApi: {},
     queue: {},
@@ -46,6 +46,15 @@ export function createDefaultAgentState() {
       currentDate: null,
       resources: {},
     },
+    businessSync: {
+      status: 'waiting',
+      generationId: '',
+      lastSequence: 0,
+      pending: null,
+      lastAttemptAt: null,
+      lastSuccessAt: null,
+      lastError: null,
+    },
   };
 }
 
@@ -75,6 +84,20 @@ const SAFE_CAMP_ERRORS = new Set([
   'Ответ CAMP API слишком большой.',
   'Диагностика CAMP API не настроена.',
   'CAMP API не вернул диагностические данные.',
+]);
+const BUSINESS_STATUSES = new Set(['waiting', 'disabled', 'active', 'blocked', 'error']);
+const BUSINESS_DAY_STATUSES = new Set(['complete', 'blocked', 'incomplete']);
+const BUSINESS_BLOCKERS = new Set([
+  'unresolved-controller-events',
+  'unresolved-staff-events',
+  'no-safely-classified-guest-controller',
+  'incomplete-resource',
+  'schema-changed',
+  'source-unavailable',
+  'fiscal-semantics-unconfirmed',
+]);
+const BUSINESS_RESOURCE_NAMES = new Set([
+  'accounts', 'cards', 'skudAreas', 'skudControllers', 'skudVerifyLogs', 'accountPayments', 'kkmCheques',
 ]);
 
 function sanitizeCampError(value) {
@@ -159,6 +182,114 @@ export function sanitizeCampApiState(value) {
   };
 }
 
+function calendarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return '';
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value ? value : '';
+}
+
+function isoTimestamp(value) {
+  if (typeof value !== 'string' || !value || !Number.isFinite(Date.parse(value))) return '';
+  return new Date(value).toISOString();
+}
+
+function generationId(value) {
+  const normalized = boundedText(value, 36).toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(normalized)
+    ? normalized
+    : '';
+}
+
+function sanitizeBusinessEnvelope(value) {
+  const input = safeObject(value);
+  const id = generationId(input.generationId);
+  const sequence = Number(input.sequence);
+  const generatedAt = isoTimestamp(input.generatedAt);
+  const windowInput = safeObject(input.window);
+  const from = calendarDate(windowInput.from);
+  const through = calendarDate(windowInput.through);
+  const completeThrough = calendarDate(windowInput.completeThrough);
+  if (input.schemaVersion !== 1 || !id || !Number.isSafeInteger(sequence) || sequence < 1 || !generatedAt
+    || !from || !through || !completeThrough || from > completeThrough || completeThrough > through
+    || windowInput.timezone !== 'Europe/Moscow') return null;
+  const rawDays = Array.isArray(input.days) ? input.days : [];
+  if (rawDays.length < 1 || rawDays.length > 62) return null;
+  const days = [];
+  for (const valueDay of rawDays) {
+    const day = safeObject(valueDay);
+    const date = calendarDate(day.date);
+    const uniqueVisitors = day.uniqueVisitors === null ? null : Number(day.uniqueVisitors);
+    const fiscalRevenueKopecks = day.fiscalRevenueKopecks === null ? null : Number(day.fiscalRevenueKopecks);
+    const fiscalPaymentRows = Number(day.fiscalPaymentRows);
+    if (!date || date < from || date > through || !BUSINESS_DAY_STATUSES.has(day.visitorStatus)
+      || !BUSINESS_DAY_STATUSES.has(day.revenueStatus)
+      || (uniqueVisitors !== null && (!Number.isSafeInteger(uniqueVisitors) || uniqueVisitors < 0 || uniqueVisitors > 1_000_000))
+      || (fiscalRevenueKopecks !== null && (!Number.isSafeInteger(fiscalRevenueKopecks)
+        || Math.abs(fiscalRevenueKopecks) > 10_000_000_000_000))
+      || !Number.isSafeInteger(fiscalPaymentRows) || fiscalPaymentRows < 0 || fiscalPaymentRows > 10_000_000
+      || (day.visitorStatus === 'complete') !== (uniqueVisitors !== null)
+      || (day.revenueStatus === 'complete') !== (fiscalRevenueKopecks !== null)) return null;
+    days.push({
+      date,
+      uniqueVisitors,
+      visitorStatus: day.visitorStatus,
+      fiscalRevenueKopecks,
+      revenueStatus: day.revenueStatus,
+      fiscalPaymentRows,
+    });
+  }
+  days.sort((left, right) => left.date.localeCompare(right.date));
+  const expectedDays = Math.floor(
+    (Date.parse(`${through}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000,
+  ) + 1;
+  if (days.length !== expectedDays || days[0].date !== from || days.at(-1).date !== through
+    || new Set(days.map(day => day.date)).size !== days.length
+    || days.some(day => day.date > completeThrough
+      && (day.visitorStatus === 'complete' || day.revenueStatus === 'complete'))) return null;
+  const qualityInput = safeObject(input.quality);
+  const blockers = (Array.isArray(qualityInput.blockers) ? qualityInput.blockers : [])
+    .filter(blocker => BUSINESS_BLOCKERS.has(blocker))
+    .slice(0, 12);
+  const resourceSchemaHashes = Object.fromEntries(Object.entries(safeObject(qualityInput.resourceSchemaHashes))
+    .flatMap(([name, hash]) => BUSINESS_RESOURCE_NAMES.has(name) && /^[a-f0-9]{64}$/i.test(hash || '')
+      ? [[name, hash.toLowerCase()]]
+      : []));
+  return {
+    schemaVersion: 1,
+    generationId: id,
+    sequence,
+    generatedAt,
+    window: { from, through, completeThrough, timezone: 'Europe/Moscow' },
+    days,
+    quality: {
+      dateExchangeUsable: qualityInput.dateExchangeUsable === true,
+      blockers: [...new Set(blockers)],
+      resourceSchemaHashes,
+    },
+  };
+}
+
+export function sanitizeBusinessSyncState(value) {
+  const defaults = createDefaultAgentState().businessSync;
+  const input = safeObject(value);
+  const id = generationId(input.generationId);
+  const lastSequence = id && Number.isSafeInteger(Number(input.lastSequence)) && Number(input.lastSequence) >= 0
+    ? Number(input.lastSequence)
+    : 0;
+  const candidate = sanitizeBusinessEnvelope(input.pending);
+  const pending = candidate && candidate.generationId === id && candidate.sequence > lastSequence ? candidate : null;
+  return {
+    ...defaults,
+    status: BUSINESS_STATUSES.has(input.status) ? input.status : defaults.status,
+    generationId: id,
+    lastSequence,
+    pending,
+    lastAttemptAt: finiteNumber(input.lastAttemptAt),
+    lastSuccessAt: finiteNumber(input.lastSuccessAt),
+    lastError: boundedText(input.lastError, 500) || null,
+  };
+}
+
 function sanitizeState(value) {
   const defaults = createDefaultAgentState();
   const state = safeObject(value);
@@ -168,7 +299,7 @@ function sanitizeState(value) {
   const sourceApi = safeObject(state.sourceApi);
   const inputStats = safeObject(state.stats);
   return {
-    version: 3,
+    version: 4,
     processedFiles: Object.fromEntries(processedEntries),
     processedApi: Object.fromEntries(processedApiEntries),
     queue: Object.fromEntries(queueEntries),
@@ -193,6 +324,7 @@ function sanitizeState(value) {
         : [],
     },
     campApi: sanitizeCampApiState(state.campApi),
+    businessSync: sanitizeBusinessSyncState(state.businessSync),
   };
 }
 
