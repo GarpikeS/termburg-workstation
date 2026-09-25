@@ -6,7 +6,7 @@ import {
   profileCampResponse,
 } from './camp-source-client.mjs';
 
-test('probes CAMP dictionaries once and transactional resources for the initial and current Moscow dates', async () => {
+test('probes CAMP dictionaries once and transactional resources only for the current Moscow date', async () => {
   const requests = [];
   const client = new CampSourceApiClient({
     enabled: true,
@@ -45,17 +45,15 @@ test('probes CAMP dictionaries once and transactional resources for the initial 
   assert.deepEqual(requests.map(request => request.url), [
     'http://10.10.0.250:60888/api/v1/camp/guesttypes?dateexchange=2023-09-01',
     'http://10.10.0.250:60888/api/v1/camp/services?dateexchange=2023-09-01',
-    'http://10.10.0.250:60888/api/v1/camp/accounts?dateexchange=2023-09-01',
     'http://10.10.0.250:60888/api/v1/camp/accounts?dateexchange=2026-09-14',
-    'http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2023-09-01',
     'http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2026-09-14',
   ]);
   assert.ok(requests.every(request => request.options.headers['X-API-Key'] === 'local-api-key-for-test-only'));
   assert.ok(requests.every(request => request.options.redirect === 'manual'));
   assert.equal(result.status, 'diagnostic');
   assert.equal(result.resources.guestTypes.probes[0].rowCount, 1);
-  assert.equal(result.resources.accounts.probes.length, 2);
-  assert.equal(result.resources.accountSales.probes.length, 2);
+  assert.equal(result.resources.accounts.probes.length, 1);
+  assert.equal(result.resources.accountSales.probes.length, 1);
   assert.match(JSON.stringify(result), /BALANCE|SUMMA/);
   assert.doesNotMatch(JSON.stringify(result), /Взрослый|Банный комплекс|Иван Иванов|CASHBOX-SECRET|444\.25|local-api-key/);
 });
@@ -113,6 +111,34 @@ test('negotiates standard and legacy query styles independently for each endpoin
   assert.ok(!urls.includes('http://10.10.0.250:60888/api/v1/camp/services&dateexchange=2023-09-01'));
   assert.ok(urls.includes('http://10.10.0.250:60888/api/v1/camp/accountsales?dateexchange=2023-09-01'));
   assert.ok(!urls.includes('http://10.10.0.250:60888/api/v1/camp/accountsales&dateexchange=2023-09-01'));
+});
+
+test('does not redownload an oversized successful response with the legacy query syntax', async () => {
+  const urls = [];
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://10.10.0.250:60888'],
+    apiKey: 'local-api-key-for-test-only',
+  }, {
+    fetchImpl: async url => {
+      urls.push(url);
+      return new Response('{}', {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(6 * 1024 * 1024),
+        },
+      });
+    },
+  });
+
+  await assert.rejects(
+    client.fetchResource('cards', '/api/v1/camp/cards', '2023-09-01', { businessProjection: true }),
+    /слишком большой/u,
+  );
+  assert.deepEqual(urls, [
+    'http://10.10.0.250:60888/api/v1/camp/cards?dateexchange=2023-09-01',
+  ]);
 });
 
 test('allows only the approved Dolphin CAMP origin over public plain HTTP', async () => {
@@ -279,7 +305,12 @@ test('business collection projects only required fields for completed days and t
     timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
   });
 
-  assert.equal(requests.length, 12);
+  assert.equal(requests.length, 9);
+  for (const resource of ['cards', 'skudareas', 'skudcontrollers']) {
+    const matching = requests.filter(request => request.url.includes(`/camp/${resource}?`));
+    assert.equal(matching.length, 1);
+    assert.match(matching[0].url, /dateexchange=2023-09-01$/u);
+  }
   assert.deepEqual({
     currentDate: result.currentDate,
     from: result.from,
@@ -300,6 +331,110 @@ test('business collection projects only required fields for completed days and t
   assert.deepEqual(result.quality.blockers, []);
   assert.equal(Object.keys(result.quality.resourceSchemaHashes).length, 6);
   assert.doesNotMatch(JSON.stringify(result), /Иван Иванов|CARD-SECRET|Телефон|SECRET/u);
+});
+
+test('business collection accepts cumulative transactional responses and keeps only each requested day', async () => {
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async url => {
+      const requestedDate = new URL(url).searchParams.get('dateexchange');
+      let body = businessBody(url);
+      if (requestedDate === '2026-09-09' && url.includes('/skudverifylogs?')) {
+        body = [
+          ...body,
+          ...businessBody(url, { verifyDate: '2026-09-10 09:00:00.000' }),
+        ];
+      }
+      if (requestedDate === '2026-09-09' && url.includes('/accountpayments?')) {
+        body = [
+          ...body,
+          ...businessBody(url, { paymentDate: '2026-09-10 10:00:00.000' }),
+        ];
+      }
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+
+  assert.deepEqual(result.resources.skudVerifyLogs.map(row => row.DATEACTION), [
+    '2026-09-09 09:00:00.000',
+    '2026-09-10 09:00:00.000',
+  ]);
+  assert.deepEqual(result.resources.accountPayments.map(row => row.DATEDOC), [
+    '2026-09-09 10:00:00.000',
+    '2026-09-10 10:00:00.000',
+  ]);
+  assert.deepEqual(result.quality.blockers, []);
+});
+
+test('business collection treats explicit empty arrays as available zero-row resources', async () => {
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async () => new Response('[]', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  });
+
+  const result = await client.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+
+  assert.deepEqual(Object.keys(result.resources), [
+    'accounts', 'cards', 'skudAreas', 'skudControllers', 'skudVerifyLogs', 'accountPayments',
+  ]);
+  assert.ok(Object.values(result.resources).every(rows => rows.length === 0));
+  assert.equal(Object.keys(result.quality.resourceSchemaHashes).length, 6);
+  assert.equal(result.quality.dateExchangeUsable, true);
+  assert.deepEqual(result.quality.blockers, []);
+});
+
+test('a failed business method does not suppress later methods on the same CAMP origin', async () => {
+  const requestedResources = [];
+  const client = new CampSourceApiClient({
+    enabled: true,
+    baseUrls: ['http://85.202.234.197:60888'],
+    apiKey: 'local-api-key-for-test-only',
+    business: { enabled: true, lookbackDays: 1, endpoints: businessEndpoints },
+  }, {
+    fetchImpl: async url => {
+      const resource = Object.entries(businessEndpoints)
+        .find(([, endpoint]) => url.includes(endpoint))?.[0] || 'accounts';
+      requestedResources.push(resource);
+      if (resource === 'cards') throw new Error('simulated cards timeout');
+      return new Response(JSON.stringify(businessBody(url)), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    },
+  });
+
+  const result = await client.fetchBusinessResources({
+    timestamp: Date.parse('2026-09-10T10:00:00.000Z'),
+  });
+
+  assert.equal(Object.hasOwn(result.resources, 'cards'), false);
+  assert.equal(Object.hasOwn(result.resources, 'skudAreas'), true);
+  assert.equal(Object.hasOwn(result.resources, 'skudControllers'), true);
+  assert.equal(Object.hasOwn(result.resources, 'skudVerifyLogs'), true);
+  assert.equal(Object.hasOwn(result.resources, 'accountPayments'), true);
+  assert.ok(requestedResources.indexOf('accountPayments') > requestedResources.indexOf('cards'));
+  assert.ok(result.quality.blockers.includes('source-unavailable'));
+  assert.ok(result.quality.blockers.includes('incomplete-resource'));
 });
 
 test('business collection fails closed when endpoints or schemas are missing', async () => {
