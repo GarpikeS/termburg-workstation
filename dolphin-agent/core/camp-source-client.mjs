@@ -41,14 +41,17 @@ const DEFAULT_ENDPOINTS = Object.freeze({
 });
 const BUSINESS_RESOURCE_SPECS = Object.freeze({
   accounts: Object.freeze({
+    queryMode: 'daily',
     requiredFields: Object.freeze(['ID', 'ISSTAFF']),
     aliases: Object.freeze({ ID: Object.freeze(['ID', 'id']), ISSTAFF: Object.freeze(['ISSTAFF', 'isStaff']) }),
   }),
   cards: Object.freeze({
+    queryMode: 'snapshot',
     requiredFields: Object.freeze(['ID', 'ISSTAFFCARD']),
     aliases: Object.freeze({ ID: Object.freeze(['ID', 'id']), ISSTAFFCARD: Object.freeze(['ISSTAFFCARD', 'isStaffCard']) }),
   }),
   skudAreas: Object.freeze({
+    queryMode: 'snapshot',
     requiredFields: Object.freeze(['ID', 'STATUS', 'KIND', 'ISCHECKBALANCE']),
     aliases: Object.freeze({
       ID: Object.freeze(['ID', 'id']),
@@ -58,6 +61,7 @@ const BUSINESS_RESOURCE_SPECS = Object.freeze({
     }),
   }),
   skudControllers: Object.freeze({
+    queryMode: 'snapshot',
     requiredFields: Object.freeze(['ID', 'IDAREA', 'READERIN', 'READEROUT', 'STATUS']),
     aliases: Object.freeze({
       ID: Object.freeze(['ID', 'id']),
@@ -68,6 +72,7 @@ const BUSINESS_RESOURCE_SPECS = Object.freeze({
     }),
   }),
   skudVerifyLogs: Object.freeze({
+    queryMode: 'daily',
     requiredFields: Object.freeze([
       'DATEACTION', 'IDCONTROLLER', 'IDREADER', 'ISALLOW', 'READERIN', 'IDACCOUNT', 'IDCARD', 'STATUS',
     ]),
@@ -84,6 +89,7 @@ const BUSINESS_RESOURCE_SPECS = Object.freeze({
     }),
   }),
   accountPayments: Object.freeze({
+    queryMode: 'daily',
     requiredFields: Object.freeze(['DATEDOC', 'SUMMA', 'STATUS', 'ISNOTFISCAL']),
     dateField: 'DATEDOC',
     aliases: Object.freeze({
@@ -489,11 +495,11 @@ export class CampSourceApiClient {
           failures.push(normalized.message);
           if (!(error instanceof CampSourceApiError) || error?.name === 'TimeoutError' || error?.name === 'AbortError') {
             this.deadBaseUrls.add(baseUrl);
-            break;
           }
-          if (normalized.status === 401 || normalized.status === 403 || (normalized.status >= 300 && normalized.status < 400)) {
-            break;
-          }
+          // Legacy syntax is negotiated only by an explicit standard-route 404
+          // above. Retrying a timeout, oversized body or invalid JSON with the
+          // alternate delimiter would download the same unsafe response twice.
+          break;
         }
       }
     }
@@ -518,16 +524,22 @@ export class CampSourceApiClient {
     let dateExchangeUsable = true;
 
     for (const resource of BUSINESS_RESOURCE_NAMES) {
+      // A slow or unavailable CAMP method must not poison every method that follows it.
+      // Keep the preferred working origin, but isolate failed origins to this resource.
+      this.deadBaseUrls.clear();
       const apiPath = this.config.business.endpoints[resource];
       const rows = [];
       const hashes = new Set();
       let valid = Boolean(apiPath);
-      let schemaObserved = false;
+      let responseObserved = false;
+      let emptySchemaHash = '';
       if (!apiPath) {
         dateExchangeUsable = false;
         if (!blockers.includes('source-unavailable')) blockers.push('source-unavailable');
       }
-      for (const dateExchange of valid ? dates : []) {
+      const spec = BUSINESS_RESOURCE_SPECS[resource];
+      const queryDates = spec.queryMode === 'snapshot' ? [this.config.initialDate] : dates;
+      for (const dateExchange of valid ? queryDates : []) {
         let result;
         try {
           result = await this.fetchResource(resource, apiPath, dateExchange, { businessProjection: true });
@@ -542,20 +554,29 @@ export class CampSourceApiClient {
           if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
           break;
         }
+        responseObserved = true;
         if (result.rowCount > 0) {
-          schemaObserved = true;
           hashes.add(result.projectedSchemaHash);
+        } else if (!emptySchemaHash) {
+          emptySchemaHash = result.projectedSchemaHash;
         }
-        const dateField = BUSINESS_RESOURCE_SPECS[resource].dateField;
-        if (dateField && result.projectedRows.some(row => localDatePrefix(row[dateField]) !== dateExchange)) {
+        const dateField = spec.dateField;
+        const rowDates = dateField
+          ? result.projectedRows.map(row => localDatePrefix(row[dateField]))
+          : [];
+        // Vendor methods may return either the requested day or a suffix beginning
+        // at dateexchange. Rows older than the requested day make the filter unsafe.
+        if (dateField && rowDates.some(date => !date || date < dateExchange)) {
           valid = false;
           dateExchangeUsable = false;
           if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
           break;
         }
-        rows.push(...result.projectedRows);
+        rows.push(...(dateField
+          ? result.projectedRows.filter((row, index) => rowDates[index] === dateExchange)
+          : result.projectedRows));
       }
-      if (!schemaObserved) {
+      if (!responseObserved) {
         valid = false;
         if (!blockers.includes('incomplete-resource')) blockers.push('incomplete-resource');
       }
@@ -565,7 +586,7 @@ export class CampSourceApiClient {
       }
       if (!valid) continue;
       resources[resource] = rows;
-      resourceSchemaHashes[resource] = [...hashes][0];
+      resourceSchemaHashes[resource] = [...hashes][0] || emptySchemaHash;
     }
 
     return {
@@ -591,13 +612,15 @@ export class CampSourceApiClient {
     const plan = [
       ['guestTypes', this.config.endpoints.guestTypes, [this.config.initialDate]],
       ['services', this.config.endpoints.services, [this.config.initialDate]],
-      ['accounts', this.config.endpoints.accounts, [...new Set([this.config.initialDate, currentDate])]],
-      ['accountSales', this.config.endpoints.accountSales, [...new Set([this.config.initialDate, currentDate])]],
+      ['accounts', this.config.endpoints.accounts, [currentDate]],
+      ['accountSales', this.config.endpoints.accountSales, [currentDate]],
     ];
     const resources = {};
     let successCount = 0;
     let errorCount = 0;
     for (const [resource, apiPath, dates] of plan) {
+      // Endpoint failures are independent: one slow method must not suppress the next.
+      this.deadBaseUrls.clear();
       const probes = [];
       const errors = [];
       for (const dateExchange of dates) {

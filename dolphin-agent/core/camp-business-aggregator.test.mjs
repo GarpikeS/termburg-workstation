@@ -125,6 +125,29 @@ test('distinguishes a missing resource from a valid empty resource', () => {
   assert.deepEqual(empty.quality.blockers, []);
 });
 
+test('publishes fiscal revenue even when a visitor reference resource is unavailable', () => {
+  const metadata = visitorMetadata();
+  const result = aggregateCampBusinessDays({
+    accounts: metadata.accounts,
+    skudAreas: metadata.skudAreas,
+    skudControllers: metadata.skudControllers,
+    skudVerifyLogs: [entry()],
+    accountPayments: [
+      { DATEDOC: '2026-09-09 10:00:00.000', SUMMA: 123.45, STATUS: 0, ISNOTFISCAL: 0 },
+    ],
+  }, {
+    currentDate: '2026-09-10',
+    from: '2026-09-09',
+    through: '2026-09-09',
+  });
+
+  assert.equal(result.days[0].uniqueVisitors, null);
+  assert.equal(result.days[0].visitorStatus, 'blocked');
+  assert.equal(result.days[0].fiscalRevenueKopecks, 12_345);
+  assert.equal(result.days[0].revenueStatus, 'complete');
+  assert.ok(result.quality.blockers.includes('incomplete-resource'));
+});
+
 test('blocks only the affected visitor day when a controller cannot be resolved', () => {
   const result = aggregateCampBusinessDays({
     ...visitorMetadata(),
