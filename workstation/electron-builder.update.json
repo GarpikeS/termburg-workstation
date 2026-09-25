@@ -38,7 +38,7 @@
     "target": [
       { "target": "nsis", "arch": ["x64"] }
     ],
-    "icon": "desktop/assets/icon.png",
+    "icon": "desktop/assets/icon.ico",
     "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
