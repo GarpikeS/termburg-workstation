@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeOfficialScheduleItems } from '../src/features/schedule/officialSchedule.ts';
-import { getEventsForDate, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
+import { getEventsForDate, getRemainingScheduleItems, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
 
 function createSchedule({ weeklyEvents, exceptions }) {
   return {
@@ -95,4 +95,22 @@ test('uses Krasnoyarsk time for the Zelenogorsk screens', () => {
   assert.equal(clock.dateKey, '2026-09-08');
   assert.equal(clock.hour, 12);
   assert.equal(clock.minute, 15);
+});
+
+test('removes finished events from the live TV schedule', () => {
+  const items = [
+    { id: 'finished', time: '09:00', endTime: '09:30' },
+    { id: 'active', time: '10:00', endTime: '10:45' },
+    { id: 'upcoming', time: '11:00' },
+  ];
+
+  assert.deepEqual(
+    getRemainingScheduleItems(items, 10 * 60 + 15).map(item => item.id),
+    ['active', 'upcoming'],
+  );
+  assert.deepEqual(
+    getRemainingScheduleItems(items, 10 * 60 + 45).map(item => item.id),
+    ['upcoming'],
+  );
+  assert.deepEqual(getRemainingScheduleItems(items, 11 * 60 + 30), []);
 });

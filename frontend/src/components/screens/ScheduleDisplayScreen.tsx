@@ -4,7 +4,15 @@ import { CalendarDays, MapPin, Wifi, WifiOff } from 'lucide-react';
 import { ScheduleError, ScheduleEventRow, ScheduleLoading, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
 import { useSchedule } from '@/features/schedule/useSchedule';
 import { useNow } from '@/features/schedule/useNow';
-import { formatScheduleDate, getEventsForDate, getZonedClock, timeToMinutes } from '@/features/schedule/scheduleTime';
+import {
+  formatScheduleDate,
+  getEventsForDate,
+  getHighlightedItem,
+  getRemainingScheduleItems,
+  getZonedClock,
+} from '@/features/schedule/scheduleTime';
+
+const DISPLAY_EVENT_LIMIT = 9;
 
 export function ScheduleDisplayScreen() {
   const { locationId = '1', layout } = useParams();
@@ -14,19 +22,11 @@ export function ScheduleDisplayScreen() {
   const location = data?.locations.find(item => item.id === locationId) ?? data?.locations[0];
   const clock = location ? getZonedClock(now, location.timezone) : null;
   const items = data && location && clock ? getEventsForDate(data, location.id, clock.dateKey) : [];
-  const nextTime = clock ? items.find(item => timeToMinutes(item.time) >= clock.minutes)?.time ?? null : null;
-  const visibleItems = (() => {
-    if (items.length <= 9) return items;
-    const index = nextTime ? items.findIndex(item => item.time === nextTime) : -1;
-    let start = index >= 0 ? Math.min(Math.max(index - 1, 0), items.length - 9) : Math.max(items.length - 9, 0);
-    let end = Math.min(start + 9, items.length);
-
-    // Keep simultaneous events together even when they cross the nine-row window.
-    while (start > 0 && items[start - 1].time === items[start].time) start -= 1;
-    while (end < items.length && items[end].time === items[end - 1].time) end += 1;
-
-    return items.slice(start, end);
-  })();
+  const remainingItems = clock ? getRemainingScheduleItems(items, clock.minutes) : items;
+  const highlighted = clock ? getHighlightedItem(remainingItems, clock.minutes) : null;
+  const highlightedTime = highlighted?.item?.time ?? null;
+  const visibleItems = remainingItems.slice(0, DISPLAY_EVENT_LIMIT);
+  const dayIsFinished = items.length > 0 && remainingItems.length === 0;
 
   if (error && !data) return <ScheduleError message={error} />;
   if (!data || !location || !clock) return <ScheduleLoading />;
@@ -63,22 +63,22 @@ export function ScheduleDisplayScreen() {
           <main className="schedule-display__main">
         <div className="schedule-display__date-line">
           <div><CalendarDays size={26} /><span>{formatScheduleDate(clock.dateKey)}</span></div>
-          <span>{visibleItems.length === items.length ? `${items.length} событий` : `Ближайшие ${visibleItems.length}`}</span>
+          <span>{visibleItems.length === remainingItems.length ? `${remainingItems.length} событий` : `Ближайшие ${visibleItems.length}`}</span>
         </div>
         <div className="schedule-display__events">
           {visibleItems.length > 0 ? visibleItems.map(item => (
             <ScheduleEventRow
               key={`${item.id}-${item.occurrenceDate}`}
               item={item}
-              highlighted={nextTime === item.time}
-              accessibilityLabel={nextTime === item.time ? `Следующее событие: ${item.time}, ${item.title}, ${item.venue}` : undefined}
+              highlighted={highlightedTime === item.time}
+              accessibilityLabel={highlightedTime === item.time ? `${highlighted?.status === 'now' ? 'Сейчас идёт' : 'Следующее событие'}: ${item.time}, ${item.title}, ${item.venue}` : undefined}
               compact
             />
           )) : (
             <div className="schedule-display__empty">
               <CalendarDays size={44} />
-              <h2>На сегодня событий нет</h2>
-              <p>Отдыхайте и набирайтесь сил.</p>
+              <h2>{dayIsFinished ? 'Все мероприятия на сегодня завершились' : 'На сегодня событий нет'}</h2>
+              <p>{dayIsFinished ? 'Будем ждать вас завтра.' : 'Отдыхайте и набирайтесь сил.'}</p>
             </div>
           )}
         </div>

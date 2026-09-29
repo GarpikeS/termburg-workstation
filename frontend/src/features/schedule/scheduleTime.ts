@@ -130,6 +130,10 @@ export function getHighlightedItem(items: ScheduleItem[], currentMinutes: number
   return { item: null, status: null };
 }
 
+export function getRemainingScheduleItems(items: ScheduleItem[], currentMinutes: number) {
+  return items.filter(item => getItemEndMinutes(item) > currentMinutes);
+}
+
 export function getNextScheduleItem(
   data: ScheduleData,
   locationId: string,
