@@ -7,6 +7,7 @@ import { getSchedulePrintKinds } from '../src/features/schedule/schedulePrintKin
 import { getZonedClock } from '../src/features/schedule/scheduleTime.ts';
 
 const mobileSource = readFileSync(new URL('../src/components/screens/ScheduleMobileScreen.tsx', import.meta.url), 'utf8');
+const displaySource = readFileSync(new URL('../src/components/screens/ScheduleDisplayScreen.tsx', import.meta.url), 'utf8');
 const printSource = readFileSync(new URL('../src/components/screens/SchedulePrintScreen.tsx', import.meta.url), 'utf8');
 const posterSource = readFileSync(new URL('../src/features/schedule/MonthlyPosterStudio.tsx', import.meta.url), 'utf8');
 const imageSource = readFileSync(new URL('../src/features/schedule/downloadScheduleImage.ts', import.meta.url), 'utf8');
@@ -71,4 +72,12 @@ test('keeps end times and price badges inside schedule rows', () => {
   assert.match(scheduleStyles, /@container schedule-display \(orientation: portrait\) and \(width < 40rem\)[\s\S]*?\.schedule-display__events\s*\{[\s\S]*?grid-auto-rows:\s*auto/);
   assert.match(scheduleStyles, /\.schedule-display \.schedule-event__body\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto/);
   assert.match(scheduleStyles, /\.schedule-display \.schedule-price--compact\s*\{[\s\S]*?justify-self:\s*end/);
+});
+
+test('keeps the TV display compact and free of redundant connection chrome', () => {
+  assert.match(displaySource, /const LANDSCAPE_EVENT_LIMIT = 12/);
+  assert.match(displaySource, /const PORTRAIT_EVENT_LIMIT = 9/);
+  assert.doesNotMatch(displaySource, /Wifi|WifiOff|schedule-display__sync/);
+  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__header\s*\{[\s\S]*?height:\s*clamp\(9\.5rem, 20cqh, 12rem\)/);
+  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__brand-stack\s*\{[\s\S]*?grid-template-columns:\s*auto auto/);
 });

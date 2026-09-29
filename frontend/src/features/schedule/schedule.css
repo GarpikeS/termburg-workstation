@@ -5202,15 +5202,15 @@
 
 @container schedule-display (orientation: landscape) {
   .schedule-display__header {
-    height: clamp(11rem, 25cqh, 15rem);
+    height: clamp(9.5rem, 20cqh, 12rem);
     min-height: 0;
     display: block;
-    padding: 0.45rem clamp(1.5rem, 4cqw, 3.5rem) 1.35rem;
+    padding: 0.35rem clamp(1.5rem, 4cqw, 3.5rem) 1.1rem;
   }
 
   .schedule-display__header::after {
-    height: 1.2rem;
-    background-size: 1.2rem 1.2rem;
+    height: 1rem;
+    background-size: 1rem 1rem;
   }
 
   .schedule-display__brand {
@@ -5221,9 +5221,13 @@
   .schedule-display__brand-stack {
     position: absolute;
     z-index: 1;
-    top: clamp(0.5rem, 1.2cqh, 0.85rem);
+    top: clamp(0.35rem, 0.8cqh, 0.6rem);
     right: clamp(1.5rem, 4cqw, 3.5rem);
-    gap: clamp(0.15rem, 0.45cqh, 0.35rem);
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: center;
+    gap: clamp(0.45rem, 1.1cqw, 0.85rem);
   }
 
   .schedule-display__brand-clock,
@@ -5233,22 +5237,13 @@
   }
 
   .schedule-display__header .schedule-mark {
-    width: clamp(5.4rem, 7cqw, 6.8rem);
-  }
-
-  .schedule-display__sync {
-    position: absolute;
-    z-index: 2;
-    top: 0.35rem;
-    left: clamp(1.5rem, 4cqw, 3.5rem);
-    padding: 0.2rem 0.48rem;
-    font-size: 0.62rem;
+    width: clamp(3.4rem, 4.5cqw, 4.8rem);
   }
 
   .schedule-display__title {
     position: absolute;
     left: clamp(1.5rem, 4cqw, 3.5rem);
-    bottom: clamp(1.55rem, 3.1cqh, 2.1rem);
+    bottom: clamp(1.2rem, 2.35cqh, 1.65rem);
     align-items: flex-end;
     justify-content: flex-start;
     margin: 0;
@@ -5259,8 +5254,8 @@
   }
 
   .schedule-display__title h1 {
-    margin-top: 0.16rem;
-    font-size: clamp(2.1rem, 5cqh, 3.25rem);
+    margin-top: 0.12rem;
+    font-size: clamp(1.9rem, 4.3cqh, 2.75rem);
     line-height: 0.9;
   }
 
@@ -5342,7 +5337,7 @@
   }
 
   .schedule-display__brand-clock strong {
-    font-size: clamp(3rem, 6.8cqh, 4.5rem);
+    font-size: clamp(2.8rem, 6cqh, 4rem);
   }
 
   .schedule-display__brand-clock > span {
@@ -5357,7 +5352,7 @@
   }
 
   .schedule-display__header {
-    height: clamp(15rem, 26cqh, 25rem);
+    height: clamp(13.5rem, 22cqh, 21rem);
     min-height: 0;
     display: block;
     padding: clamp(0.8rem, 1.5cqh, 1.25rem) clamp(1.5rem, 5cqw, 3.5rem) clamp(2rem, 3cqh, 2.75rem);
@@ -5379,7 +5374,11 @@
     top: clamp(0.7rem, 1.2cqh, 1.1rem);
     right: auto;
     left: 50%;
-    gap: clamp(0.25rem, 0.55cqh, 0.5rem);
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: center;
+    gap: clamp(0.55rem, 2cqw, 1rem);
     transform: translateX(-50%);
   }
 
@@ -5390,7 +5389,7 @@
   }
 
   .schedule-display__header .schedule-mark {
-    width: clamp(6.5rem, 13cqw, 8rem);
+    width: clamp(5rem, 10cqw, 6.5rem);
   }
 
   .schedule-display__brand-clock strong {
@@ -5400,15 +5399,6 @@
   .schedule-display__brand-clock > span {
     margin-top: 0.25rem;
     font-size: clamp(1rem, 2.4cqw, 1.3rem);
-  }
-
-  .schedule-display__sync {
-    position: absolute;
-    z-index: 2;
-    top: clamp(0.7rem, 2.1cqh, 1.8rem);
-    left: clamp(0.7rem, 3cqw, 2rem);
-    padding: 0.38rem 0.65rem;
-    font-size: clamp(0.62rem, 1.45cqw, 0.88rem);
   }
 
   .schedule-display__title {
