@@ -5221,13 +5221,8 @@
   .schedule-display__brand-stack {
     position: absolute;
     z-index: 1;
-    top: clamp(0.35rem, 0.8cqh, 0.6rem);
-    right: clamp(1.5rem, 4cqw, 3.5rem);
-    display: grid;
-    grid-template-columns: auto auto;
-    align-items: center;
-    justify-items: center;
-    gap: clamp(0.45rem, 1.1cqw, 0.85rem);
+    inset: 0 0 1rem;
+    display: block;
   }
 
   .schedule-display__brand-clock,
@@ -5236,8 +5231,19 @@
     white-space: nowrap;
   }
 
+  .schedule-display__brand-clock {
+    position: absolute;
+    top: 50%;
+    right: clamp(1.5rem, 4cqw, 3.5rem);
+    transform: translateY(-50%);
+  }
+
   .schedule-display__header .schedule-mark {
-    width: clamp(3.4rem, 4.5cqw, 4.8rem);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: clamp(8.5rem, 13cqw, 11.5rem);
+    transform: translate(-50%, -50%);
   }
 
   .schedule-display__title {
@@ -5338,12 +5344,13 @@
   }
 
   .schedule-display__brand-clock strong {
-    font-size: clamp(2.8rem, 6cqh, 4rem);
+    font-size: clamp(5rem, 13cqh, 8.5rem);
+    line-height: 0.88;
   }
 
   .schedule-display__brand-clock > span {
-    margin-top: 0.2rem;
-    font-size: clamp(0.82rem, 1.45cqh, 1.05rem);
+    margin-top: 0.3rem;
+    font-size: clamp(0.9rem, 1.8cqh, 1.25rem);
   }
 }
 

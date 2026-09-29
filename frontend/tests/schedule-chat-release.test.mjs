@@ -79,5 +79,6 @@ test('keeps the TV display compact and free of redundant connection chrome', () 
   assert.match(displaySource, /const PORTRAIT_EVENT_LIMIT = 9/);
   assert.doesNotMatch(displaySource, /Wifi|WifiOff|schedule-display__sync/);
   assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__header\s*\{[\s\S]*?height:\s*clamp\(9\.5rem, 20cqh, 12rem\)/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__brand-stack\s*\{[\s\S]*?grid-template-columns:\s*auto auto/);
+  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__header \.schedule-mark\s*\{[\s\S]*?left:\s*50%[\s\S]*?width:\s*clamp\(8\.5rem, 13cqw, 11\.5rem\)/);
+  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__brand-clock strong\s*\{[\s\S]*?font-size:\s*clamp\(5rem, 13cqh, 8\.5rem\)/);
 });
