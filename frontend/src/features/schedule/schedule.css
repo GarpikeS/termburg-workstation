@@ -1013,12 +1013,37 @@
 
 /* TV/display */
 .schedule-display-stage {
+  position: relative;
   width: 100%;
   min-height: 100dvh;
   display: grid;
   place-items: center;
   overflow: hidden;
   background: var(--schedule-navy-deep);
+}
+
+.schedule-display__fullscreen {
+  position: fixed;
+  z-index: 20;
+  right: clamp(0.8rem, 2vw, 1.5rem);
+  bottom: clamp(0.8rem, 2vw, 1.5rem);
+  min-height: 3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 1rem;
+  color: white;
+  background: rgba(5, 39, 68, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  box-shadow: 0 0.5rem 1.6rem rgba(4, 27, 47, 0.28);
+  font: 800 clamp(0.82rem, 1.2vw, 1rem) / 1 'Inter', 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+.schedule-display__fullscreen:focus-visible {
+  outline: 3px solid #8fd8dd;
+  outline-offset: 3px;
 }
 
 .schedule-display-frame {
@@ -5233,7 +5258,7 @@
 
   .schedule-display__brand-clock {
     position: absolute;
-    top: 50%;
+    top: calc(50% + 0.45rem);
     right: clamp(1.5rem, 4cqw, 3.5rem);
     transform: translateY(-50%);
   }
@@ -5284,8 +5309,8 @@
   }
 
   .schedule-display__events {
-    grid-auto-rows: minmax(0, 1fr);
-    align-content: stretch;
+    grid-auto-rows: auto;
+    align-content: start;
     gap: 0 0.8rem;
     padding-top: 0.1rem;
   }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { normalizeOfficialScheduleItems } from '../src/features/schedule/officialSchedule.ts';
-import { getEventsForDate, getRemainingScheduleItems, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
+import { getEventsForDate, getNextScheduleDay, getRemainingScheduleItems, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
 
 function createSchedule({ weeklyEvents, exceptions }) {
   return {
@@ -113,4 +113,19 @@ test('removes finished events from the live TV schedule', () => {
     ['upcoming'],
   );
   assert.deepEqual(getRemainingScheduleItems(items, 11 * 60 + 30), []);
+});
+
+test('shows the next scheduled day when all of today events have finished', () => {
+  const schedule = createSchedule({
+    weeklyEvents: [
+      { id: 'today', locationId: '2', published: true, daysOfWeek: [3], time: '10:00', endTime: '10:30' },
+      { id: 'tomorrow', locationId: '2', published: true, daysOfWeek: [4], time: '11:00', endTime: '11:30' },
+    ],
+    exceptions: [],
+  });
+
+  const nextDay = getNextScheduleDay(schedule, '2', '2026-09-30');
+
+  assert.equal(nextDay?.dateKey, '2026-10-01');
+  assert.deepEqual(nextDay?.items.map(item => item.id), ['tomorrow']);
 });

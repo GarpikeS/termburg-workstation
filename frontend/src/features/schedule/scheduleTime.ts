@@ -134,6 +134,20 @@ export function getRemainingScheduleItems(items: ScheduleItem[], currentMinutes:
   return items.filter(item => getItemEndMinutes(item) > currentMinutes);
 }
 
+export function getNextScheduleDay(
+  data: ScheduleData,
+  locationId: string,
+  dateKey: string,
+  maxDays = 31,
+) {
+  for (let offset = 1; offset <= maxDays; offset += 1) {
+    const candidateDate = addDays(dateKey, offset);
+    const items = getEventsForDate(data, locationId, candidateDate);
+    if (items.length > 0) return { dateKey: candidateDate, items, dayOffset: offset };
+  }
+  return null;
+}
+
 export function getNextScheduleItem(
   data: ScheduleData,
   locationId: string,
