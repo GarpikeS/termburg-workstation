@@ -12,6 +12,7 @@ test('a location-scoped store is configured and accepts its only account', async
   try {
     const authFile = path.join(root, 'schedule-auth.json');
     const setupAuth = createScheduleAuth({ authFile, scryptOptions: testScrypt });
+    await setupAuth.ready;
     await setupAuth.setup({
       moscowPassword: 'Moscow-pass-2026',
       zelenogorskPassword: 'Zelenogorsk-pass-2026',
@@ -47,6 +48,7 @@ test('production startup removes a persisted test account and refuses its login'
       scryptOptions: testScrypt,
       testProfile: { username: 'testtb', password: '2026', locationId: 'test', version: 1 },
     });
+    await legacyAuth.ready;
     await legacyAuth.setup({
       moscowPassword: 'Moscow-pass-2026',
       zelenogorskPassword: 'Zelenogorsk-pass-2026',

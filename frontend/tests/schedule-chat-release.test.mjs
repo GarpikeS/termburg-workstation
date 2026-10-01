@@ -4,7 +4,8 @@ import test from 'node:test';
 
 import { MAX_POSTER_EVENTS, MIN_POSTER_EVENTS } from '../src/features/schedule/monthlyPoster.ts';
 import { getSchedulePrintKinds } from '../src/features/schedule/schedulePrintKinds.ts';
-import { getZonedClock } from '../src/features/schedule/scheduleTime.ts';
+import { getEventsForDate, getRemainingScheduleItems, getZonedClock } from '../src/features/schedule/scheduleTime.ts';
+import { tvScheduleFixture } from './fixtures/tvSchedule.mjs';
 
 const mobileSource = readFileSync(new URL('../src/components/screens/ScheduleMobileScreen.tsx', import.meta.url), 'utf8');
 const displaySource = readFileSync(new URL('../src/components/screens/ScheduleDisplayScreen.tsx', import.meta.url), 'utf8');
@@ -12,6 +13,8 @@ const printSource = readFileSync(new URL('../src/components/screens/SchedulePrin
 const posterSource = readFileSync(new URL('../src/features/schedule/MonthlyPosterStudio.tsx', import.meta.url), 'utf8');
 const imageSource = readFileSync(new URL('../src/features/schedule/downloadScheduleImage.ts', import.meta.url), 'utf8');
 const scheduleStyles = readFileSync(new URL('../src/features/schedule/schedule.css', import.meta.url), 'utf8');
+const tvStyles = readFileSync(new URL('../src/features/schedule/scheduleDisplay.css', import.meta.url), 'utf8');
+const tvEventSource = readFileSync(new URL('../src/features/schedule/ScheduleTvEvent.tsx', import.meta.url), 'utf8');
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -69,21 +72,34 @@ test('keeps end times and price badges inside schedule rows', () => {
   assert.match(price, /max-width:\s*100%/);
   assert.match(price, /flex-shrink:\s*0/);
   assert.match(price, /white-space:\s*nowrap/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: portrait\) and \(width < 40rem\)[\s\S]*?\.schedule-display__events\s*\{[\s\S]*?grid-auto-rows:\s*auto/);
-  assert.match(scheduleStyles, /\.schedule-display \.schedule-event__body\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) auto/);
-  assert.match(scheduleStyles, /\.schedule-display \.schedule-price--compact\s*\{[\s\S]*?justify-self:\s*end/);
+  assert.match(tvEventSource, /schedule-tv-event__meta/);
+  assert.match(tvEventSource, /schedule-tv-event__venue/);
+  assert.match(tvEventSource, /schedule-tv-event__price/);
+  assert.doesNotMatch(tvStyles, /translateY|background-clip|text-fill-color/);
 });
 
 test('keeps the TV display compact and free of redundant connection chrome', () => {
   assert.match(displaySource, /const LANDSCAPE_EVENT_LIMIT = 12/);
   assert.match(displaySource, /const PORTRAIT_EVENT_LIMIT = 9/);
   assert.doesNotMatch(displaySource, /Wifi|WifiOff|schedule-display__sync/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__header\s*\{[\s\S]*?height:\s*clamp\(9\.5rem, 20cqh, 12rem\)/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__events\s*\{[\s\S]*?grid-auto-rows:\s*auto;[\s\S]*?align-content:\s*start/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__header \.schedule-mark\s*\{[\s\S]*?left:\s*50%[\s\S]*?width:\s*clamp\(8\.5rem, 13cqw, 11\.5rem\)/);
-  assert.match(scheduleStyles, /@container schedule-display \(orientation: landscape\)[\s\S]*?\.schedule-display__brand-clock strong\s*\{[\s\S]*?font-size:\s*clamp\(5rem, 13cqh, 8\.5rem\)/);
-  assert.match(scheduleStyles, /\.schedule-display__brand-clock\s*\{[\s\S]*?top:\s*calc\(50% \+ 0\.45rem\)/);
+  assert.match(displaySource, /ScheduleTvEvent/);
+  assert.doesNotMatch(displaySource, /ScheduleEventRow|schedule-display__/);
+  assert.match(displaySource, /matchMedia\('\(orientation: portrait\)'\)/);
   assert.match(displaySource, /getNextScheduleDay/);
   assert.match(displaySource, /requestFullscreen\(\{ navigationUI: 'hide' \}\)/);
   assert.match(displaySource, /На весь экран/);
+});
+
+test('dense TV fixture includes 12 remaining events, long titles and paid/free prices', () => {
+  const clock = getZonedClock(new Date('2026-10-01T05:40:00Z'), 'Asia/Krasnoyarsk');
+  const all = getEventsForDate(tvScheduleFixture, '2', clock.dateKey);
+  const remaining = getRemainingScheduleItems(all, clock.minutes);
+  assert.equal(all.length, 13);
+  assert.equal(remaining.length, 12);
+  assert.equal(remaining[0].time, '10:00'); // Ongoing all-day event must stay.
+  assert.equal(remaining.at(-1).time, '19:00');
+  assert.ok(remaining.some(item => item.title.length >= 50));
+  assert.ok(remaining.some(item => item.price === 390));
+  assert.ok(remaining.some(item => item.priceKind === 'free'));
+  assert.ok(remaining.every(item => item.locationId === '2'));
 });
