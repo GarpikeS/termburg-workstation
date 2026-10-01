@@ -116,3 +116,9 @@ test('preserves the branded animated clock wave over complete white digits', () 
   assert.match(tvStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/);
   assert.match(tvStyles, /\.schedule-wave-clock\s*\{[^}]*overflow: visible/);
 });
+
+test('keeps TV backgrounds flat without unrequested decorative circles or glow', () => {
+  assert.match(tvStyles, /\.schedule-tv\s*\{[^}]*background:\s*var\(--schedule-paper\)/);
+  assert.match(tvStyles, /\.schedule-tv__header\s*\{[^}]*background:\s*var\(--schedule-navy\)/);
+  assert.doesNotMatch(tvStyles, /radial-gradient|linear-gradient|schedule-tv__header::(?:before|after)|backdrop-filter|\bblur\(/);
+});

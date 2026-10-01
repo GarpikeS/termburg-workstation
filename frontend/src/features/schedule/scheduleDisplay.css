@@ -31,13 +31,11 @@
   display: grid;
   grid-template-rows: var(--tv-header-height) minmax(0, 1fr);
   color: var(--schedule-ink);
-  background: linear-gradient(180deg, var(--schedule-aqua-soft), var(--schedule-paper) 28%);
+  background: var(--schedule-paper);
   font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
 }
 
 .schedule-tv__header {
-  position: relative;
-  isolation: isolate;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -46,19 +44,8 @@
   gap: calc(2 * var(--tv-w));
   padding: calc(1.4 * var(--tv-h)) var(--tv-side);
   color: white;
-  background: radial-gradient(ellipse at 50% 140%, var(--schedule-aqua-dark), transparent 65%),
-    linear-gradient(115deg, var(--schedule-navy-deep), var(--schedule-navy));
+  background: var(--schedule-navy);
   border-bottom: calc(0.55 * var(--tv-h)) solid var(--schedule-aqua);
-}
-
-.schedule-tv__header::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: repeating-radial-gradient(ellipse at 50% 180%, transparent 0 12%, var(--schedule-aqua) 12.1% 12.3%, transparent 12.4% 20%);
-  opacity: 0.12;
 }
 
 .schedule-tv__title {
