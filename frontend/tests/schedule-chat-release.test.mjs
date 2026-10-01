@@ -15,6 +15,7 @@ const imageSource = readFileSync(new URL('../src/features/schedule/downloadSched
 const scheduleStyles = readFileSync(new URL('../src/features/schedule/schedule.css', import.meta.url), 'utf8');
 const tvStyles = readFileSync(new URL('../src/features/schedule/scheduleDisplay.css', import.meta.url), 'utf8');
 const tvEventSource = readFileSync(new URL('../src/features/schedule/ScheduleTvEvent.tsx', import.meta.url), 'utf8');
+const tvClockSource = readFileSync(new URL('../src/features/schedule/ScheduleWaveClock.tsx', import.meta.url), 'utf8');
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -102,4 +103,16 @@ test('dense TV fixture includes 12 remaining events, long titles and paid/free p
   assert.ok(remaining.some(item => item.price === 390));
   assert.ok(remaining.some(item => item.priceKind === 'free'));
   assert.ok(remaining.every(item => item.locationId === '2'));
+});
+
+test('preserves the branded animated clock wave over complete white digits', () => {
+  assert.match(displaySource, /<ScheduleWaveClock hour=\{clock.hour\} minute=\{clock.minute\}/);
+  assert.match(tvClockSource, /schedule-wave-clock__base[^>]*fill="white"/);
+  assert.match(tvClockSource, /<mask[^>]*maskUnits="userSpaceOnUse"[^>]*y="-40"[^>]*height="200"/);
+  assert.match(tvClockSource, /schedule-wave-clock__wave--back/);
+  assert.match(tvClockSource, /schedule-wave-clock__wave--front/);
+  assert.match(tvClockSource, /role="img" aria-label=\{time\}/);
+  assert.match(tvStyles, /@keyframes schedule-tv-water/);
+  assert.match(tvStyles, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none/);
+  assert.match(tvStyles, /\.schedule-wave-clock\s*\{[^}]*overflow: visible/);
 });

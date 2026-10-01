@@ -5,6 +5,7 @@ import '@/features/schedule/scheduleDisplay.css';
 import { CalendarDays, MapPin, Maximize2 } from 'lucide-react';
 import { ScheduleError, ScheduleLoading, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
 import { ScheduleTvEvent } from '@/features/schedule/ScheduleTvEvent';
+import { ScheduleWaveClock } from '@/features/schedule/ScheduleWaveClock';
 import { useSchedule } from '@/features/schedule/useSchedule';
 import { useNow } from '@/features/schedule/useNow';
 import {
@@ -98,9 +99,7 @@ export function ScheduleDisplayScreen() {
             </div>
             <TermburgScheduleMark />
             <div className="schedule-tv__clock">
-              <strong aria-label={`${String(clock.hour).padStart(2, '0')}:${String(clock.minute).padStart(2, '0')}`}>
-                {String(clock.hour).padStart(2, '0')}<i>:</i>{String(clock.minute).padStart(2, '0')}
-              </strong>
+              <ScheduleWaveClock hour={clock.hour} minute={clock.minute} />
               <span>{location.shortName}</span>
             </div>
           </header>
