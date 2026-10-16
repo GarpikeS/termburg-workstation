@@ -1,0 +1,27 @@
+.schedule-admin__workspace--day { grid-template-columns: minmax(0, 1fr); }
+.schedule-admin-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.schedule-day-editor { display: grid; gap: 1.2rem; padding: clamp(1rem, 2.5vw, 2rem); color: var(--schedule-ink); }
+.schedule-day-editor__heading, .schedule-day-editor__summary, .schedule-day-editor__row-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.schedule-day-editor__date { display: flex; align-items: end; gap: .5rem; }
+.schedule-day-editor h2 { margin: 0; font-size: 1.3rem; color: var(--schedule-navy); }
+.schedule-day-editor p { margin: .4rem 0; font-size: .85rem; line-height: 1.6; }
+.schedule-day-editor__help { padding: 1rem; border: 1px solid #d5dfe1; border-radius: .7rem; background: #f8faf9; }
+.schedule-day-editor__help strong, .schedule-day-editor__summary strong { font-size: .9rem; }
+.schedule-day-editor__summary span { display: block; margin-top: .3rem; font-size: .8rem; color: #657a89; }
+.schedule-day-editor__rows { display: grid; gap: .8rem; }
+.schedule-day-editor__row { min-width: 0; padding: 1rem; border: 1px solid #dce4e5; border-radius: .8rem; background: white; }
+.schedule-day-editor__row.is-replaced { border-left: 4px solid var(--schedule-teal, #277d83); }
+.schedule-day-editor__row-heading { margin-bottom: .8rem; font-size: .8rem; color: #657a89; }
+.schedule-day-editor__fields { display: grid; grid-template-columns: minmax(0, 1fr) repeat(2, minmax(7rem, .28fr)); gap: .8rem; border: 0; padding: 0; margin: 0; min-width: 0; }
+.schedule-day-editor .schedule-admin-field input, .schedule-day-editor .schedule-admin-field textarea, .schedule-day-editor select { font-size: .9rem; }
+.schedule-day-editor select { min-width: 0; width: 100%; padding: .65rem .75rem; border: 1px solid #d5dfe1; border-radius: .7rem; background: #f8faf9; color: var(--schedule-ink); min-height: 2.75rem; }
+.schedule-day-editor__details { margin-top: .8rem; font-size: .8rem; }
+.schedule-day-editor__details summary { cursor: pointer; color: #657a89; padding: .25rem 0; }
+.schedule-day-editor__details[open] summary { margin-bottom: .5rem; }
+.schedule-day-editor input:focus-visible, .schedule-day-editor select:focus-visible, .schedule-day-editor textarea:focus-visible, .schedule-day-editor summary:focus-visible { outline: 2px solid var(--schedule-teal, #277d83); outline-offset: 2px; }
+.schedule-day-editor fieldset:disabled { opacity: .7; }
+@media (max-width: 650px) {
+  .schedule-day-editor__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .schedule-day-editor__title, .schedule-day-editor__venue { grid-column: 1 / -1; }
+  .schedule-admin-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

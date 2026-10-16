@@ -95,14 +95,19 @@ export function formatScheduleDate(dateKey: string, options?: Intl.DateTimeForma
 
 export function getEventsForDate(data: ScheduleData, locationId: string, dateKey: string): ScheduleItem[] {
   const weekday = getIsoWeekday(dateKey);
+  const regular = data.weeklyEvents.filter(event => event.locationId === locationId
+    && event.published && event.daysOfWeek.includes(weekday));
+  const regularIds = new Set(regular.map(event => event.id));
   const exceptions: ScheduleItem[] = data.exceptions
     .filter(event => event.locationId === locationId && event.published && event.date === dateKey)
+    .filter(event => !event.replacesEventId || regularIds.has(event.replacesEventId))
     .map(event => ({ ...event, occurrenceDate: dateKey, isException: true, daysOfWeek: [weekday] }));
   const closed = exceptions.filter(isClosedScheduleItem);
   if (closed.length > 0) return closed;
 
-  const recurring: ScheduleItem[] = data.weeklyEvents
-    .filter(event => event.locationId === locationId && event.published && event.daysOfWeek.includes(weekday))
+  const replaced = new Set(exceptions.flatMap(event => 'replacesEventId' in event && event.replacesEventId ? [event.replacesEventId] : []));
+  const recurring: ScheduleItem[] = regular
+    .filter(event => !replaced.has(event.id))
     .map(event => ({ ...event, occurrenceDate: dateKey, isException: false }));
   return [...recurring, ...exceptions].sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 }

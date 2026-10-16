@@ -26,6 +26,8 @@ export interface ScheduleEvent {
 
 export interface ScheduleException {
   id: string;
+  /** Replaces a weekly event only on this date. */
+  replacesEventId?: string;
   locationId: string;
   date: string;
   time: string;

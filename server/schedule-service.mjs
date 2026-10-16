@@ -88,6 +88,35 @@ export function normalizeScheduleLocationTimezones(schedule) {
   };
 }
 
+// Validate the new replacement contract without changing legacy ordinary/closure records.
+export function validateScheduleItems(schedule) {
+  const replacements = new Set();
+  for (const item of schedule.exceptions) {
+    if (item.replacesEventId === undefined) continue;
+    const validDate = typeof item.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+      && Number.isFinite(Date.parse(`${item.date}T12:00:00Z`))
+      && new Date(`${item.date}T12:00:00Z`).toISOString().slice(0, 10) === item.date;
+    const validTime = value => typeof value === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+    const original = schedule.weeklyEvents.find(event => event.id === item.replacesEventId);
+    const weekday = new Date(`${item.date}T12:00:00Z`).getUTCDay() || 7;
+    const key = `${item.locationId}|${item.date}|${item.replacesEventId}`;
+    if (!validDate || typeof item.replacesEventId !== 'string' || !original || original.locationId !== item.locationId
+      || !original.daysOfWeek.includes(weekday) || item.closed || item.sanitaryDay
+      || (item.published && !original.published) || replacements.has(key)) {
+      return 'Проверьте замену: исходное событие должно проходить в этом комплексе в выбранную дату; на событие допускается одна замена.';
+    }
+    if (typeof item.title !== 'string' || !item.title.trim() || item.title.length > 500
+      || typeof item.venue !== 'string' || !item.venue.trim() || item.venue.length > 500
+      || !validTime(item.time) || (item.endTime && !validTime(item.endTime))
+      || !['free', 'paid'].includes(item.priceKind) || typeof item.published !== 'boolean'
+      || (item.price !== undefined && (!Number.isFinite(item.price) || item.price < 0))) {
+      return 'Проверьте название, время, место и стоимость замены.';
+    }
+    replacements.add(key);
+  }
+  return '';
+}
+
 export function createScheduleService(options) {
   const {
     staticRoot,
@@ -583,11 +612,18 @@ export function createScheduleService(options) {
           return;
         }
         const testSession = access.user?.isTest === true;
+        const current = testSession ? await readTestSchedule() : await readSchedule();
         const saved = testSession
-          ? isolateTestSchedule(value, await readTestSchedule())
+          ? isolateTestSchedule(value, current)
           : access.user?.locationId
-            ? mergeScheduleForLocation(await readSchedule(), value, access.user.locationId)
+            ? mergeScheduleForLocation(current, value, access.user.locationId)
             : value;
+        if (saved.exceptions.some(item => !item.replacesEventId && current.exceptions.some(previous => previous.id === item.id && previous.replacesEventId))) {
+          sendJson(response, 409, { error: 'Потеряна связь замены с обычным событием. Обновите программу. Для отмены замены удалите её запись в «Особых датах».' });
+          return;
+        }
+        const validationError = validateScheduleItems(saved);
+        if (validationError) { sendJson(response, 400, { error: validationError }); return; }
         if (testSession) await writeTestSchedule(saved);
         else await writeSchedule(saved);
         broadcastScheduleUpdate(saved);

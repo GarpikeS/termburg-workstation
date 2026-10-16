@@ -122,9 +122,8 @@ export async function saveSchedule(data: ScheduleData, adminToken?: string): Pro
     revision: data.revision + 1,
     updatedAt: new Date().toISOString(),
   };
-  writeLocalSchedule(next);
-
   if (!hasScheduleApi()) {
+    writeLocalSchedule(next);
     return {
       data: next,
       synced: false,
@@ -168,9 +167,10 @@ export async function saveSchedule(data: ScheduleData, adminToken?: string): Pro
       message: 'Сохранено и обновлено на всех экранах.',
     };
   } catch (error) {
-    if (error && typeof error === 'object' && 'status' in error && (error.status === 401 || error.status === 403)) {
+    if (error && typeof error === 'object' && 'status' in error) {
       throw error;
     }
+    writeLocalSchedule(next);
     return {
       data: next,
       synced: false,

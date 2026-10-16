@@ -73,7 +73,11 @@ try {
   const userDataPath = path.join(temporaryDirectory, 'user-data');
   let preservedSiteSync = '';
   let preservedScheduleAuth = '';
+  let preservedSchedule = '';
   if (preserveExistingProfile) {
+    preservedSchedule = await fs.readFile(path.join(repoRoot, 'frontend/public/data/default-schedule.json'), 'utf8');
+    await fs.mkdir(userDataPath, { recursive: true });
+    await fs.writeFile(path.join(userDataPath, 'schedule.json'), preservedSchedule, 'utf8');
     await fs.mkdir(userDataPath, { recursive: true });
     preservedSiteSync = JSON.stringify({
       locations: {
@@ -167,7 +171,8 @@ try {
     }
   }
   if (preserveExistingProfile) {
-    if (await fs.readFile(path.join(userDataPath, 'site-sync.json'), 'utf8') !== preservedSiteSync
+    if (await fs.readFile(path.join(userDataPath, 'schedule.json'), 'utf8') !== preservedSchedule
+      || await fs.readFile(path.join(userDataPath, 'site-sync.json'), 'utf8') !== preservedSiteSync
       || await fs.readFile(path.join(userDataPath, 'schedule-auth.json'), 'utf8') !== preservedScheduleAuth) {
       throw new Error('Public Workstation update changed the existing schedule connection or account profile.');
     }

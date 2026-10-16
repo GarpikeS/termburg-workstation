@@ -41,6 +41,13 @@ const generatedFiles = archiveFiles
   .sort();
 if (withoutGenerated) {
   if (generatedFiles.length > 0) throw new Error('Public Workstation update contains generated installation credentials.');
+  const adminChunk = archiveFiles.find(fileName => /\/frontend\/build\/assets\/ScheduleAdminAccessScreen-.*\.js$/.test(fileName));
+  if (!adminChunk) throw new Error('Schedule editor bundle missing from the package.');
+  const editor = extractFile(archivePath, adminChunk.slice(1).split('/').join(path.sep)).toString('utf8');
+  const service = extractFile(archivePath, 'server/schedule-service.mjs').toString('utf8');
+  if (!editor.includes('Замена дня') || !editor.includes('replacesEventId') || !service.includes('validateScheduleItems(saved)')) {
+    throw new Error('Public Workstation update is missing the date replacement editor or validation.');
+  }
   console.log('Workstation package audit passed: public update has no generated credentials or test files.');
   process.exit(0);
 }

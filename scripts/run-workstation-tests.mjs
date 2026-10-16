@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const testFiles = [
+  'frontend/tests/schedule-day-editor.test.mjs',
+  'frontend/tests/schedule-date-overrides.test.mjs',
+  'server/schedule-day-replacement.test.mjs',
   'workstation/autostart.test.mjs',
   'workstation/device-profile.test.mjs',
   'workstation/github-updater.test.mjs',

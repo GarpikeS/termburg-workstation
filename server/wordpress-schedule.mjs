@@ -70,14 +70,21 @@ function locationTimeZone(schedule, locationId) {
   return text(location?.timezone) || 'Europe/Moscow';
 }
 
-function toWordPressEvent(item, { date, daysOfWeek }) {
+function publicEventId(item, locationId) {
+  const id = text(item.id);
+  const prefix = `official-${locationId}-`;
+  return id.startsWith(prefix) ? id.slice(prefix.length) : id;
+}
+
+function toWordPressEvent(item, { date, daysOfWeek, locationId }) {
   const closed = Boolean(item.closed || item.sanitaryDay);
   const name = text(item.title) || (closed ? 'Санитарный день' : '');
   const days = date ? weekdayForDate(date) : weekdayLabels(daysOfWeek);
   const price = closed ? null : eventPrice(item);
   const result = {
-    id: item.id,
+    id: publicEventId(item, locationId),
     ...(date ? { date } : {}),
+    ...(date && item.replacesEventId ? { replacesEventId: publicEventId({ id: item.replacesEventId }, locationId) } : {}),
     name,
     title: name,
     time: closed ? '' : text(item.time),
@@ -107,11 +114,11 @@ export function buildWordPressSchedulePayload(schedule, locationId) {
 
   const recurring = schedule.weeklyEvents
     .filter(item => item.locationId === locationId && item.published)
-    .map(item => toWordPressEvent(item, { daysOfWeek: item.daysOfWeek }));
+    .map(item => toWordPressEvent(item, { daysOfWeek: item.daysOfWeek, locationId }));
 
   const dated = schedule.exceptions
-    .filter(item => item.locationId === locationId && item.published)
-    .map(item => toWordPressEvent(item, { date: item.date }));
+    .filter(item => item.locationId === locationId && item.published && (!item.replacesEventId || locationId === '2'))
+    .map(item => toWordPressEvent(item, { date: item.date, locationId }));
 
   return [...recurring, ...dated].sort(compareEventsByDisplayOrder);
 }

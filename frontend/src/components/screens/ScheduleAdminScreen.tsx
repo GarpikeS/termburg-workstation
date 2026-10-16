@@ -3,15 +3,17 @@ import '@/features/schedule/schedule.css';
 import { Building2, CalendarPlus, CalendarX2, Check, Copy, Download, ExternalLink, FileText, LogOut, MonitorUp, Pencil, Plus, RefreshCcw, Save, Send, Settings2, ShieldCheck, Sparkles, Trash2, Wifi, WifiOff, X } from 'lucide-react';
 import { ScheduleError, ScheduleLoading, TermburgScheduleMark } from '@/features/schedule/SchedulePrimitives';
 import { MonthlyPosterStudio } from '@/features/schedule/MonthlyPosterStudio';
-import { DAY_LABELS, DAY_LABELS_SHORT, timeToMinutes } from '@/features/schedule/scheduleTime';
+import { DayReplacementEditor } from '@/features/schedule/DayReplacementEditor';
+import { DAY_LABELS, DAY_LABELS_SHORT, getIsoWeekday, timeToMinutes } from '@/features/schedule/scheduleTime';
 import { useSchedule } from '@/features/schedule/useSchedule';
 import { loadSiteSyncSettings, publishScheduleToSite, saveSiteSyncSettings } from '@/features/schedule/scheduleRepository';
 import type { ScheduleData, ScheduleEditorUser, ScheduleEvent, ScheduleException, SchedulePriceKind, SiteSyncSettings } from '@/features/schedule/types';
 
-type EditorTab = 'weekly' | 'exceptions' | 'poster';
+type EditorTab = 'weekly' | 'exceptions' | 'poster' | 'day';
 
 interface EditorForm {
   id: string;
+  replacesEventId: string;
   time: string;
   endTime: string;
   title: string;
@@ -34,6 +36,7 @@ interface ScheduleServerInfo {
 
 const emptyForm: EditorForm = {
   id: '',
+  replacesEventId: '',
   time: '12:00',
   endTime: '12:30',
   title: '',
@@ -65,6 +68,13 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
   const [siteComplexCode, setSiteComplexCode] = useState('');
   const [siteToken, setSiteToken] = useState('');
   const [siteBusy, setSiteBusy] = useState(false);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   useEffect(() => {
     if (data && !draft) {
@@ -148,7 +158,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
 
   const submitForm = (event: React.FormEvent) => {
     event.preventDefault();
-    if (tab === 'poster') return;
+    if (tab === 'poster' || tab === 'day') return;
     if (!form.title.trim() || (!form.sanitaryDay && (!form.venue.trim() || !form.time))) {
       setNotice({ tone: 'error', text: 'Заполните время, название и место.' });
       return;
@@ -160,6 +170,18 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     if (tab === 'exceptions' && !form.date) {
       setNotice({ tone: 'error', text: 'Выберите дату особого события.' });
       return;
+    }
+
+    if (tab === 'exceptions' && form.replacesEventId) {
+      const original = visibleWeekly.find(item => item.id === form.replacesEventId);
+      if (form.sanitaryDay || !original?.published || !original.daysOfWeek.includes(getIsoWeekday(form.date))) {
+        setNotice({ tone: 'error', text: 'Выберите обычное событие, которое проходит в эту дату.' });
+        return;
+      }
+      if (visibleExceptions.some(item => item.id !== form.id && item.date === form.date && item.replacesEventId === form.replacesEventId)) {
+        setNotice({ tone: 'error', text: 'У этого события уже есть замена на выбранную дату. Отредактируйте её.' });
+        return;
+      }
     }
 
     const id = form.id || `${tab}-${crypto.randomUUID()}`;
@@ -186,6 +208,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
       const item: ScheduleException = {
         ...common,
         date: form.date,
+        ...(form.replacesEventId ? { replacesEventId: form.replacesEventId } : {}),
         ...(form.sanitaryDay ? { closed: true, sanitaryDay: true } : {}),
       };
       return { ...current, exceptions: [...current.exceptions.filter(eventItem => eventItem.id !== id), item] };
@@ -199,6 +222,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     setTab('weekly');
     setForm({
       id: item.id,
+      replacesEventId: '',
       time: item.time,
       endTime: item.endTime ?? '',
       title: item.title,
@@ -219,6 +243,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     setTab('exceptions');
     setForm({
       id: item.id,
+      replacesEventId: item.replacesEventId ?? '',
       time: item.time,
       endTime: item.endTime ?? '',
       title: item.title,
@@ -235,7 +260,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const removeItem = (kind: Exclude<EditorTab, 'poster'>, id: string) => {
+  const removeItem = (kind: 'weekly' | 'exceptions', id: string) => {
     if (!window.confirm('Удалить это событие из расписания?')) return;
     setDraft(current => current ? {
       ...current,
@@ -443,15 +468,25 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
           </div>
         )}
 
-        <div className={`schedule-admin__workspace ${tab === 'poster' ? 'schedule-admin__workspace--poster' : ''}`}>
+        <div className={`schedule-admin__workspace ${tab === 'poster' ? 'schedule-admin__workspace--poster' : tab === 'day' ? 'schedule-admin__workspace--day' : ''}`}>
           <section className="schedule-admin-editor">
             <div className="schedule-admin-tabs" role="tablist" aria-label="Разделы расписания">
               <button type="button" role="tab" aria-selected={tab === 'weekly'} className={tab === 'weekly' ? 'is-active' : ''} onClick={() => { setTab('weekly'); resetForm(); }}>Обычная неделя</button>
+              <button type="button" role="tab" aria-selected={tab === 'day'} className={tab === 'day' ? 'is-active' : ''} onClick={() => { setTab('day'); resetForm(); }}>Замена дня</button>
               <button type="button" role="tab" aria-selected={tab === 'exceptions'} className={tab === 'exceptions' ? 'is-active' : ''} onClick={() => { setTab('exceptions'); resetForm(); }}>Особые даты</button>
               <button type="button" role="tab" aria-selected={tab === 'poster'} className={tab === 'poster' ? 'is-active' : ''} onClick={() => { setTab('poster'); resetForm(); }}>Афиша месяца</button>
             </div>
 
-            {tab === 'poster' ? (
+            {tab === 'day' ? (
+              activeLocation ? <DayReplacementEditor
+                data={draft}
+                location={activeLocation}
+                readOnly={saving}
+                onChange={next => { setDraft(next); setDirty(true); }}
+                onNotice={setNotice}
+                onOpenExceptions={date => { setTab('exceptions'); setForm({ ...emptyForm, date }); }}
+              /> : <ScheduleError message="Комплекс не найден." />
+            ) : tab === 'poster' ? (
               activeLocation ? <MonthlyPosterStudio
                 location={activeLocation}
                 posters={draft.monthlyPosters}
@@ -480,6 +515,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
               ) : (
                 <>
                   <label className="schedule-admin-field"><span>Дата</span><input type="date" value={form.date} onChange={event => setFormField('date', event.target.value)} required /></label>
+                  {!form.sanitaryDay && <label className="schedule-admin-field"><span>Какое обычное событие заменить</span><select value={form.replacesEventId} onChange={event => setFormField('replacesEventId', event.target.value)}><option value="">Дополнительное событие — ничего не заменять</option>{visibleWeekly.filter(item => item.published && item.daysOfWeek.includes(getIsoWeekday(form.date))).map(item => <option key={item.id} value={item.id}>{item.time} · {item.title}</option>)}</select><small>Замена действует только в выбранную дату; обычная неделя не меняется.</small></label>}
                   <label className="schedule-admin-toggle schedule-admin-toggle--closed"><input type="checkbox" checked={form.sanitaryDay} onChange={event => setForm(current => ({ ...current, sanitaryDay: event.target.checked, title: event.target.checked && !current.id ? 'Санитарный день' : current.title, details: event.target.checked && !current.id ? 'Санитарный день' : current.details }))} /><span><i /><strong>Санитарный день</strong><small>Скрывает всю обычную программу выбранной даты</small></span></label>
                 </>
               )}
@@ -509,7 +545,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
             )}
           </section>
 
-          {tab !== 'poster' && (
+          {tab !== 'poster' && tab !== 'day' && (
           <section className="schedule-admin-list">
             <div className="schedule-admin-list__heading">
               <div><span>{tab === 'weekly' ? 'Обычная неделя' : 'Афиша по датам'}</span><h2>{tab === 'weekly' ? `${visibleWeekly.length} записей` : `${visibleExceptions.length} особых событий`}</h2></div>
