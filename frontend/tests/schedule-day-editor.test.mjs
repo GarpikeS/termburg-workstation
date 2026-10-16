@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changeDayEvent, countDayReplacements, getDayReplacementRows, resetDayReplacements } from '../src/features/schedule/dayReplacement.ts';
+import { changeDayEvent, countDayReplacements, createDayReplacementId, getDayReplacementRows, resetDayReplacements } from '../src/features/schedule/dayReplacement.ts';
 import { getEventsForDate } from '../src/features/schedule/scheduleTime.ts';
 import { validateScheduleItems } from '../../server/schedule-service.mjs';
 
 const steam = { id: 'steam', locationId: '2', daysOfWeek: [1,2,3,4,5,6,7], time: '14:00', endTime: '14:30', title: 'Парение', venue: 'Парная', priceKind: 'paid', price: 390, published: true };
 const fixture = () => ({ schemaVersion: 1, revision: 5, updatedAt: '2026-10-16', locations: [{ id: '1' }, { id: '2' }], weeklyEvents: [steam, { ...steam, id: 'wellness', title: 'Детское занятие' }, { ...steam, id: 'moscow', locationId: '1' }], exceptions: [], monthlyPosters: [] });
 const update = (data, patch, id = 'steam', exception = false, date = '2026-10-17') => changeDayEvent(data, '2', date, id, exception, patch, () => 'override');
+
+test('LAN HTTP generates unique IDs without secure-context randomUUID', () => {
+  const source = { getRandomValues: value => crypto.getRandomValues(value) };
+  const first = createDayReplacementId(source);
+  assert.match(first, /^day-[a-f0-9]{32}$/);
+  assert.notEqual(first, createDayReplacementId(source));
+});
 
 test('one edit changes only one date and one event; entire template, Moscow and wellness remain untouched', () => {
   const before = fixture();

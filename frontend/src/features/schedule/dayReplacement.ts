@@ -4,6 +4,13 @@ import type { ScheduleData, ScheduleException, ScheduleItem } from './types';
 export type DayEventPatch = Partial<Pick<ScheduleException,
   'title' | 'time' | 'endTime' | 'venue' | 'details' | 'priceKind' | 'price'>>;
 
+// LAN HTTP browsers expose getRandomValues, but randomUUID needs a secure context.
+export function createDayReplacementId(source: Pick<Crypto, 'getRandomValues'> & Partial<Pick<Crypto, 'randomUUID'>> = crypto) {
+  const suffix = typeof source.randomUUID === 'function' ? source.randomUUID()
+    : [...source.getRandomValues(new Uint32Array(4))].map(value => value.toString(16).padStart(8, '0')).join('');
+  return `day-${suffix}`;
+}
+
 export function isDayReplacementDate(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date)
     && Number.isFinite(Date.parse(`${date}T12:00:00Z`))
@@ -23,7 +30,7 @@ export function getPendingDayReplacement(data: ScheduleData, item: ScheduleItem)
 // Use the existing date-exception contract. Never clone or edit the weekly template.
 export function changeDayEvent(
   data: ScheduleData, locationId: string, date: string, itemId: string,
-  isException: boolean, patch: DayEventPatch, createId = () => `day-${crypto.randomUUID()}`,
+  isException: boolean, patch: DayEventPatch, createId = createDayReplacementId,
 ): ScheduleData {
   const item = getDayReplacementRows(data, locationId, date)
     .find(event => event.id === itemId && event.isException === isException);
