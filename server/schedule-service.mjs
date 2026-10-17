@@ -669,10 +669,10 @@ export function createScheduleService(options) {
           const validationError = validateScheduleItems(saved);
           if (validationError) { sendJson(response, 400, { error: validationError }); return; }
           await fs.copyFile(resolvedDataFile, `${resolvedDataFile}.before-site-load-${Date.now()}.bak`).catch(error => { if (error.code !== 'ENOENT') throw error; });
-          // Persist the baseline before local data: a crash then causes a safe conflict, not a blind publication.
+          // Data first: a crash before the baseline update leaves a stale token and fails closed.
           store.locations[locationId] = { ...settings, lastRemoteRevision: state.revision };
-          await writeSiteSyncStore(store);
           await writeSchedule(saved);
+          await writeSiteSyncStore(store);
           broadcastScheduleUpdate(saved);
           sendJson(response, 200, saved);
         });
