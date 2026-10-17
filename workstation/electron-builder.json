@@ -16,6 +16,7 @@
     "dolphin-agent/adapters/excel-reader.ps1",
     "server/schedule-auth.mjs",
     "server/schedule-service.mjs",
+    "server/schedule-site-state.mjs",
     "server/schedule-server.mjs",
     "server/wordpress-schedule.mjs",
     "frontend/build/**/*",
@@ -30,7 +31,7 @@
   ],
   "extraMetadata": {
     "main": "desktop/main.mjs",
-    "version": "1.1.26",
+    "version": "1.1.27",
     "description": "Редактор расписания Термбурга и автоматическое погашение билетов Dolphin"
   },
   "win": {

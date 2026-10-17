@@ -141,7 +141,7 @@ export async function saveSchedule(data: ScheduleData, adminToken?: string): Pro
         Accept: 'application/json',
         ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
       },
-      body: JSON.stringify(next),
+      body: JSON.stringify({ ...next, baseRevision: data.revision }),
       signal: controller.signal,
       credentials: 'same-origin',
     });
@@ -272,6 +272,13 @@ export function publishScheduleToSite(locationId: string, adminToken?: string) {
     },
     body: JSON.stringify({ locationId }),
   }, 30000);
+}
+
+export function loadScheduleFromSite(locationId: string, baseRevision: number) {
+  return apiJson<ScheduleData>('/api/site-sync/load', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locationId, baseRevision }),
+  });
 }
 
 export function subscribeToLocalSchedule(onChange: (data: ScheduleData) => void) {

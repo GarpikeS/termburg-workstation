@@ -8,6 +8,7 @@ import { checkForWorkstationUpdate, launchWorkstationInstaller } from '../workst
 import { dolphinStatusLabel } from '../workstation/status.mjs';
 import { applyEmbeddedSiteSyncDefaults } from '../workstation/site-sync-bootstrap.mjs';
 import { applyEmbeddedScheduleAuthDefaults } from '../workstation/schedule-auth-bootstrap.mjs';
+import { recoverWorkstationSchedule } from '../workstation/schedule-recovery.mjs';
 
 const APP_NAME = 'Термбург Расписание';
 const WORKSTATION_MARKER = path.join(app.getAppPath(), 'workstation', 'mode.json');
@@ -457,6 +458,7 @@ async function startDesktop() {
     ? await applyEmbeddedScheduleAuthDefaults({ embeddedFile: embeddedAuthFile, targetFile: authFile, logger })
     : { embedded: false, applied: false };
 
+  if (WORKSTATION_MODE) await recoverWorkstationSchedule({ userData, logger });
   scheduleService = await startScheduleService({
     staticRoot,
     dataFile,

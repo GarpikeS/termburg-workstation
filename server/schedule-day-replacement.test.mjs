@@ -40,10 +40,11 @@ test('desktop accounts save date replacements without changing the other complex
       assert.equal((await put(legacy)).status, 409);
       assert.equal(await readFile(dataFile, 'utf8'), stored);
       const invalid = structuredClone(confirmed);
+      invalid.revision++;
       invalid.exceptions.find(item => item.id === override.id).title = '';
       assert.equal((await put(invalid)).status, 400);
       assert.equal(await readFile(dataFile, 'utf8'), stored);
-      const restored = { ...confirmed, exceptions: confirmed.exceptions.filter(item => item.id !== override.id) };
+      const restored = { ...confirmed, revision: confirmed.revision + 1, exceptions: confirmed.exceptions.filter(item => item.id !== override.id) };
       assert.equal((await put(restored)).status, 200);
       assert.deepEqual((await get()).exceptions, before.exceptions);
     }

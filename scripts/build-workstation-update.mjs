@@ -94,6 +94,10 @@ try {
     `--expected-version=${expectedVersion}`,
   ]);
   runNodeScript('scripts/write-workstation-update-checksum.mjs');
+  runNodeScript('scripts/test-workstation-packaged.mjs', [
+    `--unpacked-directory=${unpackedDirectory}`, '--without-enrollment', '--without-site-sync',
+    '--preserve-existing-profile', '--verify-holiday-recovery', `--expected-version=${expectedVersion}`,
+  ]);
   await cleanupUpdateArtifacts();
   buildSucceeded = true;
   console.log('Public Workstation update built without embedded credentials or a Dolphin enrollment token.');

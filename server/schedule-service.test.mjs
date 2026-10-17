@@ -274,6 +274,7 @@ test('schedule editor login protects writes and scopes users to one complex', as
     const originalGreen = schedule.weeklyEvents.find(item => item.locationId === '2');
     const changed = {
       ...schedule,
+      baseRevision: schedule.revision,
       weeklyEvents: schedule.weeklyEvents.map(item => item.locationId === '1'
         ? { ...item, title: `${item.title} — Москва` }
         : { ...item, title: `${item.title} — недопустимая правка` }),
@@ -360,6 +361,7 @@ test('manual test login uses an isolated schedule and cannot publish production 
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({
         ...testSchedule,
+        baseRevision: testSchedule.revision,
         weeklyEvents: [testEvent, ...liveSchedule.weeklyEvents],
       }),
     });

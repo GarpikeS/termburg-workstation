@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import path from 'node:path';
 import { createScheduleAuth } from './schedule-auth.mjs';
+import { loadRemoteScheduleState, matchesSiteSchedule, importSiteSchedule } from './schedule-site-state.mjs';
 import {
   buildWordPressImportHeaders,
   buildWordPressSchedulePayload,
@@ -146,6 +147,12 @@ export function createScheduleService(options) {
   const resolvedSiteSyncFile = path.resolve(siteSyncFile);
   const scheduleAuth = authFile ? createScheduleAuth({ authFile, scryptOptions: authScryptOptions, testProfile }) : null;
   let boundPort = port;
+  let pendingWrite = Promise.resolve();
+  function serializeWrite(action) {
+    const next = pendingWrite.then(action);
+    pendingWrite = next.catch(() => {});
+    return next;
+  }
 
   function setCommonHeaders(response) {
     response.setHeader('Access-Control-Allow-Origin', allowedOrigin);
@@ -315,6 +322,13 @@ export function createScheduleService(options) {
     const endpoint = validateWordPressImportUrl(settings.endpoint);
     const payload = buildWordPressSchedulePayload(schedule, locationId);
     validateWordPressScheduleBeforePublish(schedule, locationId, payload);
+    if (locationId === '2' && !settings.lastRemoteRevision) {
+      const state = await loadRemoteScheduleState(settings);
+      if (!matchesSiteSchedule(schedule, locationId, state)) {
+        throw new Error('Отправка на сайт остановлена: эта копия отличается от публикации. Нажмите «Загрузить с сайта», затем внесите изменения заново.');
+      }
+      settings.lastRemoteRevision = state.revision;
+    }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
@@ -356,6 +370,7 @@ export function createScheduleService(options) {
         ...settings,
         lastPublishedAt: publishedAt,
         lastPublishedCount: payload.length,
+        lastRemoteRevision: remoteBody.revision || settings.lastRemoteRevision,
       });
       await writeSiteSyncStore(store);
       return {
@@ -611,8 +626,15 @@ export function createScheduleService(options) {
           sendJson(response, 400, { error: 'Неверный формат расписания.' });
           return;
         }
+        await serializeWrite(async () => {
         const testSession = access.user?.isTest === true;
         const current = testSession ? await readTestSchedule() : await readSchedule();
+        const baseRevision = value.baseRevision ?? value.revision - 1;
+        if (baseRevision !== current.revision) {
+          sendJson(response, 409, { error: 'Расписание уже изменилось. Обновите данные, затем внесите правки заново.' });
+          return;
+        }
+        delete value.baseRevision;
         const saved = testSession
           ? isolateTestSchedule(value, current)
           : access.user?.locationId
@@ -628,6 +650,32 @@ export function createScheduleService(options) {
         else await writeSchedule(saved);
         broadcastScheduleUpdate(saved);
         sendJson(response, 200, saved);
+        });
+        return;
+      }
+
+      if (url.pathname === '/api/site-sync/load' && request.method === 'POST') {
+        const input = JSON.parse(await readBody(request) || '{}');
+        const locationId = typeof input.locationId === 'string' ? input.locationId : '';
+        const access = writeAccess(request, locationId);
+        if (!access.allowed) { sendJson(response, access.status, { error: access.error }); return; }
+        await serializeWrite(async () => {
+          const current = await readSchedule();
+          if (input.baseRevision !== current.revision) { sendJson(response, 409, { error: 'Расписание уже изменилось. Обновите окно и повторите загрузку.' }); return; }
+          const store = await readSiteSyncStore();
+          const settings = normalizeWordPressSyncSettings(store.locations[locationId], WORDPRESS_SYNC_DEFAULTS_BY_LOCATION[locationId]);
+          const state = await loadRemoteScheduleState(settings);
+          const saved = importSiteSchedule(current, locationId, state);
+          const validationError = validateScheduleItems(saved);
+          if (validationError) { sendJson(response, 400, { error: validationError }); return; }
+          await fs.copyFile(resolvedDataFile, `${resolvedDataFile}.before-site-load-${Date.now()}.bak`).catch(error => { if (error.code !== 'ENOENT') throw error; });
+          // Persist the baseline before local data: a crash then causes a safe conflict, not a blind publication.
+          store.locations[locationId] = { ...settings, lastRemoteRevision: state.revision };
+          await writeSiteSyncStore(store);
+          await writeSchedule(saved);
+          broadcastScheduleUpdate(saved);
+          sendJson(response, 200, saved);
+        });
         return;
       }
 
@@ -675,7 +723,7 @@ export function createScheduleService(options) {
           return;
         }
         try {
-          sendJson(response, 200, await publishScheduleToSite(locationId));
+          sendJson(response, 200, await serializeWrite(() => publishScheduleToSite(locationId)));
         } catch (error) {
           if (error?.message === 'LOCATION_NOT_FOUND') {
             sendJson(response, 404, { error: 'Комплекс не найден.' });
@@ -687,7 +735,7 @@ export function createScheduleService(options) {
           }
           if (error?.message === 'REMOTE_IMPORT_FAILED') {
             sendJson(response, 502, {
-              error: `Сайт отклонил расписание (HTTP ${error.remoteStatus}).`,
+              error: error.remoteBody?.message || `Сайт отклонил расписание (HTTP ${error.remoteStatus}).`,
               remoteStatus: error.remoteStatus,
               remoteResponse: error.remoteBody,
             });

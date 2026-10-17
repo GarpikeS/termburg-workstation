@@ -6,7 +6,7 @@ import { MonthlyPosterStudio } from '@/features/schedule/MonthlyPosterStudio';
 import { DayReplacementEditor } from '@/features/schedule/DayReplacementEditor';
 import { DAY_LABELS, DAY_LABELS_SHORT, getIsoWeekday, timeToMinutes } from '@/features/schedule/scheduleTime';
 import { useSchedule } from '@/features/schedule/useSchedule';
-import { loadSiteSyncSettings, publishScheduleToSite, saveSiteSyncSettings } from '@/features/schedule/scheduleRepository';
+import { loadScheduleFromSite, loadSiteSyncSettings, publishScheduleToSite, saveSiteSyncSettings } from '@/features/schedule/scheduleRepository';
 import type { ScheduleData, ScheduleEditorUser, ScheduleEvent, ScheduleException, SchedulePriceKind, SiteSyncSettings } from '@/features/schedule/types';
 
 type EditorTab = 'weekly' | 'exceptions' | 'poster' | 'day';
@@ -368,6 +368,20 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
     }
   };
 
+  const loadFromSite = async () => {
+    if (!window.confirm('Загрузить опубликованное расписание этого комплекса с сайта? Сохранённая копия будет помещена в резервную копию, а несохранённые правки в окне будут отменены. Другой комплекс и месячная афиша останутся.')) return;
+    setSiteBusy(true);
+    try {
+      const saved = await loadScheduleFromSite(locationId, draft.revision);
+      setDraft(structuredClone(saved));
+      setDirty(false);
+      await refresh();
+      setNotice({ tone: 'success', text: 'Актуальное расписание загружено с сайта. Теперь можно вносить и отправлять изменения.' });
+    } catch (reason) {
+      setNotice({ tone: 'error', text: reason instanceof Error ? reason.message : 'Не удалось загрузить расписание.' });
+    } finally { setSiteBusy(false); }
+  };
+
   const logout = async () => {
     if (dirty && !window.confirm('Есть несохранённые изменения. Выйти и потерять их?')) return;
     await onLogout();
@@ -399,6 +413,7 @@ export function ScheduleAdminScreen({ session, onLogout }: { session: ScheduleEd
             <div><small>{isTestSession ? 'Изолированный тестовый режим' : 'Вы вошли в комплекс'}</small><strong>{activeLocation?.name ?? (locationId === '1' ? 'Термбург Москва' : 'Термбург Зеленогорск')}</strong></div>
           </div>
           <div className="schedule-admin__toolbar-actions">
+            {!isTestSession && locationId === '2' && <button type="button" className="schedule-admin-secondary" disabled={siteBusy || saving} onClick={() => void loadFromSite()}><Download size={17} />Загрузить с сайта</button>}
             <button type="button" className="schedule-admin-secondary" onClick={downloadBackup}><Download size={17} />JSON-копия</button>
             <button type="button" className="schedule-admin-secondary" onClick={() => void refresh()}><RefreshCcw size={17} />Обновить</button>
             <button type="button" className="schedule-admin-secondary schedule-admin-logout" onClick={() => void logout()}><LogOut size={17} />Выйти</button>

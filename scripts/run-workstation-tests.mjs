@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const testFiles = [
+  'server/schedule-site-state.test.mjs',
   'frontend/tests/schedule-day-editor.test.mjs',
   'frontend/tests/schedule-date-overrides.test.mjs',
   'server/schedule-day-replacement.test.mjs',
@@ -32,7 +33,7 @@ const testFiles = [
   'server/feedback-service.test.mjs',
   'server/wordpress-schedule.test.mjs',
 ];
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...testFiles], {
   cwd: repoRoot,
   stdio: 'inherit',
 });

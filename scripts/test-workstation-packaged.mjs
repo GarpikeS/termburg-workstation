@@ -25,6 +25,7 @@ const expectedRemovedAuthAccount = expectedRemovedAuthArgument?.slice('--expecte
 const expectedVersionArgument = process.argv.find(argument => argument.startsWith('--expected-version='));
 const expectedVersion = expectedVersionArgument?.slice('--expected-version='.length) || '';
 const preserveExistingProfile = process.argv.includes('--preserve-existing-profile');
+const verifyHolidayRecovery = process.argv.includes('--verify-holiday-recovery');
 
 function smokeAccount(username, locationId) {
   return {
@@ -76,13 +77,22 @@ try {
   let preservedSchedule = '';
   if (preserveExistingProfile) {
     preservedSchedule = await fs.readFile(path.join(repoRoot, 'frontend/public/data/default-schedule.json'), 'utf8');
+    if (verifyHolidayRecovery) {
+      const schedule = JSON.parse(preservedSchedule);
+      const approved = JSON.parse(await fs.readFile(path.join(repoRoot, 'workstation/holiday-recovery-20261017.json'), 'utf8'));
+      schedule.weeklyEvents = [...schedule.weeklyEvents.filter(e => e.locationId !== '2'), ...approved.filter(e => e.date === '2026-10-17').map(e => ({
+        id: e.replacesEventId, locationId: '2', daysOfWeek: [1,2,3,4,5,6,7], time: e.time,
+        title: 'Обычное парение', venue: 'Парная', priceKind: 'paid', price: 390, published: true,
+      }))];
+      preservedSchedule = JSON.stringify(schedule);
+    }
     await fs.mkdir(userDataPath, { recursive: true });
     await fs.writeFile(path.join(userDataPath, 'schedule.json'), preservedSchedule, 'utf8');
     await fs.mkdir(userDataPath, { recursive: true });
     preservedSiteSync = JSON.stringify({
       locations: {
         1: { token: 'existing-moscow-site-token-123456', lastPublishedAt: '2026-09-14T12:00:00.000Z' },
-        2: { token: 'existing-zelenogorsk-site-token-123456', lastPublishedAt: '2026-09-14T13:00:00.000Z' },
+        2: { token: 'existing-zelenogorsk-site-token-123456', lastPublishedAt: '2026-09-14T13:00:00.000Z', ...(verifyHolidayRecovery ? { complexCode: 'zelenogorsk', endpoint: 'http://127.0.0.1:9/schedule/import' } : {}) },
       },
     });
     preservedScheduleAuth = JSON.stringify({
@@ -171,7 +181,16 @@ try {
     }
   }
   if (preserveExistingProfile) {
-    if (await fs.readFile(path.join(userDataPath, 'schedule.json'), 'utf8') !== preservedSchedule
+    const savedSchedule = await fs.readFile(path.join(userDataPath, 'schedule.json'), 'utf8');
+    if (verifyHolidayRecovery) {
+      const before = JSON.parse(preservedSchedule), after = JSON.parse(savedSchedule);
+      if (after.exceptions.filter(e => e.replacesEventId && e.priceKind === 'free').length !== 20
+        || JSON.stringify(after.weeklyEvents) !== JSON.stringify(before.weeklyEvents)
+        || JSON.stringify(after.monthlyPosters) !== JSON.stringify(before.monthlyPosters)) throw new Error('Packaged holiday recovery did not preserve the ordinary schedule.');
+      const backup = (await fs.readdir(userDataPath)).find(name => name.startsWith('schedule-before-holiday-recovery-'));
+      if (!backup || await fs.readFile(path.join(userDataPath, backup), 'utf8') !== preservedSchedule) throw new Error('Packaged holiday recovery backup is missing.');
+    }
+    if ((!verifyHolidayRecovery && savedSchedule !== preservedSchedule)
       || await fs.readFile(path.join(userDataPath, 'site-sync.json'), 'utf8') !== preservedSiteSync
       || await fs.readFile(path.join(userDataPath, 'schedule-auth.json'), 'utf8') !== preservedScheduleAuth) {
       throw new Error('Public Workstation update changed the existing schedule connection or account profile.');

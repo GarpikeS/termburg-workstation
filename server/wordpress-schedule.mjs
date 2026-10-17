@@ -190,6 +190,7 @@ export function normalizeWordPressSyncSettings(value = {}, defaults = {}) {
     token: typeof value.token === 'string' ? value.token.trim() : '',
     complexCode: text(value.complexCode) || text(defaults.complexCode),
     lastPublishedAt: text(value.lastPublishedAt),
+    lastRemoteRevision: /^[a-f0-9]{64}$/.test(value.lastRemoteRevision || '') ? value.lastRemoteRevision : '',
     lastPublishedCount: Number.isInteger(value.lastPublishedCount) && value.lastPublishedCount >= 0
       ? value.lastPublishedCount
       : null,
@@ -241,5 +242,6 @@ export function buildWordPressImportHeaders(settings) {
   if (normalized.authMode === 'x-api-key') headers['X-API-Key'] = normalized.token;
   else headers.Authorization = `Bearer ${normalized.token}`;
   if (normalized.complexCode) headers['X-Termburg-Location'] = normalized.complexCode;
+  if (normalized.lastRemoteRevision) headers['If-Match'] = `"${normalized.lastRemoteRevision}"`;
   return headers;
 }
