@@ -41,3 +41,10 @@ return409. Rejected HTTP writes are not treated as successful local saves.
 
 Deployment of the WordPress guard precedes enabling the desktop update. Legacy
 programs keep viewing/editing locally but must update before website publication.
+
+The deployed WordPress helper is versioned at
+`integrations/wordpress/termburg-schedule-concurrency.php`. The existing import
+handler is renamed to `termburg_api_schedule_import_legacy`, and this helper is
+required from its containing admin API module. Existing token authentication is
+retained; the helper contains no credentials. Baseline acquisition must follow
+local data persistence so a crash leaves a stale token and fails closed.
