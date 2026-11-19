@@ -440,3 +440,18 @@
     --tv-h: 1cqh;
   }
 }
+
+.schedule-tv-certificate {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: #171d31;
+}
+
+.schedule-tv-certificate img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

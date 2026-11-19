@@ -17,6 +17,9 @@ import {
   getZonedClock,
 } from '@/features/schedule/scheduleTime';
 
+import { certificateTvPhase } from '@/features/schedule/certificateTvPhase';
+import certificatePoster from '@/assets/zelenogorsk-certificates-2026-11.jpg';
+
 const LANDSCAPE_EVENT_LIMIT = 12;
 const PORTRAIT_EVENT_LIMIT = 9;
 
@@ -32,6 +35,20 @@ export function ScheduleDisplayScreen() {
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const location = data?.locations.find(item => item.id === locationId) ?? data?.locations[0];
+  const certificatePhase = certificateTvPhase(location?.id === locationId ? locationId : '', now.getTime());
+  const campaignActive = certificatePhase !== 'inactive';
+  const [certificateReady, setCertificateReady] = useState(false);
+  const showCertificate = certificatePhase === 'poster' && certificateReady;
+
+  useEffect(() => {
+    if (!campaignActive) return;
+    const image = new Image();
+    image.onload = () => setCertificateReady(true);
+    image.src = certificatePoster;
+    return () => {
+      image.onload = null;
+    };
+  }, [campaignActive]);
   const clock = location ? getZonedClock(now, location.timezone) : null;
   const items = data && location && clock ? getEventsForDate(data, location.id, clock.dateKey) : [];
   const remainingItems = clock ? getRemainingScheduleItems(items, clock.minutes) : items;
@@ -86,6 +103,23 @@ export function ScheduleDisplayScreen() {
 
   if (error && !data) return <ScheduleError message={error} />;
   if (!data || !location || !clock) return <ScheduleLoading />;
+
+  if (showCertificate) {
+    return (
+      <div className="schedule-tv-stage">
+        <div className={`schedule-tv-frame schedule-tv-frame--${displayLayout}`}>
+          <div className="schedule-tv-certificate">
+            <img
+              src={certificatePoster}
+              width={1024}
+              height={1536}
+              alt="Новогоднее предложение на подарочные сертификаты. С 20 по 30 ноября."
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="schedule-tv-stage">
